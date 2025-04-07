@@ -110,6 +110,9 @@ A WCAG 2.2 AA/AAA compliant booking API for the AccessMeet platform. AccessMeet 
 - `npm start` - Start production server
 - `npm run dev` - Start development server with hot reload
 - `npm test` - Run tests
+- `npm run test:unit` - Run unit tests
+- `npm run test:coverage` - Run tests with coverage
+- `npm run coverage:report` - Generate comprehensive coverage report and badges
 - `npm run lint` - Run ESLint and markdownlint
 - `npm run db:migrate` - Run database migrations
 
@@ -173,6 +176,30 @@ AccessMeet API is designed to support WCAG 2.2 AA/AAA compliance in the followin
 3. **Flexible Booking Options**: Support for buffer times and custom durations to accommodate users who may need additional time.
 4. **Accessibility Settings**: User settings include accessibility mode toggles and alt text enablement.
 5. **Structured Data**: Consistent and well-structured data to support accessible frontend implementation.
+
+## Testing and Code Quality
+
+AccessMeet API follows a comprehensive testing strategy to ensure code reliability and maintainability.
+
+### Test Coverage
+
+The project maintains high test coverage to ensure code quality. See [Test Coverage Report](docs/TEST_COVERAGE.md) for detailed metrics.
+
+```bash
+# Run all tests with coverage
+npm run test:coverage
+
+# Generate comprehensive coverage report with badges
+npm run coverage:report
+```
+
+Coverage badges are automatically generated and can be found in the test coverage report.
+
+### Testing Approach
+
+- **Unit Tests**: Tests for individual components (models, controllers, services)
+- **Mocking**: External dependencies are mocked to ensure tests are deterministic
+- **Code Style**: ESLint and Markdownlint are used to maintain consistent code style
 
 ## License
 

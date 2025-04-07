@@ -70,20 +70,17 @@ User.prototype.validatePassword = async function (password) {
 };
 
 /**
- * Hash password before saving user
+ * Set up hooks for password hashing
  */
-User.beforeCreate(async (user) => {
-  if (user.changed('password_hash')) {
+const hashPassword = async (user) => {
+  if (user.changed && user.changed('password_hash')) {
     const salt = await bcrypt.genSalt(10);
     user.password_hash = await bcrypt.hash(user.password_hash, salt);
   }
-});
+};
 
-User.beforeUpdate(async (user) => {
-  if (user.changed('password_hash')) {
-    const salt = await bcrypt.genSalt(10);
-    user.password_hash = await bcrypt.hash(user.password_hash, salt);
-  }
-});
+// Add hooks directly to the model
+User.beforeCreate(hashPassword);
+User.beforeUpdate(hashPassword);
 
 module.exports = User;
