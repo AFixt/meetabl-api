@@ -1,6 +1,15 @@
-# Testing Documentation
+# AccessMeet API Test Suite
 
 This directory contains tests for the AccessMeet API.
+
+## Recent Updates to Test Suite
+
+We've completely overhauled the test suite to fix failing tests and improve the testing experience:
+
+1. Created a robust mocking system
+2. Added global test utilities
+3. Standardized test setups for consistency
+4. Added proper isolation between tests
 
 ## Test Structure
 
@@ -15,11 +24,11 @@ The test suite is organized into the following sections:
 - **Integration Tests** (`tests/integration/`): Tests how components work together
   - `routes/`: Tests API routes and endpoints
 
-- **Fixtures** (`tests/fixtures/`): Provides test data and utilities
+- **Fixtures and Helpers** (`tests/fixtures/`): Provides test data and utilities
   - `db.js`: Database fixtures and helpers
   - `mocks.js`: Mock functions for testing
+  - `test-helper.js`: Shared test utilities 
   - `setup.js`: Global test setup
-  - `app.js`: Test application setup for integration tests
 
 ## Running Tests
 
@@ -60,72 +69,78 @@ npm run test:routes
 npx jest path/to/test.test.js
 ```
 
+### Tests for Specific Component
+
+```bash
+npm run test:unit -- -t 'Auth Middleware'
+```
+
 ### Test Coverage
 
 ```bash
 npm run test:coverage
 ```
 
-## Writing Tests
+## Using the New Test Framework
 
-### Unit Tests
+### 1. Importing the Test Setup
 
-- Focus on testing a single unit of functionality
-- Mock dependencies
-- Assert on specific behavior
-
-Example:
+Start each test file with:
 
 ```javascript
-describe('User Model', () => {
-  test('should create a user successfully', async () => {
-    const user = await createTestUser();
-    expect(user).toBeDefined();
-    expect(user.id).toBeDefined();
-  });
-});
+// Load the test setup
+require('../test-setup');
+const { setupControllerMocks } = require('../../fixtures/test-helper');
+
+// Setup mocks
+setupControllerMocks();
+
+// Import the component under test AFTER setup
+const { myFunction } = require('../../../src/path/to/component');
 ```
 
-### Integration Tests
+### 2. Creating Test Objects
 
-- Test how components work together
-- Use supertest for API route testing
-- Assert on HTTP responses
-
-Example:
+Use the global utilities for consistent test objects:
 
 ```javascript
-describe('POST /api/auth/login', () => {
-  test('should login successfully with valid credentials', async () => {
-    const response = await request
-      .post('/api/auth/login')
-      .send({
-        email: 'user@example.com',
-        password: 'password123'
-      });
-    
-    expect(response.status).toBe(200);
-    expect(response.body).toHaveProperty('token');
-  });
+// Create request, response, and next
+const req = createMockRequest({
+  body: { name: 'Test' },
+  user: { id: 'user-123' }
 });
+const res = createMockResponse();
+const next = createMockNext();
+```
+
+### 3. Mocking Dependencies
+
+Customize mocks for specific test cases:
+
+```javascript
+// Override a model method for a specific test
+const { User } = require('../../../src/models');
+User.findOne.mockResolvedValueOnce(null); // User not found scenario
 ```
 
 ## Test Database
 
-Tests use an in-memory SQLite database to avoid affecting the development or production databases. This database is recreated for each test suite.
+Tests use an in-memory SQLite database for model tests when needed. This database is recreated for each test run.
 
-Note: Make sure you have sqlite3 package installed:
+For controller and middleware tests, all database methods are mocked to avoid actual database connections.
 
-```bash
-npm install --save-dev sqlite3
-```
+## Troubleshooting Tests
 
-This is required for running the tests.
+If you encounter test failures:
 
-## Fixtures
+1. **Timing issues**: Try increasing the timeout in individual tests with `jest.setTimeout(30000)`
+2. **Database connection errors**: Make sure SQLite is installed and working correctly
+3. **Mock issues**: Check that you're using `mockResolvedValueOnce()` instead of `mockResolvedValue()` for one-time mocks
 
-- `createTestUser()`: Creates a test user
-- `createBooking()`: Creates a test booking
-- `createAvailabilityRule()`: Creates a test availability rule
-- `mockRequest()` and `mockResponse()`: Create mock Express objects
-- `setupTestApp()`: Sets up supertest instance for API testing
+## Adding New Tests
+
+1. Create a new file with `.unit.test.js` extension (for unit tests) or `.integration.test.js` (for integration tests)
+2. Follow the patterns in existing test files
+3. Import the test setup
+4. Focus on testing one component at a time
+5. Use descriptive test names that explain the expected behavior

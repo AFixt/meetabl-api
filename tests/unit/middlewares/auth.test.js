@@ -9,7 +9,6 @@ const { authenticateJWT } = require('../../../src/middlewares/auth');
 jest.mock('../../../src/models', () => ({
   User: {
     findOne: jest.fn().mockImplementation(({ where }) => {
-      const { createTestUser } = require('../../fixtures/db');
       // For the valid user test
       if (where && where.id === 'test-user-id') {
         return Promise.resolve({ id: 'test-user-id', name: 'Test User' });
@@ -50,8 +49,7 @@ jest.mock('jsonwebtoken', () => {
     JsonWebTokenError
   };
 });
-const { mockRequest, mockResponse, generateAuthToken } = require('../../fixtures/mocks');
-const { setupTestDatabase, clearDatabase, createTestUser } = require('../../fixtures/db');
+const { mockRequest, mockResponse } = require('../../fixtures/mocks');
 
 describe('Auth Middleware', () => {
   let user;
