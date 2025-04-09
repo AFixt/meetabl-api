@@ -16,18 +16,21 @@ if (!fs.existsSync(logsDir)) {
   fs.mkdirSync(logsDir, { recursive: true });
 }
 
-// Determine if we're in production
+// Determine environment
 const isProduction = process.env.NODE_ENV === 'production';
+const isTest = process.env.NODE_ENV === 'test';
 
-// Create a stream for better console output in development
+// Create a stream for output based on environment
 const formatOut = isProduction
   ? { type: 'stream', stream: process.stdout }
-  : {
-    type: 'rotating-file',
-    path: path.join(__dirname, '../../logs/accessmeet.log'),
-    period: '1d',
-    count: 7
-  };
+  : isTest
+    ? { type: 'stream', stream: process.stdout }
+    : {
+      type: 'rotating-file',
+      path: path.join(__dirname, '../../logs/accessmeet.log'),
+      period: '1d',
+      count: 7
+    };
 
 // Create the logger
 const logger = bunyan.createLogger({
@@ -36,13 +39,13 @@ const logger = bunyan.createLogger({
   serializers: bunyan.stdSerializers,
   streams: [
     formatOut,
-    {
+    ...(isTest ? [] : [{
       level: 'error',
       type: 'rotating-file',
       path: path.join(__dirname, '../../logs/error.log'),
       period: '1d',
       count: 7
-    }
+    }])
   ]
 });
 

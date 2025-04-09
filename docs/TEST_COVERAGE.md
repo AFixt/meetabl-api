@@ -27,10 +27,10 @@ The latest test coverage metrics are displayed below:
 
 | Category   | Current | Target |
 |------------|---------|--------|
-| Branches   | 13.65%  | 80%    |
-| Functions  | 8.86%   | 80%    |
-| Lines      | 12.70%  | 80%    |
-| Statements | 12.56%  | 80%    |
+| Branches  | 30.92% | 80%    |
+| Functions | 20.51% | 80%    |
+| Lines     | 27.18% | 80%    |
+| Statements | 27.19% | 80%    |
 
 > **Note**: The current coverage is low because we've recently migrated from integration tests to unit tests with proper mocking. We are actively working on improving test coverage.
 
