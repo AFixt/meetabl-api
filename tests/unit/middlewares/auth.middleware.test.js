@@ -1,8 +1,8 @@
 /**
  * Authentication middleware tests
- * 
+ *
  * Using the improved test setup for consistent mocking
- * 
+ *
  * @author meetabl Team
  */
 
@@ -17,20 +17,18 @@ setupControllerMocks();
 const { authenticateJWT } = require('../../../src/middlewares/auth');
 
 // Ensure createMockRequest, createMockResponse, createMockNext are available
-if (typeof global.createMockRequest !== 'function' ||
-    typeof global.createMockResponse !== 'function' ||
-    typeof global.createMockNext !== 'function') {
+if (typeof global.createMockRequest !== 'function'
+    || typeof global.createMockResponse !== 'function'
+    || typeof global.createMockNext !== 'function') {
   // Define them if they're not available in the global scope
-  global.createMockRequest = (overrides = {}) => {
-    return {
-      body: {},
-      params: {},
-      query: {},
-      headers: {},
-      user: { id: 'test-user-id' },
-      ...overrides
-    };
-  };
+  global.createMockRequest = (overrides = {}) => ({
+    body: {},
+    params: {},
+    query: {},
+    headers: {},
+    user: { id: 'test-user-id' },
+    ...overrides
+  });
 
   global.createMockResponse = () => {
     const res = {};
@@ -50,13 +48,13 @@ describe('Auth Middleware', () => {
     // Mock the JWT verify and User.findOne responses for this test
     const jwt = require('jsonwebtoken');
     jwt.verify.mockReturnValueOnce({ userId: 'test-user-id' });
-    
+
     const { User } = require('../../../src/models');
-    User.findOne.mockResolvedValueOnce({ 
+    User.findOne.mockResolvedValueOnce({
       id: 'test-user-id',
-      name: 'Test User' 
+      name: 'Test User'
     });
-    
+
     // Create mock request, response and next
     const req = createMockRequest({
       headers: {
@@ -71,7 +69,7 @@ describe('Auth Middleware', () => {
 
     // Verify next was called (successful authentication)
     expect(next).toHaveBeenCalled();
-    
+
     // Verify user was attached to request
     expect(req.user).toBeDefined();
     expect(req.user.id).toBe('test-user-id');
@@ -88,7 +86,7 @@ describe('Auth Middleware', () => {
 
     // Verify next was not called
     expect(next).not.toHaveBeenCalled();
-    
+
     // Verify error response
     expect(res.status).toHaveBeenCalledWith(401);
     expect(res.json).toHaveBeenCalledWith({
@@ -114,7 +112,7 @@ describe('Auth Middleware', () => {
 
     // Verify next was not called
     expect(next).not.toHaveBeenCalled();
-    
+
     // Verify error response
     expect(res.status).toHaveBeenCalledWith(401);
     expect(res.json).toHaveBeenCalledWith({
@@ -146,7 +144,7 @@ describe('Auth Middleware', () => {
 
     // Verify next was not called
     expect(next).not.toHaveBeenCalled();
-    
+
     // Verify error response
     expect(res.status).toHaveBeenCalledWith(401);
     expect(res.json).toHaveBeenCalled();
@@ -173,7 +171,7 @@ describe('Auth Middleware', () => {
 
     // Verify next was not called
     expect(next).not.toHaveBeenCalled();
-    
+
     // Verify error response
     expect(res.status).toHaveBeenCalledWith(401);
     expect(res.json).toHaveBeenCalledWith({
@@ -203,7 +201,7 @@ describe('Auth Middleware', () => {
 
     // Verify next was not called
     expect(next).not.toHaveBeenCalled();
-    
+
     // Verify error response
     expect(res.status).toHaveBeenCalledWith(401);
     expect(res.json).toHaveBeenCalledWith({

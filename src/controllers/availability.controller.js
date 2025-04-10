@@ -59,11 +59,15 @@ const createAvailabilityRule = async (req, res) => {
   try {
     const userId = req.user.id;
     const {
-      day_of_week, start_time, end_time, buffer_minutes, max_bookings_per_day
+      day_of_week: dayOfWeek,
+      start_time: startTime,
+      end_time: endTime,
+      buffer_minutes: bufferMinutes,
+      max_bookings_per_day: maxBookingsPerDay
     } = req.body;
 
     // Validate time range
-    if (start_time >= end_time) {
+    if (startTime >= endTime) {
       return res.status(400).json({
         error: {
           code: 'bad_request',
@@ -82,11 +86,11 @@ const createAvailabilityRule = async (req, res) => {
     const rule = await AvailabilityRule.create({
       id: uuidv4(),
       user_id: userId,
-      day_of_week,
-      start_time,
-      end_time,
-      buffer_minutes,
-      max_bookings_per_day
+      day_of_week: dayOfWeek,
+      start_time: startTime,
+      end_time: endTime,
+      buffer_minutes: bufferMinutes,
+      max_bookings_per_day: maxBookingsPerDay
     });
 
     // Create audit log
@@ -96,11 +100,11 @@ const createAvailabilityRule = async (req, res) => {
       action: 'availability.rule.create',
       metadata: {
         ruleId: rule.id,
-        day_of_week,
-        start_time,
-        end_time,
-        buffer_minutes,
-        max_bookings_per_day
+        day_of_week: dayOfWeek,
+        start_time: startTime,
+        end_time: endTime,
+        buffer_minutes: bufferMinutes,
+        max_bookings_per_day: maxBookingsPerDay
       }
     });
 
@@ -167,7 +171,11 @@ const updateAvailabilityRule = async (req, res) => {
     const userId = req.user.id;
     const { id } = req.params;
     const {
-      day_of_week, start_time, end_time, buffer_minutes, max_bookings_per_day
+      day_of_week: dayOfWeek,
+      start_time: startTime,
+      end_time: endTime,
+      buffer_minutes: bufferMinutes,
+      max_bookings_per_day: maxBookingsPerDay
     } = req.body;
 
     // Find rule
@@ -185,7 +193,7 @@ const updateAvailabilityRule = async (req, res) => {
     }
 
     // Validate time range if both times are provided
-    if (start_time && end_time && start_time >= end_time) {
+    if (startTime && endTime && startTime >= endTime) {
       return res.status(400).json({
         error: {
           code: 'bad_request',
@@ -201,11 +209,11 @@ const updateAvailabilityRule = async (req, res) => {
     }
 
     // Update fields
-    if (day_of_week !== undefined) rule.day_of_week = day_of_week;
-    if (start_time !== undefined) rule.start_time = start_time;
-    if (end_time !== undefined) rule.end_time = end_time;
-    if (buffer_minutes !== undefined) rule.buffer_minutes = buffer_minutes;
-    if (max_bookings_per_day !== undefined) rule.max_bookings_per_day = max_bookings_per_day;
+    if (dayOfWeek !== undefined) rule.day_of_week = dayOfWeek;
+    if (startTime !== undefined) rule.start_time = startTime;
+    if (endTime !== undefined) rule.end_time = endTime;
+    if (bufferMinutes !== undefined) rule.buffer_minutes = bufferMinutes;
+    if (maxBookingsPerDay !== undefined) rule.max_bookings_per_day = maxBookingsPerDay;
 
     await rule.save();
 
@@ -217,11 +225,11 @@ const updateAvailabilityRule = async (req, res) => {
       metadata: {
         ruleId: rule.id,
         updated: {
-          day_of_week,
-          start_time,
-          end_time,
-          buffer_minutes,
-          max_bookings_per_day
+          day_of_week: dayOfWeek,
+          start_time: startTime,
+          end_time: endTime,
+          buffer_minutes: bufferMinutes,
+          max_bookings_per_day: maxBookingsPerDay
         }
       }
     });
@@ -322,7 +330,7 @@ const getAvailableTimeSlots = async (req, res) => {
     }
 
     // Validate duration
-    const slotDuration = parseInt(duration) || 60; // Default 60 minutes
+    const slotDuration = parseInt(duration, 10) || 60; // Default 60 minutes
     if (slotDuration < 15 || slotDuration > 240) {
       return res.status(400).json({
         error: {
@@ -367,14 +375,21 @@ const getAvailableTimeSlots = async (req, res) => {
     // Calculate available slots for each rule
     const allSlots = [];
 
-    for (const rule of rules) {
+    // Use forEach instead of for...of
+    rules.forEach((rule) => {
       // Parse rule times
       const startTime = moment(rule.start_time, 'HH:mm:ss');
       const endTime = moment(rule.end_time, 'HH:mm:ss');
 
       // Create slots with specified duration
-      const slotStart = moment(targetDate).hours(startTime.hours()).minutes(startTime.minutes()).seconds(0);
-      const ruleEnd = moment(targetDate).hours(endTime.hours()).minutes(endTime.minutes()).seconds(0);
+      const slotStart = moment(targetDate)
+        .hours(startTime.hours())
+        .minutes(startTime.minutes())
+        .seconds(0);
+      const ruleEnd = moment(targetDate)
+        .hours(endTime.hours())
+        .minutes(endTime.minutes())
+        .seconds(0);
 
       while (slotStart.add(slotDuration, 'minutes').isSameOrBefore(ruleEnd)) {
         const slot = {
@@ -388,11 +403,13 @@ const getAvailableTimeSlots = async (req, res) => {
           const bookingEnd = moment(booking.end_time);
 
           // Check for overlap
-          return (
-            (moment(slot.start).isBefore(bookingEnd) && moment(slot.end).isAfter(bookingStart))
-            || (moment(slot.start).add(rule.buffer_minutes, 'minutes').isBefore(bookingEnd)
-            && moment(slot.end).subtract(rule.buffer_minutes, 'minutes').isAfter(bookingStart))
-          );
+          const normalOverlap = moment(slot.start).isBefore(bookingEnd)
+            && moment(slot.end).isAfter(bookingStart);
+
+          const bufferOverlap = moment(slot.start).add(rule.buffer_minutes, 'minutes').isBefore(bookingEnd)
+            && moment(slot.end).subtract(rule.buffer_minutes, 'minutes').isAfter(bookingStart);
+
+          return normalOverlap || bufferOverlap;
         });
 
         // Add slot if no conflict
@@ -400,7 +417,7 @@ const getAvailableTimeSlots = async (req, res) => {
           allSlots.push(slot);
         }
       }
-    }
+    });
 
     // Sort slots by start time
     allSlots.sort((a, b) => moment(a.start).diff(moment(b.start)));

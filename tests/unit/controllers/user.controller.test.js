@@ -1,8 +1,8 @@
 /**
  * User controller tests
- * 
+ *
  * Tests for the user controller functionality
- * 
+ *
  * @author meetabl Team
  */
 
@@ -10,18 +10,16 @@
 require('../test-setup');
 
 // Define global test utilities
-if (typeof global.createMockRequest !== 'function' ||
-    typeof global.createMockResponse !== 'function') {
-  global.createMockRequest = (overrides = {}) => {
-    return {
-      body: {},
-      params: {},
-      query: {},
-      headers: {},
-      user: { id: 'test-user-id' },
-      ...overrides
-    };
-  };
+if (typeof global.createMockRequest !== 'function'
+    || typeof global.createMockResponse !== 'function') {
+  global.createMockRequest = (overrides = {}) => ({
+    body: {},
+    params: {},
+    query: {},
+    headers: {},
+    user: { id: 'test-user-id' },
+    ...overrides
+  });
 
   global.createMockResponse = () => {
     const res = {};
@@ -73,11 +71,11 @@ jest.mock('../../../src/config/logger', () => ({
 }));
 
 // Now import the controller after mocking
-const { 
-  getCurrentUser, 
-  updateUser, 
-  getUserSettings, 
-  updateUserSettings 
+const {
+  getCurrentUser,
+  updateUser,
+  getUserSettings,
+  updateUserSettings
 } = require('../../../src/controllers/user.controller');
 const { User, UserSettings, AuditLog } = require('../../../src/models');
 const logger = require('../../../src/config/logger');
@@ -87,7 +85,7 @@ describe('User Controller', () => {
     // Reset mocks
     jest.clearAllMocks();
   });
-  
+
   describe('getProfile', () => {
     test('should get user profile successfully', async () => {
       // Mock user lookup
@@ -101,16 +99,16 @@ describe('User Controller', () => {
         updated: new Date('2023-01-02'),
         save: jest.fn().mockResolvedValue({})
       });
-      
+
       // Create request with authenticated user
       const req = createMockRequest({
         user: { id: 'test-user-id' }
       });
       const res = createMockResponse();
-      
+
       // Execute the controller
       await getCurrentUser(req, res);
-      
+
       // Verify the response
       expect(res.status).toHaveBeenCalledWith(200);
       expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
@@ -119,20 +117,20 @@ describe('User Controller', () => {
         email: 'test@example.com'
       }));
     });
-    
+
     test('should handle user not found', async () => {
       // Mock user not found
       User.findOne.mockResolvedValueOnce(null);
-      
+
       // Create request
       const req = createMockRequest({
         user: { id: 'non-existent-id' }
       });
       const res = createMockResponse();
-      
+
       // Execute the controller
       await getCurrentUser(req, res);
-      
+
       // Verify the response
       expect(res.status).toHaveBeenCalledWith(404);
       expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
@@ -141,20 +139,20 @@ describe('User Controller', () => {
         })
       }));
     });
-    
+
     test('should handle database errors', async () => {
       // Mock database error
       User.findOne.mockRejectedValueOnce(new Error('Database error'));
-      
+
       // Create request
       const req = createMockRequest({
         user: { id: 'test-user-id' }
       });
       const res = createMockResponse();
-      
+
       // Execute the controller
       await getCurrentUser(req, res);
-      
+
       // Verify the response
       expect(res.status).toHaveBeenCalledWith(500);
       expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
@@ -162,12 +160,12 @@ describe('User Controller', () => {
           code: 'internal_server_error'
         })
       }));
-      
+
       // Verify error was logged
       expect(logger.error).toHaveBeenCalled();
     });
   });
-  
+
   describe('updateProfile', () => {
     test('should update profile successfully', async () => {
       // Mock user lookup
@@ -178,9 +176,9 @@ describe('User Controller', () => {
         timezone: 'UTC',
         save: jest.fn().mockResolvedValue({})
       };
-      
+
       User.findOne.mockResolvedValueOnce(mockUser);
-      
+
       // Create request
       const req = createMockRequest({
         user: { id: 'test-user-id' },
@@ -190,25 +188,25 @@ describe('User Controller', () => {
         }
       });
       const res = createMockResponse();
-      
+
       // Execute the controller
       await updateUser(req, res);
-      
+
       // Verify save was called after properties were set
       expect(mockUser.save).toHaveBeenCalled();
       expect(mockUser.name).toBe('Updated Name');
       expect(mockUser.timezone).toBe('America/New_York');
-      
+
       // Verify the response
       expect(res.status).toHaveBeenCalledWith(200);
-      
+
       // Verify audit log was created
       expect(AuditLog.create).toHaveBeenCalledWith(expect.objectContaining({
         user_id: 'test-user-id',
         action: 'user.update'
       }));
     });
-    
+
     test('should reject update with invalid data', async () => {
       // Mock user lookup
       User.findOne.mockResolvedValueOnce({
@@ -218,7 +216,7 @@ describe('User Controller', () => {
         timezone: 'UTC',
         save: jest.fn().mockRejectedValue(new Error('Validation error'))
       });
-      
+
       // Create request with invalid data
       const req = createMockRequest({
         user: { id: 'test-user-id' },
@@ -227,10 +225,10 @@ describe('User Controller', () => {
         }
       });
       const res = createMockResponse();
-      
+
       // Execute the controller
       await updateUser(req, res);
-      
+
       // Verify the response
       expect(res.status).toHaveBeenCalledWith(500);
       expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
@@ -240,7 +238,7 @@ describe('User Controller', () => {
       }));
     });
   });
-  
+
   describe('getSettings', () => {
     test('should get user settings successfully', async () => {
       // Mock settings lookup
@@ -251,16 +249,16 @@ describe('User Controller', () => {
         confirmation_email_copy: true,
         alt_text_enabled: false
       });
-      
+
       // Create request
       const req = createMockRequest({
         user: { id: 'test-user-id' }
       });
       const res = createMockResponse();
-      
+
       // Execute the controller
       await getUserSettings(req, res);
-      
+
       // Verify the response
       expect(res.status).toHaveBeenCalledWith(200);
       expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
@@ -269,11 +267,11 @@ describe('User Controller', () => {
         alt_text_enabled: false
       }));
     });
-    
+
     test('should create settings if not found', async () => {
       // Mock settings not found
       UserSettings.findOne.mockResolvedValueOnce(null);
-      
+
       // Mock settings create
       UserSettings.create.mockResolvedValueOnce({
         id: 'new-settings-id',
@@ -282,21 +280,21 @@ describe('User Controller', () => {
         confirmation_email_copy: true,
         alt_text_enabled: false
       });
-      
+
       // Create request
       const req = createMockRequest({
         user: { id: 'test-user-id' }
       });
       const res = createMockResponse();
-      
+
       // Execute the controller
       await getUserSettings(req, res);
-      
+
       // Verify settings was created
       expect(UserSettings.create).toHaveBeenCalledWith(expect.objectContaining({
         user_id: 'test-user-id'
       }));
-      
+
       // Verify the response
       expect(res.status).toHaveBeenCalledWith(200);
       expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
@@ -306,7 +304,7 @@ describe('User Controller', () => {
       }));
     });
   });
-  
+
   describe('updateSettings', () => {
     test('should update settings successfully', async () => {
       // Mock settings lookup
@@ -319,9 +317,9 @@ describe('User Controller', () => {
         branding_color: '#000000',
         save: jest.fn().mockResolvedValue({})
       };
-      
+
       UserSettings.findOne.mockResolvedValueOnce(mockSettings);
-      
+
       // Create request
       const req = createMockRequest({
         user: { id: 'test-user-id' },
@@ -331,29 +329,29 @@ describe('User Controller', () => {
         }
       });
       const res = createMockResponse();
-      
+
       // Execute the controller
       await updateUserSettings(req, res);
-      
+
       // Verify settings properties were updated
       expect(mockSettings.accessibility_mode).toBe(true);
       expect(mockSettings.alt_text_enabled).toBe(true);
       expect(mockSettings.save).toHaveBeenCalled();
-      
+
       // Verify the response
       expect(res.status).toHaveBeenCalledWith(200);
-      
+
       // Verify audit log was created
       expect(AuditLog.create).toHaveBeenCalledWith(expect.objectContaining({
         user_id: 'test-user-id',
         action: 'user.settings.update'
       }));
     });
-    
+
     test('should create settings if not found', async () => {
       // Mock settings not found
       UserSettings.findOne.mockResolvedValueOnce(null);
-      
+
       // Mock settings create
       UserSettings.create.mockResolvedValueOnce({
         id: 'new-settings-id',
@@ -364,7 +362,7 @@ describe('User Controller', () => {
         branding_color: '#000000',
         save: jest.fn().mockResolvedValue({})
       });
-      
+
       // Create request
       const req = createMockRequest({
         user: { id: 'test-user-id' },
@@ -374,15 +372,15 @@ describe('User Controller', () => {
         }
       });
       const res = createMockResponse();
-      
+
       // Execute the controller
       await updateUserSettings(req, res);
-      
+
       // Verify settings was created with user_id at minimum (controller adds the rest)
       expect(UserSettings.create).toHaveBeenCalledWith(expect.objectContaining({
         user_id: 'test-user-id'
       }));
-      
+
       // Verify the response
       expect(res.status).toHaveBeenCalledWith(200);
     });

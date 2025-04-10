@@ -1,8 +1,8 @@
 /**
  * Auth controller unit tests
- * 
+ *
  * Using mocked functions for consistent testing
- * 
+ *
  * @author meetabl Team
  */
 
@@ -17,18 +17,16 @@ setupControllerMocks();
 const { v4: uuidv4 } = jest.requireActual('uuid');
 
 // Define global test utilities if not defined
-if (typeof global.createMockRequest !== 'function' ||
-    typeof global.createMockResponse !== 'function') {
-  global.createMockRequest = (overrides = {}) => {
-    return {
-      body: {},
-      params: {},
-      query: {},
-      headers: {},
-      user: { id: 'test-user-id' },
-      ...overrides
-    };
-  };
+if (typeof global.createMockRequest !== 'function'
+    || typeof global.createMockResponse !== 'function') {
+  global.createMockRequest = (overrides = {}) => ({
+    body: {},
+    params: {},
+    query: {},
+    headers: {},
+    user: { id: 'test-user-id' },
+    ...overrides
+  });
 
   global.createMockResponse = () => {
     const res = {};
@@ -44,7 +42,7 @@ if (typeof global.createMockRequest !== 'function' ||
 describe('Auth Controller', () => {
   // Custom controller implementations
   let mockController;
-  
+
   beforeEach(() => {
     // Create a fresh copy of the controller for each test
     mockController = {
@@ -58,7 +56,7 @@ describe('Auth Controller', () => {
             }
           });
         }
-        
+
         // Success case
         return res.status(201).json({
           id: 'new-user-id',
@@ -67,7 +65,7 @@ describe('Auth Controller', () => {
           token: 'mock.jwt.token'
         });
       }),
-      
+
       login: jest.fn(async (req, res) => {
         // Check valid credentials
         if (req.body.email === 'test@example.com' && req.body.password === 'Password123!') {
@@ -79,7 +77,7 @@ describe('Auth Controller', () => {
             refreshToken: 'mock.refresh.token'
           });
         }
-        
+
         // Invalid credentials
         return res.status(401).json({
           error: {
@@ -88,7 +86,7 @@ describe('Auth Controller', () => {
           }
         });
       }),
-      
+
       refreshToken: jest.fn(async (req, res) => {
         if (!req.body.refreshToken) {
           return res.status(400).json({
@@ -98,14 +96,14 @@ describe('Auth Controller', () => {
             }
           });
         }
-        
+
         if (req.body.refreshToken === 'valid.refresh.token') {
           return res.status(200).json({
             token: 'new.access.token',
             refreshToken: 'new.refresh.token'
           });
         }
-        
+
         return res.status(401).json({
           error: {
             code: 'unauthorized',
@@ -115,7 +113,7 @@ describe('Auth Controller', () => {
       })
     };
   });
-  
+
   describe('register', () => {
     test('should register a new user successfully', async () => {
       // Create mock request and response
@@ -135,7 +133,7 @@ describe('Auth Controller', () => {
       // Check response
       expect(res.status).toHaveBeenCalledWith(201);
       expect(res.json).toHaveBeenCalled();
-      
+
       // Verify response data
       const responseData = res.json.mock.calls[0][0];
       expect(responseData.id).toBeDefined();
@@ -162,7 +160,7 @@ describe('Auth Controller', () => {
       // Check response
       expect(res.status).toHaveBeenCalledWith(400);
       expect(res.json).toHaveBeenCalled();
-      
+
       // Verify error message
       const responseData = res.json.mock.calls[0][0];
       expect(responseData.error).toBeDefined();
@@ -188,7 +186,7 @@ describe('Auth Controller', () => {
       // Check response
       expect(res.status).toHaveBeenCalledWith(200);
       expect(res.json).toHaveBeenCalled();
-      
+
       // Verify response data
       const responseData = res.json.mock.calls[0][0];
       expect(responseData.id).toBeDefined();
@@ -212,7 +210,7 @@ describe('Auth Controller', () => {
       // Check response
       expect(res.status).toHaveBeenCalledWith(401);
       expect(res.json).toHaveBeenCalled();
-      
+
       // Verify error message
       const responseData = res.json.mock.calls[0][0];
       expect(responseData.error).toBeDefined();
@@ -235,7 +233,7 @@ describe('Auth Controller', () => {
       // Check response
       expect(res.status).toHaveBeenCalledWith(401);
       expect(res.json).toHaveBeenCalled();
-      
+
       // Verify error message
       const responseData = res.json.mock.calls[0][0];
       expect(responseData.error).toBeDefined();
@@ -259,7 +257,7 @@ describe('Auth Controller', () => {
       // Check response
       expect(res.status).toHaveBeenCalledWith(200);
       expect(res.json).toHaveBeenCalled();
-      
+
       // Verify response data
       const responseData = res.json.mock.calls[0][0];
       expect(responseData.token).toBeDefined();
@@ -281,7 +279,7 @@ describe('Auth Controller', () => {
       // Check response
       expect(res.status).toHaveBeenCalledWith(401);
       expect(res.json).toHaveBeenCalled();
-      
+
       // Verify error message
       const responseData = res.json.mock.calls[0][0];
       expect(responseData.error).toBeDefined();
@@ -301,7 +299,7 @@ describe('Auth Controller', () => {
       // Check response
       expect(res.status).toHaveBeenCalledWith(400);
       expect(res.json).toHaveBeenCalled();
-      
+
       // Verify error message
       const responseData = res.json.mock.calls[0][0];
       expect(responseData.error).toBeDefined();

@@ -16,7 +16,7 @@ const logger = require('./config/logger');
 const { processNotifications } = require('./jobs/notification-processor');
 
 // Use test database configuration when in test environment
-const { initializeDatabase } = process.env.NODE_ENV === 'test' 
+const { initializeDatabase } = process.env.NODE_ENV === 'test'
   ? require('./models/test-models')
   : require('./config/database');
 
@@ -133,21 +133,22 @@ const initializeApp = async () => {
   try {
     // Initialize database connection
     await initializeDatabase();
-    
+
     // Setup basic notification processing job
-    // In production, you would use a proper job scheduler like node-cron, Bull, or a dedicated service
+    // In production, you would use a proper job scheduler
+    // like node-cron, Bull, or a dedicated service
     if (process.env.NODE_ENV !== 'test') {
       // Run once at startup
-      processNotifications().catch(err => logger.error('Error in initial notification processing:', err));
-      
+      processNotifications().catch((err) => logger.error('Error in initial notification processing:', err));
+
       // Then every 5 minutes
       setInterval(() => {
-        processNotifications().catch(err => logger.error('Error in scheduled notification processing:', err));
+        processNotifications().catch((err) => logger.error('Error in scheduled notification processing:', err));
       }, 5 * 60 * 1000);
-      
+
       logger.info('Notification processor scheduled');
     }
-    
+
     logger.info('Application initialized successfully');
     return app;
   } catch (error) {

@@ -199,9 +199,9 @@ const login = async (req, res) => {
  */
 const refreshToken = async (req, res) => {
   try {
-    const { refreshToken } = req.body;
+    const { refreshToken: tokenFromBody } = req.body;
 
-    if (!refreshToken) {
+    if (!tokenFromBody) {
       return res.status(400).json({
         error: {
           code: 'bad_request',
@@ -217,7 +217,7 @@ const refreshToken = async (req, res) => {
     }
 
     // Verify refresh token
-    const decoded = jwt.verify(refreshToken, process.env.JWT_SECRET);
+    const decoded = jwt.verify(tokenFromBody, process.env.JWT_SECRET);
 
     if (!decoded.userId || decoded.type !== 'refresh') {
       return res.status(401).json({

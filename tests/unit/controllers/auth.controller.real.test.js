@@ -1,8 +1,8 @@
 /**
  * Auth controller tests
- * 
+ *
  * Comprehensive tests for the auth controller functionality
- * 
+ *
  * @author meetabl Team
  */
 
@@ -13,18 +13,16 @@ require('../test-setup');
 const { v4: uuidv4 } = jest.requireActual('uuid');
 
 // Define global test utilities
-if (typeof global.createMockRequest !== 'function' ||
-    typeof global.createMockResponse !== 'function') {
-  global.createMockRequest = (overrides = {}) => {
-    return {
-      body: {},
-      params: {},
-      query: {},
-      headers: {},
-      user: { id: 'test-user-id' },
-      ...overrides
-    };
-  };
+if (typeof global.createMockRequest !== 'function'
+    || typeof global.createMockResponse !== 'function') {
+  global.createMockRequest = (overrides = {}) => ({
+    body: {},
+    params: {},
+    query: {},
+    headers: {},
+    user: { id: 'test-user-id' },
+    ...overrides
+  });
 
   global.createMockResponse = () => {
     const res = {};
@@ -43,7 +41,7 @@ jest.mock('jsonwebtoken', () => ({
   verify: jest.fn().mockImplementation((token, secret) => {
     if (token === 'valid.refresh.token') {
       return { userId: 'test-user-id', type: 'refresh' };
-    } else if (token === 'invalid.token') {
+    } if (token === 'invalid.token') {
       throw new Error('Invalid token');
     } else if (token === 'expired.token') {
       const error = new Error('Token expired');
@@ -69,10 +67,9 @@ jest.mock('jsonwebtoken', () => ({
 jest.mock('bcrypt', () => ({
   genSalt: jest.fn().mockResolvedValue('mocksalt'),
   hash: jest.fn().mockResolvedValue('mockhash'),
-  compare: jest.fn().mockImplementation((password, hash) => {
+  compare: jest.fn().mockImplementation((password, hash) =>
     // Simple validation checking if password is "correct_password"
-    return Promise.resolve(password === 'correct_password');
-  })
+    Promise.resolve(password === 'correct_password'))
 }));
 
 jest.mock('../../../src/config/logger', () => ({
@@ -105,11 +102,11 @@ jest.mock('../../../src/config/database', () => ({
 }));
 
 // Now import the controller after mocking
+const jwt = require('jsonwebtoken');
+const bcrypt = require('bcrypt');
 const { register, login, refreshToken } = require('../../../src/controllers/auth.controller');
 const { User, UserSettings, AuditLog } = require('../../../src/models');
 const { sequelize } = require('../../../src/config/database');
-const jwt = require('jsonwebtoken');
-const bcrypt = require('bcrypt');
 const logger = require('../../../src/config/logger');
 
 describe('Auth Controller', () => {
@@ -130,14 +127,14 @@ describe('Auth Controller', () => {
       });
       UserSettings.create.mockResolvedValueOnce({ id: 'settings-id' });
       AuditLog.create.mockResolvedValueOnce({ id: 'audit-log-id' });
-      
+
       // Mock transaction
       const transaction = {
         commit: jest.fn().mockResolvedValueOnce(true),
         rollback: jest.fn()
       };
       sequelize.transaction.mockResolvedValueOnce(transaction);
-      
+
       // Create request and response
       const req = createMockRequest({
         body: {
@@ -148,10 +145,10 @@ describe('Auth Controller', () => {
         }
       });
       const res = createMockResponse();
-      
+
       // Execute the controller
       await register(req, res);
-      
+
       // Verify the response
       expect(res.status).toHaveBeenCalledWith(201);
       expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
@@ -160,22 +157,22 @@ describe('Auth Controller', () => {
         email: 'john@example.com',
         token: 'mock.jwt.token'
       }));
-      
+
       // Verify transaction was committed
       expect(transaction.commit).toHaveBeenCalled();
       expect(transaction.rollback).not.toHaveBeenCalled();
-      
+
       // Verify log was created
       expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('User registered'));
     });
-    
+
     test('should reject registration with existing email', async () => {
       // Mock an existing user
       User.findOne.mockResolvedValueOnce({
         id: 'existing-id',
         email: 'existing@example.com'
       });
-      
+
       // Create request and response
       const req = createMockRequest({
         body: {
@@ -185,10 +182,10 @@ describe('Auth Controller', () => {
         }
       });
       const res = createMockResponse();
-      
+
       // Execute the controller
       await register(req, res);
-      
+
       // Verify the response
       expect(res.status).toHaveBeenCalledWith(400);
       expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
@@ -198,19 +195,19 @@ describe('Auth Controller', () => {
         })
       }));
     });
-    
+
     test('should handle database errors during registration', async () => {
       // Mock a database error
       User.findOne.mockResolvedValueOnce(null);
       User.create.mockRejectedValueOnce(new Error('Database error'));
-      
+
       // Mock transaction
       const transaction = {
         commit: jest.fn(),
         rollback: jest.fn().mockResolvedValueOnce(true)
       };
       sequelize.transaction.mockResolvedValueOnce(transaction);
-      
+
       // Create request and response
       const req = createMockRequest({
         body: {
@@ -220,10 +217,10 @@ describe('Auth Controller', () => {
         }
       });
       const res = createMockResponse();
-      
+
       // Execute the controller
       await register(req, res);
-      
+
       // Verify the response
       expect(res.status).toHaveBeenCalledWith(500);
       expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
@@ -231,11 +228,11 @@ describe('Auth Controller', () => {
           code: 'internal_server_error'
         })
       }));
-      
+
       // Verify transaction was rolled back
       expect(transaction.rollback).toHaveBeenCalled();
       expect(transaction.commit).not.toHaveBeenCalled();
-      
+
       // Verify error was logged
       expect(logger.error).toHaveBeenCalled();
     });
@@ -246,7 +243,7 @@ describe('Auth Controller', () => {
       // Reset mocks
       jest.clearAllMocks();
     });
-    
+
     test('should log in user with valid credentials', async () => {
       // Mock user lookup
       User.findOne.mockResolvedValueOnce({
@@ -256,17 +253,17 @@ describe('Auth Controller', () => {
         password_hash: 'hashed_password',
         timezone: 'UTC'
       });
-      
+
       // Mock password validation
       bcrypt.compare.mockResolvedValueOnce(true);
-      
+
       // Mock token generation
       jwt.sign.mockReturnValueOnce('access.token');
       jwt.sign.mockReturnValueOnce('refresh.token');
-      
+
       // Mock audit log
       AuditLog.create.mockResolvedValueOnce({ id: 'audit-log-id' });
-      
+
       // Create request and response
       const req = createMockRequest({
         body: {
@@ -275,10 +272,10 @@ describe('Auth Controller', () => {
         }
       });
       const res = createMockResponse();
-      
+
       // Execute the controller
       await login(req, res);
-      
+
       // Verify the response
       expect(res.status).toHaveBeenCalledWith(200);
       expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
@@ -288,21 +285,21 @@ describe('Auth Controller', () => {
         token: expect.any(String),
         refreshToken: expect.any(String)
       }));
-      
+
       // Verify audit log was created
       expect(AuditLog.create).toHaveBeenCalledWith(expect.objectContaining({
         user_id: 'user-id',
         action: 'user.login'
       }));
-      
+
       // Verify log was created
       expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('User logged in'));
     });
-    
+
     test('should reject login with non-existent email', async () => {
       // Mock user not found
       User.findOne.mockResolvedValueOnce(null);
-      
+
       // Create request and response
       const req = createMockRequest({
         body: {
@@ -311,10 +308,10 @@ describe('Auth Controller', () => {
         }
       });
       const res = createMockResponse();
-      
+
       // Execute the controller
       await login(req, res);
-      
+
       // Verify the response
       expect(res.status).toHaveBeenCalledWith(401);
       expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
@@ -324,7 +321,7 @@ describe('Auth Controller', () => {
         })
       }));
     });
-    
+
     test('should reject login with invalid password', async () => {
       // Mock user lookup
       User.findOne.mockResolvedValueOnce({
@@ -332,10 +329,10 @@ describe('Auth Controller', () => {
         email: 'john@example.com',
         password_hash: 'hashed_password'
       });
-      
+
       // Mock password validation to fail
       bcrypt.compare.mockResolvedValueOnce(false);
-      
+
       // Create request and response
       const req = createMockRequest({
         body: {
@@ -344,10 +341,10 @@ describe('Auth Controller', () => {
         }
       });
       const res = createMockResponse();
-      
+
       // Execute the controller
       await login(req, res);
-      
+
       // Verify the response
       expect(res.status).toHaveBeenCalledWith(401);
       expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
@@ -357,11 +354,11 @@ describe('Auth Controller', () => {
         })
       }));
     });
-    
+
     test('should handle database errors during login', async () => {
       // Mock database error
       User.findOne.mockRejectedValueOnce(new Error('Database error'));
-      
+
       // Create request and response
       const req = createMockRequest({
         body: {
@@ -370,10 +367,10 @@ describe('Auth Controller', () => {
         }
       });
       const res = createMockResponse();
-      
+
       // Execute the controller
       await login(req, res);
-      
+
       // Verify the response
       expect(res.status).toHaveBeenCalledWith(500);
       expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
@@ -381,36 +378,36 @@ describe('Auth Controller', () => {
           code: 'internal_server_error'
         })
       }));
-      
+
       // Verify error was logged
       expect(logger.error).toHaveBeenCalled();
     });
   });
-  
+
   describe('refreshToken', () => {
     beforeEach(() => {
       // Reset mocks
       jest.clearAllMocks();
     });
-    
+
     test('should refresh token with valid refresh token', async () => {
       // Mock JWT verification
       jwt.verify.mockReturnValueOnce({ userId: 'user-id', type: 'refresh' });
-      
+
       // Mock user lookup
       User.findOne.mockResolvedValueOnce({
         id: 'user-id',
         name: 'John Doe',
         email: 'john@example.com'
       });
-      
+
       // Mock token generation
       jwt.sign.mockReturnValueOnce('new.access.token');
       jwt.sign.mockReturnValueOnce('new.refresh.token');
-      
+
       // Mock audit log
       AuditLog.create.mockResolvedValueOnce({ id: 'audit-log-id' });
-      
+
       // Create request and response
       const req = createMockRequest({
         body: {
@@ -418,37 +415,37 @@ describe('Auth Controller', () => {
         }
       });
       const res = createMockResponse();
-      
+
       // Execute the controller
       await refreshToken(req, res);
-      
+
       // Verify the response
       expect(res.status).toHaveBeenCalledWith(200);
       expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
         token: expect.any(String),
         refreshToken: expect.any(String)
       }));
-      
+
       // Verify audit log was created
       expect(AuditLog.create).toHaveBeenCalledWith(expect.objectContaining({
         user_id: 'user-id',
         action: 'user.token_refresh'
       }));
-      
+
       // Verify log was created
       expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('Token refreshed'));
     });
-    
+
     test('should reject request without refresh token', async () => {
       // Create request and response
       const req = createMockRequest({
         body: {}
       });
       const res = createMockResponse();
-      
+
       // Execute the controller
       await refreshToken(req, res);
-      
+
       // Verify the response
       expect(res.status).toHaveBeenCalledWith(400);
       expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
@@ -458,11 +455,11 @@ describe('Auth Controller', () => {
         })
       }));
     });
-    
+
     test('should reject request with invalid token type', async () => {
       // Mock JWT verification with wrong token type
       jwt.verify.mockReturnValueOnce({ userId: 'user-id', type: 'access' });
-      
+
       // Create request and response
       const req = createMockRequest({
         body: {
@@ -470,10 +467,10 @@ describe('Auth Controller', () => {
         }
       });
       const res = createMockResponse();
-      
+
       // Execute the controller
       await refreshToken(req, res);
-      
+
       // Verify the response
       expect(res.status).toHaveBeenCalledWith(401);
       expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
@@ -483,14 +480,14 @@ describe('Auth Controller', () => {
         })
       }));
     });
-    
+
     test('should reject request when user not found', async () => {
       // Mock JWT verification
       jwt.verify.mockReturnValueOnce({ userId: 'nonexistent-user', type: 'refresh' });
-      
+
       // Mock user not found
       User.findOne.mockResolvedValueOnce(null);
-      
+
       // Create request and response
       const req = createMockRequest({
         body: {
@@ -498,10 +495,10 @@ describe('Auth Controller', () => {
         }
       });
       const res = createMockResponse();
-      
+
       // Execute the controller
       await refreshToken(req, res);
-      
+
       // Verify the response
       expect(res.status).toHaveBeenCalledWith(401);
       expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
@@ -511,14 +508,14 @@ describe('Auth Controller', () => {
         })
       }));
     });
-    
+
     test('should handle expired refresh token', async () => {
       // Mock JWT verification to throw TokenExpiredError
       const error = new jwt.TokenExpiredError('Token expired');
       jwt.verify.mockImplementationOnce(() => {
         throw error;
       });
-      
+
       // Create request and response
       const req = createMockRequest({
         body: {
@@ -526,10 +523,10 @@ describe('Auth Controller', () => {
         }
       });
       const res = createMockResponse();
-      
+
       // Execute the controller
       await refreshToken(req, res);
-      
+
       // Verify the response
       expect(res.status).toHaveBeenCalledWith(401);
       expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
@@ -539,14 +536,14 @@ describe('Auth Controller', () => {
         })
       }));
     });
-    
+
     test('should handle invalid JWT token format', async () => {
       // Mock JWT verification to throw JsonWebTokenError
       const error = new jwt.JsonWebTokenError('Invalid token');
       jwt.verify.mockImplementationOnce(() => {
         throw error;
       });
-      
+
       // Create request and response
       const req = createMockRequest({
         body: {
@@ -554,10 +551,10 @@ describe('Auth Controller', () => {
         }
       });
       const res = createMockResponse();
-      
+
       // Execute the controller
       await refreshToken(req, res);
-      
+
       // Verify the response
       expect(res.status).toHaveBeenCalledWith(401);
       expect(res.json).toHaveBeenCalledWith(expect.objectContaining({

@@ -72,11 +72,14 @@ const createBooking = async (req, res) => {
   try {
     const userId = req.user.id;
     const {
-      customer_name, customer_email, start_time, end_time
+      customer_name: customerName,
+      customer_email: customerEmail,
+      start_time: startTime,
+      end_time: endTime
     } = req.body;
 
     // Validate datetime format
-    if (!moment(start_time).isValid() || !moment(end_time).isValid()) {
+    if (!moment(startTime).isValid() || !moment(endTime).isValid()) {
       return res.status(400).json({
         error: {
           code: 'bad_request',
@@ -96,7 +99,7 @@ const createBooking = async (req, res) => {
     }
 
     // Validate time range
-    if (moment(start_time).isSameOrAfter(moment(end_time))) {
+    if (moment(startTime).isSameOrAfter(moment(endTime))) {
       return res.status(400).json({
         error: {
           code: 'bad_request',
@@ -120,24 +123,24 @@ const createBooking = async (req, res) => {
           {
             // Starts during another booking
             start_time: {
-              [sequelize.Op.lt]: end_time,
-              [sequelize.Op.gte]: start_time
+              [sequelize.Op.lt]: endTime,
+              [sequelize.Op.gte]: startTime
             }
           },
           {
             // Ends during another booking
             end_time: {
-              [sequelize.Op.lte]: end_time,
-              [sequelize.Op.gt]: start_time
+              [sequelize.Op.lte]: endTime,
+              [sequelize.Op.gt]: startTime
             }
           },
           {
             // Completely overlaps another booking
             start_time: {
-              [sequelize.Op.lte]: start_time
+              [sequelize.Op.lte]: startTime
             },
             end_time: {
-              [sequelize.Op.gte]: end_time
+              [sequelize.Op.gte]: endTime
             }
           }
         ]
@@ -164,10 +167,10 @@ const createBooking = async (req, res) => {
     const booking = await Booking.create({
       id: bookingId,
       user_id: userId,
-      customer_name,
-      customer_email,
-      start_time,
-      end_time,
+      customer_name: customerName,
+      customer_email: customerEmail,
+      start_time: startTime,
+      end_time: endTime,
       status: 'confirmed'
     }, { transaction });
 
@@ -186,9 +189,9 @@ const createBooking = async (req, res) => {
       action: 'booking.create',
       metadata: {
         bookingId,
-        customer_email,
-        start_time,
-        end_time
+        customer_email: customerEmail,
+        start_time: startTime,
+        end_time: endTime
       }
     }, { transaction });
 
@@ -200,7 +203,7 @@ const createBooking = async (req, res) => {
 
     // Queue email notification job
     await notificationService.queueNotification(bookingId, 'email');
-    
+
     // Create calendar event if user has calendar integration
     try {
       await calendarService.createCalendarEvent(booking);
@@ -332,12 +335,12 @@ const cancelBooking = async (req, res) => {
 
     // Queue email notification job for cancellation
     await notificationService.queueNotification(id, 'email');
-    
+
     // Update calendar event if user has calendar integration
     try {
       // In a real implementation, we would update or delete the calendar event
       // For now, we'll create a new event with the cancelled status
-      booking.description = 'CANCELLED: ' + (booking.description || '');
+      booking.description = `CANCELLED: ${booking.description || ''}`;
       await calendarService.createCalendarEvent(booking);
     } catch (calendarError) {
       logger.error(`Failed to update calendar event for cancelled booking ${id}:`, calendarError);
@@ -410,9 +413,9 @@ const getPublicBookings = async (req, res) => {
     // Parse date and get day of week (0 = Sunday, 6 = Saturday)
     const targetDate = moment(date, 'YYYY-MM-DD');
     const dayOfWeek = targetDate.day();
-    
+
     // Validate duration
-    const slotDuration = parseInt(duration) || 60; // Default 60 minutes
+    const slotDuration = parseInt(duration, 10) || 60; // Default 60 minutes
     if (slotDuration < 15 || slotDuration > 240) {
       return res.status(400).json({
         error: {
@@ -460,14 +463,21 @@ const getPublicBookings = async (req, res) => {
     // Calculate available slots for each rule
     const allSlots = [];
 
-    for (const rule of rules) {
+    // Use forEach instead of for...of
+    rules.forEach((rule) => {
       // Parse rule times
       const startTime = moment(rule.start_time, 'HH:mm:ss');
       const endTime = moment(rule.end_time, 'HH:mm:ss');
 
       // Create slots with specified duration
-      const slotStart = moment(targetDate).hours(startTime.hours()).minutes(startTime.minutes()).seconds(0);
-      const ruleEnd = moment(targetDate).hours(endTime.hours()).minutes(endTime.minutes()).seconds(0);
+      const slotStart = moment(targetDate)
+        .hours(startTime.hours())
+        .minutes(startTime.minutes())
+        .seconds(0);
+      const ruleEnd = moment(targetDate)
+        .hours(endTime.hours())
+        .minutes(endTime.minutes())
+        .seconds(0);
 
       while (slotStart.add(slotDuration, 'minutes').isSameOrBefore(ruleEnd)) {
         const slot = {
@@ -493,7 +503,7 @@ const getPublicBookings = async (req, res) => {
           allSlots.push(slot);
         }
       }
-    }
+    });
 
     // Sort slots by start time
     allSlots.sort((a, b) => moment(a.start).diff(moment(b.start)));
@@ -529,7 +539,10 @@ const createPublicBooking = async (req, res) => {
   try {
     const { username } = req.params;
     const {
-      customer_name, customer_email, start_time, end_time
+      customer_name: customerName,
+      customer_email: customerEmail,
+      start_time: startTime,
+      end_time: endTime
     } = req.body;
 
     // Find user by username
@@ -554,8 +567,8 @@ const createPublicBooking = async (req, res) => {
     const userId = user.id;
 
     // Validate datetime format and range
-    if (!moment(start_time).isValid() || !moment(end_time).isValid()
-        || moment(start_time).isSameOrAfter(moment(end_time))) {
+    if (!moment(startTime).isValid() || !moment(endTime).isValid()
+        || moment(startTime).isSameOrAfter(moment(endTime))) {
       return res.status(400).json({
         error: {
           code: 'bad_request',
@@ -582,22 +595,22 @@ const createPublicBooking = async (req, res) => {
         [sequelize.Op.or]: [
           {
             start_time: {
-              [sequelize.Op.lt]: end_time,
-              [sequelize.Op.gte]: start_time
+              [sequelize.Op.lt]: endTime,
+              [sequelize.Op.gte]: startTime
             }
           },
           {
             end_time: {
-              [sequelize.Op.lte]: end_time,
-              [sequelize.Op.gt]: start_time
+              [sequelize.Op.lte]: endTime,
+              [sequelize.Op.gt]: startTime
             }
           },
           {
             start_time: {
-              [sequelize.Op.lte]: start_time
+              [sequelize.Op.lte]: startTime
             },
             end_time: {
-              [sequelize.Op.gte]: end_time
+              [sequelize.Op.gte]: endTime
             }
           }
         ]
@@ -624,10 +637,10 @@ const createPublicBooking = async (req, res) => {
     const booking = await Booking.create({
       id: bookingId,
       user_id: userId,
-      customer_name,
-      customer_email,
-      start_time,
-      end_time,
+      customer_name: customerName,
+      customer_email: customerEmail,
+      start_time: startTime,
+      end_time: endTime,
       status: 'confirmed'
     }, { transaction });
 
@@ -646,10 +659,10 @@ const createPublicBooking = async (req, res) => {
       action: 'booking.public.create',
       metadata: {
         bookingId,
-        customer_name,
-        customer_email,
-        start_time,
-        end_time
+        customer_name: customerName,
+        customer_email: customerEmail,
+        start_time: startTime,
+        end_time: endTime
       }
     }, { transaction });
 
@@ -661,7 +674,7 @@ const createPublicBooking = async (req, res) => {
 
     // Queue email notification jobs for both user and customer
     await notificationService.queueNotification(bookingId, 'email');
-    
+
     // Create calendar event if user has calendar integration
     try {
       await calendarService.createCalendarEvent(booking);

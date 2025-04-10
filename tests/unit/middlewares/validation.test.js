@@ -1,11 +1,11 @@
 /**
  * Validation middleware tests
- * 
+ *
  * @author meetabl Team
  */
 
-const { validateRequest } = require('../../../src/middlewares/validation');
 const { body, validationResult } = require('express-validator');
+const { validateRequest } = require('../../../src/middlewares/validation');
 const { mockRequest, mockResponse } = require('../../fixtures/mocks');
 
 describe('Validation Middleware', () => {
@@ -15,7 +15,7 @@ describe('Validation Middleware', () => {
       body('name').notEmpty().withMessage('Name is required'),
       body('email').isEmail().withMessage('Invalid email format')
     ];
-    
+
     // Create valid request
     const req = mockRequest({
       body: {
@@ -27,8 +27,8 @@ describe('Validation Middleware', () => {
     const next = jest.fn();
 
     // Apply validation rules
-    await Promise.all(validationRules.map(validation => validation.run(req)));
-    
+    await Promise.all(validationRules.map((validation) => validation.run(req)));
+
     // Execute validateRequest middleware
     validateRequest(req, res, next);
 
@@ -44,7 +44,7 @@ describe('Validation Middleware', () => {
       body('name').notEmpty().withMessage('Name is required'),
       body('email').isEmail().withMessage('Invalid email format')
     ];
-    
+
     // Create invalid request
     const req = mockRequest({
       body: {
@@ -56,8 +56,8 @@ describe('Validation Middleware', () => {
     const next = jest.fn();
 
     // Apply validation rules
-    await Promise.all(validationRules.map(validation => validation.run(req)));
-    
+    await Promise.all(validationRules.map((validation) => validation.run(req)));
+
     // Execute validateRequest middleware
     validateRequest(req, res, next);
 
@@ -65,7 +65,7 @@ describe('Validation Middleware', () => {
     expect(next).not.toHaveBeenCalled();
     expect(res.status).toHaveBeenCalledWith(400);
     expect(res.json).toHaveBeenCalled();
-    
+
     const responseData = res.json.mock.calls[0][0];
     expect(responseData.error).toBeDefined();
     expect(responseData.error.code).toBe('bad_request');
@@ -78,7 +78,7 @@ describe('Validation Middleware', () => {
       body('name').trim().notEmpty(),
       body('email').normalizeEmail().isEmail()
     ];
-    
+
     // Create request with data to sanitize
     const req = mockRequest({
       body: {
@@ -90,8 +90,8 @@ describe('Validation Middleware', () => {
     const next = jest.fn();
 
     // Apply validation rules with sanitization
-    await Promise.all(validationRules.map(validation => validation.run(req)));
-    
+    await Promise.all(validationRules.map((validation) => validation.run(req)));
+
     // Execute validateRequest middleware
     validateRequest(req, res, next);
 

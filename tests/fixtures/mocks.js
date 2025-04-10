@@ -1,8 +1,8 @@
 /**
  * Mock implementations for testing
- * 
+ *
  * Provides mock functions for external services
- * 
+ *
  * @author meetabl Team
  */
 
@@ -16,10 +16,10 @@ const { v4: uuidv4 } = require('uuid');
  * @returns {string} JWT token
  */
 const generateAuthToken = (userId, options = { expiresIn: '1h' }) => {
-  const jwtOptions = typeof options === 'string' 
-    ? { expiresIn: options } 
+  const jwtOptions = typeof options === 'string'
+    ? { expiresIn: options }
     : options;
-    
+
   return jwt.sign(
     { userId },
     process.env.JWT_SECRET || 'test-secret',
@@ -61,36 +61,32 @@ const mockResponse = () => {
  * Mock Google Calendar API client
  * @returns {Object} Mocked Google Calendar client
  */
-const mockGoogleCalendarClient = () => {
-  return {
-    calendar: jest.fn().mockReturnValue({
-      events: {
-        insert: jest.fn().mockResolvedValue({
-          data: {
-            id: uuidv4(),
-            htmlLink: 'https://calendar.google.com/event?id=123',
-            summary: 'Test Event'
-          }
-        })
-      }
-    })
-  };
-};
+const mockGoogleCalendarClient = () => ({
+  calendar: jest.fn().mockReturnValue({
+    events: {
+      insert: jest.fn().mockResolvedValue({
+        data: {
+          id: uuidv4(),
+          htmlLink: 'https://calendar.google.com/event?id=123',
+          summary: 'Test Event'
+        }
+      })
+    }
+  })
+});
 
 /**
  * Mock Microsoft Graph client
  * @returns {Object} Mocked Microsoft Graph client
  */
-const mockMicrosoftGraphClient = () => {
-  return {
-    api: jest.fn().mockReturnThis(),
-    post: jest.fn().mockResolvedValue({
-      id: uuidv4(),
-      webLink: 'https://outlook.office.com/calendar/event/123',
-      subject: 'Test Event'
-    })
-  };
-};
+const mockMicrosoftGraphClient = () => ({
+  api: jest.fn().mockReturnThis(),
+  post: jest.fn().mockResolvedValue({
+    id: uuidv4(),
+    webLink: 'https://outlook.office.com/calendar/event/123',
+    subject: 'Test Event'
+  })
+});
 
 module.exports = {
   generateAuthToken,

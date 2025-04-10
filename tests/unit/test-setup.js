@@ -1,8 +1,8 @@
 /**
  * Shared test setup for all unit tests
- * 
+ *
  * This file configures all the necessary mocks for unit tests
- * 
+ *
  * @author meetabl Team
  */
 
@@ -66,19 +66,15 @@ jest.mock('@microsoft/microsoft-graph-client', () => ({
   }
 }));
 
-jest.mock('node-fetch', () => 
-  jest.fn().mockImplementation(() => 
-    Promise.resolve({
-      ok: true,
-      json: jest.fn().mockResolvedValue({
-        access_token: 'test-access-token',
-        refresh_token: 'test-refresh-token',
-        expires_in: 3600,
-        scope: 'Calendars.ReadWrite offline_access'
-      })
-    })
-  )
-);
+jest.mock('node-fetch', () => jest.fn().mockImplementation(() => Promise.resolve({
+  ok: true,
+  json: jest.fn().mockResolvedValue({
+    access_token: 'test-access-token',
+    refresh_token: 'test-refresh-token',
+    expires_in: 3600,
+    scope: 'Calendars.ReadWrite offline_access'
+  })
+})));
 
 // Capture console errors during tests
 let originalConsoleError;
@@ -97,16 +93,14 @@ beforeEach(() => {
 });
 
 // Define global test utilities
-global.createMockRequest = (overrides = {}) => {
-  return {
-    body: {},
-    params: {},
-    query: {},
-    headers: {},
-    user: { id: 'test-user-id' },
-    ...overrides
-  };
-};
+global.createMockRequest = (overrides = {}) => ({
+  body: {},
+  params: {},
+  query: {},
+  headers: {},
+  user: { id: 'test-user-id' },
+  ...overrides
+});
 
 global.createMockResponse = () => {
   const res = {};

@@ -1,8 +1,8 @@
 /**
  * User model unit tests
- * 
+ *
  * Using the improved test setup for consistent mocking
- * 
+ *
  * @author meetabl Team
  */
 
@@ -16,10 +16,11 @@ setupControllerMocks();
 // Import models after mocks are set up
 const { User, UserSettings } = require('../../../src/models');
 const bcrypt = require('bcrypt');
+
 const { v4: uuidv4 } = jest.requireActual('uuid');
 
 // Create a mock validatePassword function
-const validatePasswordMock = async function(password) {
+const validatePasswordMock = async function (password) {
   return bcrypt.compare(password, this.password_hash);
 };
 
@@ -28,17 +29,17 @@ describe('User Model', () => {
   beforeEach(() => {
     // Reset mocks
     jest.clearAllMocks();
-    
+
     // Mock the User model create method
     User.create.mockImplementation(async (userData) => {
       const userId = userData.id || uuidv4();
-      
+
       // Simulate beforeCreate hook for password hashing
       if (userData.password_hash && !userData.skipHooks) {
         // This simulates the beforeCreate hook for password hashing
         userData.password_hash = await bcrypt.hash(userData.password_hash, 'mocksalt');
       }
-      
+
       // Simulate afterCreate hook for user settings
       if (!userData.skipHooks) {
         // This simulates the afterCreate hook that creates user settings
@@ -52,7 +53,7 @@ describe('User Model', () => {
           });
         }, 0);
       }
-      
+
       return {
         id: userId,
         name: userData.name || 'Test User',
@@ -66,7 +67,7 @@ describe('User Model', () => {
         ...userData
       };
     });
-    
+
     // Mock the update method
     User.update.mockImplementation(async (updates, options) => {
       // Simulate beforeUpdate hook for password hashing
@@ -75,12 +76,12 @@ describe('User Model', () => {
       }
       return [1];
     });
-    
+
     // Mock the unique email validation
     User.findOne.mockImplementation(async ({ where }) => {
       if (where.email === 'duplicate@example.com') {
-        return { 
-          id: 'existing-user', 
+        return {
+          id: 'existing-user',
           email: 'duplicate@example.com',
           validatePassword: User.prototype.validatePassword,
           password_hash: await bcrypt.hash('Password123!', 'mocksalt')
@@ -97,9 +98,9 @@ describe('User Model', () => {
       password_hash: 'Password123!',
       timezone: 'America/New_York'
     };
-    
+
     const user = await User.create(userData);
-    
+
     expect(user).toBeDefined();
     expect(user.id).toBeDefined();
     expect(user.name).toBe(userData.name);
@@ -113,17 +114,17 @@ describe('User Model', () => {
 
   test('should hash password during user creation', async () => {
     const plainPassword = 'Password123!';
-    
+
     // Mock the hash function to return a predictable hash
     const mockHash = 'hashed_password_123';
     bcrypt.hash.mockResolvedValueOnce(mockHash);
-    
+
     const user = await User.create({
       name: 'Password Test User',
       email: 'password@example.com',
       password_hash: plainPassword
     });
-    
+
     // Verify password was hashed
     expect(user.password_hash).toBe(mockHash);
     expect(bcrypt.hash).toHaveBeenCalledWith(plainPassword, 'mocksalt');
@@ -132,17 +133,17 @@ describe('User Model', () => {
   test('should hash password during user update', async () => {
     const plainPassword = 'NewPassword456!';
     const userId = 'test-user-id';
-    
+
     // Set up mock for update
     const mockHash = 'updated_hash_456';
     bcrypt.hash.mockResolvedValueOnce(mockHash);
-    
+
     // Update user password
     await User.update(
       { password_hash: plainPassword },
       { where: { id: userId } }
     );
-    
+
     // Verify password was hashed during update
     expect(bcrypt.hash).toHaveBeenCalledWith(plainPassword, 'mocksalt');
   });
@@ -155,16 +156,14 @@ describe('User Model', () => {
       email: 'validate@example.com',
       password_hash: plainPassword
     });
-    
+
     // Mock the compare function to correctly validate passwords
-    bcrypt.compare.mockImplementation((password, hash) => {
-      return Promise.resolve(password === plainPassword);
-    });
-    
+    bcrypt.compare.mockImplementation((password, hash) => Promise.resolve(password === plainPassword));
+
     // Test correct password
     const validResult = await user.validatePassword(plainPassword);
     expect(validResult).toBe(true);
-    
+
     // Test incorrect password
     const invalidResult = await user.validatePassword('wrong_password');
     expect(invalidResult).toBe(false);
@@ -175,9 +174,9 @@ describe('User Model', () => {
     const user = await User.create({
       name: 'Test User',
       email: 'test@example.com',
-      password_hash: 'hash',
+      password_hash: 'hash'
     });
-    
+
     // Mock finding the settings for this user
     UserSettings.findOne.mockResolvedValueOnce({
       id: 'settings-id',
@@ -186,16 +185,16 @@ describe('User Model', () => {
       notification_email: true,
       notification_sms: false
     });
-    
+
     // Wait for the next tick to let the afterCreate "hook" run
-    await new Promise(resolve => setTimeout(resolve, 10));
-    
+    await new Promise((resolve) => setTimeout(resolve, 10));
+
     // Verify UserSettings.create was called
     expect(UserSettings.create).toHaveBeenCalled();
-    
+
     // Find the settings
     const settings = await UserSettings.findOne({ where: { user_id: user.id } });
-    
+
     expect(settings).toBeDefined();
     expect(settings.user_id).toBe(user.id);
   });
@@ -207,12 +206,12 @@ describe('User Model', () => {
       email: 'unique@example.com',
       password_hash: 'hash'
     });
-    
+
     expect(user1).toBeDefined();
-    
+
     // Mock the validation error
     User.create.mockRejectedValueOnce(new Error('SequelizeUniqueConstraintError'));
-    
+
     // Second attempt should fail
     await expect(User.create({
       name: 'Test User 2',
@@ -227,7 +226,7 @@ describe('User Model', () => {
       email: 'timezone@example.com',
       password_hash: 'hash'
     });
-    
+
     expect(user.timezone).toBe('UTC');
   });
 
@@ -238,7 +237,7 @@ describe('User Model', () => {
       password_hash: 'hash',
       calendar_provider: 'google'
     });
-    
+
     expect(user.calendar_provider).toBe('google');
   });
 
@@ -251,7 +250,7 @@ describe('User Model', () => {
       calendarTokens: { type: 'hasMany' },
       notifications: { type: 'hasMany' }
     };
-    
+
     // Check associations exist
     expect(User.associations).toBeDefined();
     expect(User.associations.bookings).toBeDefined();
@@ -267,7 +266,7 @@ describe('User Model', () => {
       email: 'uuid@example.com',
       password_hash: 'hash'
     });
-    
+
     expect(user.id).toBeDefined();
     expect(user.id.length).toBe(36); // UUID v4 format
   });
@@ -279,22 +278,22 @@ describe('User Model', () => {
       email: 'timestamp@example.com',
       password_hash: 'hash'
     });
-    
+
     const createdDate = user.created;
-    
+
     // Mock the save method
-    const mockSave = jest.fn().mockImplementation(function() {
+    const mockSave = jest.fn().mockImplementation(function () {
       this.updated = new Date(Date.now() + 1000); // Add 1 second
       return this;
     });
-    
+
     // Add save method to user object
     user.save = mockSave;
-    
+
     // Wait a moment and update user
-    await new Promise(resolve => setTimeout(resolve, 10));
+    await new Promise((resolve) => setTimeout(resolve, 10));
     await user.save();
-    
+
     // Creation date should be unchanged, but updated date should be newer
     expect(user.created).toEqual(createdDate);
     expect(user.updated > createdDate).toBe(true);

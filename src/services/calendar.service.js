@@ -82,7 +82,7 @@ const refreshGoogleToken = async (token) => {
 
     logger.info(`Refreshed Google token for user ${token.user_id}`);
   } catch (error) {
-    logger.error(`Error refreshing Google token:`, error);
+    logger.error('Error refreshing Google token:', error);
     throw error;
   }
 };
@@ -159,7 +159,7 @@ const refreshMicrosoftToken = async (token) => {
 
     logger.info(`Refreshed Microsoft token for user ${token.user_id}`);
   } catch (error) {
-    logger.error(`Error refreshing Microsoft token:`, error);
+    logger.error('Error refreshing Microsoft token:', error);
     throw error;
   }
 };
@@ -192,7 +192,7 @@ const createCalendarEvent = async (booking) => {
         end: { dateTime: endTime, timeZone: user.timezone },
         attendees: [{ email: booking.customer_email }]
       });
-    } else if (user.calendar_provider === 'microsoft') {
+    } if (user.calendar_provider === 'microsoft') {
       return await createMicrosoftCalendarEvent(user.id, {
         subject: `Meeting with ${booking.customer_name}`,
         body: {
@@ -239,7 +239,7 @@ const createGoogleCalendarEvent = async (userId, eventDetails) => {
     logger.info(`Google Calendar event created for user ${userId}: ${response.data.id}`);
     return response.data;
   } catch (error) {
-    logger.error(`Error creating Google Calendar event:`, error);
+    logger.error('Error creating Google Calendar event:', error);
     throw error;
   }
 };
@@ -263,7 +263,7 @@ const createMicrosoftCalendarEvent = async (userId, eventDetails) => {
     logger.info(`Microsoft Calendar event created for user ${userId}: ${response.id}`);
     return response;
   } catch (error) {
-    logger.error(`Error creating Microsoft Calendar event:`, error);
+    logger.error('Error creating Microsoft Calendar event:', error);
     throw error;
   }
 };

@@ -18,11 +18,11 @@ module.exports = {
   ],
   coverageDirectory: 'coverage',
   coverageReporters: [
-    "json", 
-    "lcov", 
-    "text", 
-    "clover", 
-    "html"
+    'json',
+    'lcov',
+    'text',
+    'clover',
+    'html'
   ],
   // Current thresholds are set low as we're in the process of improving coverage
   // The target is 80% for all metrics

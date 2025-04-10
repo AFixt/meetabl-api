@@ -21,16 +21,17 @@ const isProduction = process.env.NODE_ENV === 'production';
 const isTest = process.env.NODE_ENV === 'test';
 
 // Create a stream for output based on environment
-const formatOut = isProduction
-  ? { type: 'stream', stream: process.stdout }
-  : isTest
-    ? { type: 'stream', stream: process.stdout }
-    : {
-      type: 'rotating-file',
-      path: path.join(__dirname, '../../logs/meetabl.log'),
-      period: '1d',
-      count: 7
-    };
+let formatOut;
+if (isProduction || isTest) {
+  formatOut = { type: 'stream', stream: process.stdout };
+} else {
+  formatOut = {
+    type: 'rotating-file',
+    path: path.join(__dirname, '../../logs/meetabl.log'),
+    period: '1d',
+    count: 7
+  };
+}
 
 // Create the logger
 const logger = bunyan.createLogger({

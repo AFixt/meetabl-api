@@ -1,6 +1,6 @@
 /**
  * Auth middleware tests
- * 
+ *
  * @author meetabl Team
  */
 
@@ -27,7 +27,7 @@ jest.mock('jsonwebtoken', () => {
       this.name = 'TokenExpiredError';
     }
   }
-  
+
   class JsonWebTokenError extends Error {
     constructor(message) {
       super(message);
@@ -87,7 +87,7 @@ describe('Auth Middleware', () => {
     expect(next).not.toHaveBeenCalled();
     expect(res.status).toHaveBeenCalledWith(401);
     expect(res.json).toHaveBeenCalled();
-    
+
     const responseData = res.json.mock.calls[0][0];
     expect(responseData.error).toBeDefined();
     expect(responseData.error.code).toBe('unauthorized');
@@ -112,7 +112,7 @@ describe('Auth Middleware', () => {
   test('should reject invalid token', async () => {
     // Create invalid token
     const invalidToken = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiIxMjMiLCJpYXQiOjE1MTYyMzkwMjJ9.invalid_signature';
-    
+
     const req = mockRequest({
       headers: {
         authorization: `Bearer ${invalidToken}`
@@ -120,7 +120,7 @@ describe('Auth Middleware', () => {
     });
     const res = mockResponse();
     const next = jest.fn();
-    
+
     await authenticateJWT(req, res, next);
 
     expect(next).not.toHaveBeenCalled();
@@ -131,7 +131,7 @@ describe('Auth Middleware', () => {
   test('should reject if user not found', async () => {
     // Non-existent user token
     const nonExistentToken = 'non-existent-id.jwt.token';
-    
+
     const req = mockRequest({
       headers: {
         authorization: `Bearer ${nonExistentToken}`

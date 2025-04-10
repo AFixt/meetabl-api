@@ -45,7 +45,7 @@ const processNotificationQueue = async () => {
         await notification.save();
       } catch (error) {
         logger.error(`Failed to process notification ${notification.id}:`, error);
-        
+
         // Update notification status
         notification.status = 'failed';
         notification.error_message = error.message;
@@ -74,7 +74,7 @@ const sendEmailNotification = async (notification) => {
   logger.info(`[MOCK EMAIL] Body: Your booking has been ${booking.status} for ${new Date(booking.start_time).toLocaleString()} to ${new Date(booking.end_time).toLocaleString()}`);
 
   // Simulate email sending delay
-  await new Promise(resolve => setTimeout(resolve, 500));
+  await new Promise((resolve) => setTimeout(resolve, 500));
 };
 
 /**
@@ -86,13 +86,13 @@ const sendSmsNotification = async (notification) => {
   // This would typically use a real SMS service like Twilio, Nexmo, etc.
   // For now, we'll just log the SMS details
   const booking = notification.Booking;
-  
+
   logger.info(`[MOCK SMS] Sending SMS notification for booking ${booking.id}`);
   logger.info(`[MOCK SMS] To: ${booking.customer_phone || 'No phone provided'}`);
   logger.info(`[MOCK SMS] Message: Your booking has been ${booking.status} for ${new Date(booking.start_time).toLocaleString()}`);
 
   // Simulate SMS sending delay
-  await new Promise(resolve => setTimeout(resolve, 500));
+  await new Promise((resolve) => setTimeout(resolve, 500));
 };
 
 /**

@@ -1,8 +1,8 @@
 /**
  * Booking controller unit tests
- * 
+ *
  * Using the improved test setup for consistent mocking
- * 
+ *
  * @author meetabl Team
  */
 
@@ -24,20 +24,18 @@ const {
 } = require('../../../src/controllers/booking.controller');
 
 // Ensure createMockRequest, createMockResponse, createMockNext are available
-if (typeof global.createMockRequest !== 'function' ||
-    typeof global.createMockResponse !== 'function' ||
-    typeof global.createMockNext !== 'function') {
+if (typeof global.createMockRequest !== 'function'
+    || typeof global.createMockResponse !== 'function'
+    || typeof global.createMockNext !== 'function') {
   // Define them if they're not available in the global scope
-  global.createMockRequest = (overrides = {}) => {
-    return {
-      body: {},
-      params: {},
-      query: {},
-      headers: {},
-      user: { id: 'test-user-id' },
-      ...overrides
-    };
-  };
+  global.createMockRequest = (overrides = {}) => ({
+    body: {},
+    params: {},
+    query: {},
+    headers: {},
+    user: { id: 'test-user-id' },
+    ...overrides
+  });
 
   global.createMockResponse = () => {
     const res = {};
@@ -91,7 +89,7 @@ describe('Booking Controller', () => {
       // Check response
       expect(res.status).toHaveBeenCalledWith(500);
       expect(res.json).toHaveBeenCalled();
-      
+
       // Verify error
       const responseData = res.json.mock.calls[0][0];
       expect(responseData.error).toBeDefined();
@@ -105,7 +103,7 @@ describe('Booking Controller', () => {
       const startTime = new Date();
       startTime.setDate(startTime.getDate() + 1);
       startTime.setHours(10, 0, 0, 0);
-      
+
       const endTime = new Date(startTime);
       endTime.setHours(11, 0, 0, 0);
 
@@ -124,7 +122,7 @@ describe('Booking Controller', () => {
       // Mock Booking.findOne to return null (no overlapping bookings)
       const { Booking } = require('../../../src/models');
       Booking.findOne.mockResolvedValueOnce(null);
-      
+
       // Mock Booking.create to return a proper booking
       Booking.create.mockResolvedValueOnce({
         id: 'test-booking-id',
@@ -142,7 +140,7 @@ describe('Booking Controller', () => {
       // Check response
       expect(res.status).toHaveBeenCalledWith(201);
       expect(res.json).toHaveBeenCalled();
-      
+
       // Verify response data
       const responseData = res.json.mock.calls[0][0];
       expect(responseData.id).toBeDefined();
@@ -155,7 +153,7 @@ describe('Booking Controller', () => {
       const startTime = new Date();
       startTime.setDate(startTime.getDate() + 1);
       startTime.setHours(11, 0, 0, 0);
-      
+
       const endTime = new Date(startTime);
       endTime.setHours(10, 0, 0, 0);
 
@@ -177,7 +175,7 @@ describe('Booking Controller', () => {
       // Check response
       expect(res.status).toHaveBeenCalledWith(400);
       expect(res.json).toHaveBeenCalled();
-      
+
       // Verify error
       const responseData = res.json.mock.calls[0][0];
       expect(responseData.error).toBeDefined();
@@ -190,7 +188,7 @@ describe('Booking Controller', () => {
       const startTime = new Date();
       startTime.setDate(startTime.getDate() + 1);
       startTime.setHours(10, 0, 0, 0);
-      
+
       const endTime = new Date(startTime);
       endTime.setHours(11, 0, 0, 0);
 
@@ -220,7 +218,7 @@ describe('Booking Controller', () => {
       // Check response
       expect(res.status).toHaveBeenCalledWith(400);
       expect(res.json).toHaveBeenCalled();
-      
+
       // Verify error
       const responseData = res.json.mock.calls[0][0];
       expect(responseData.error).toBeDefined();
@@ -268,7 +266,7 @@ describe('Booking Controller', () => {
       // Check response
       expect(res.status).toHaveBeenCalledWith(404);
       expect(res.json).toHaveBeenCalled();
-      
+
       // Verify error
       const responseData = res.json.mock.calls[0][0];
       expect(responseData.error).toBeDefined();
@@ -304,7 +302,7 @@ describe('Booking Controller', () => {
       // Check response
       expect(res.status).toHaveBeenCalledWith(200);
       expect(res.json).toHaveBeenCalled();
-      
+
       // Verify booking was updated
       expect(mockBooking.status).toBe('cancelled');
       expect(mockBooking.save).toHaveBeenCalled();
@@ -330,7 +328,7 @@ describe('Booking Controller', () => {
       // Check response
       expect(res.status).toHaveBeenCalledWith(404);
       expect(res.json).toHaveBeenCalled();
-      
+
       // Verify error
       const responseData = res.json.mock.calls[0][0];
       expect(responseData.error).toBeDefined();

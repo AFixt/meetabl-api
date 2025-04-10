@@ -1,8 +1,8 @@
 /**
  * Notification service unit tests
- * 
+ *
  * Using the improved test setup for consistent mocking
- * 
+ *
  * @author meetabl Team
  */
 
@@ -36,7 +36,7 @@ notificationService.queueNotification.mockImplementation(async (bookingId, type)
   if (bookingId === 'non-existent-booking-id') {
     throw new Error('Booking not found');
   }
-  
+
   return {
     id: uuidv4(),
     booking_id: bookingId,
@@ -48,12 +48,12 @@ notificationService.queueNotification.mockImplementation(async (bookingId, type)
 });
 
 notificationService.processNotificationQueue.mockImplementation(async () => {
-  const pendingNotifications = await Notification.findAll({ 
-    where: { status: 'pending' } 
+  const pendingNotifications = await Notification.findAll({
+    where: { status: 'pending' }
   });
-  
+
   logger.info(`Processing ${pendingNotifications.length} pending notifications`);
-  
+
   for (const notification of pendingNotifications) {
     try {
       // Mark as sent
@@ -67,18 +67,18 @@ notificationService.processNotificationQueue.mockImplementation(async () => {
       await notification.save();
     }
   }
-  
+
   return pendingNotifications.length;
 });
 
 describe('Notification Service', () => {
   const bookingId = 'test-booking-id';
   const userId = 'test-user-id';
-  
+
   beforeEach(() => {
     // Reset mocks
     jest.clearAllMocks();
-    
+
     // Mock booking lookup
     Booking.findByPk.mockResolvedValue({
       id: bookingId,
@@ -89,7 +89,7 @@ describe('Notification Service', () => {
       end_time: new Date(Date.now() + 7200000),
       status: 'confirmed'
     });
-    
+
     // Mock user lookup
     User.findByPk.mockResolvedValue({
       id: userId,
@@ -97,23 +97,21 @@ describe('Notification Service', () => {
       email: 'user@example.com',
       timezone: 'UTC'
     });
-    
+
     // Mock notification creation
-    Notification.create.mockImplementation(async (notificationData) => {
-      return {
-        id: uuidv4(),
-        booking_id: notificationData.booking_id,
-        type: notificationData.type,
-        status: notificationData.status || 'pending',
-        created_at: new Date(),
-        updated_at: new Date(),
-        sent_at: null,
-        error_message: null,
-        save: jest.fn().mockResolvedValue(true),
-        ...notificationData
-      };
-    });
-    
+    Notification.create.mockImplementation(async (notificationData) => ({
+      id: uuidv4(),
+      booking_id: notificationData.booking_id,
+      type: notificationData.type,
+      status: notificationData.status || 'pending',
+      created_at: new Date(),
+      updated_at: new Date(),
+      sent_at: null,
+      error_message: null,
+      save: jest.fn().mockResolvedValue(true),
+      ...notificationData
+    }));
+
     // Mock notification lookup
     Notification.findAll.mockImplementation(async ({ where }) => {
       if (where.status === 'pending') {
@@ -138,7 +136,7 @@ describe('Notification Service', () => {
   describe('queueNotification', () => {
     test('should queue email notification successfully', async () => {
       const notification = await notificationService.queueNotification(bookingId, 'email');
-      
+
       expect(notification).toBeDefined();
       expect(notification.id).toBeDefined();
       expect(notification.booking_id).toBe(bookingId);
@@ -148,7 +146,7 @@ describe('Notification Service', () => {
 
     test('should queue SMS notification successfully', async () => {
       const notification = await notificationService.queueNotification(bookingId, 'sms');
-      
+
       expect(notification).toBeDefined();
       expect(notification.id).toBeDefined();
       expect(notification.booking_id).toBe(bookingId);
@@ -178,12 +176,12 @@ describe('Notification Service', () => {
         status: 'pending',
         save: jest.fn().mockResolvedValue(true)
       };
-      
+
       Notification.findAll.mockResolvedValueOnce([pendingNotification]);
-      
+
       // Process queue
       await notificationService.processNotificationQueue();
-      
+
       // Check notification was updated
       expect(pendingNotification.save).toHaveBeenCalled();
       expect(pendingNotification.status).toBe('sent');
@@ -197,42 +195,42 @@ describe('Notification Service', () => {
         booking_id: bookingId,
         type: 'email',
         status: 'pending',
-        save: jest.fn().mockImplementation(function() {
+        save: jest.fn().mockImplementation(function () {
           // Force failure status
           this.status = 'failed';
           this.error_message = 'Test error';
           return Promise.resolve(true);
         })
       };
-      
+
       Notification.findAll.mockResolvedValueOnce([pendingNotification]);
-      
+
       // Override the processNotificationQueue just for this test
       const originalImplementation = notificationService.processNotificationQueue.getMockImplementation();
-      
+
       notificationService.processNotificationQueue.mockImplementationOnce(async () => {
-        const pendingNotifications = await Notification.findAll({ 
-          where: { status: 'pending' } 
+        const pendingNotifications = await Notification.findAll({
+          where: { status: 'pending' }
         });
-        
+
         for (const notification of pendingNotifications) {
           // Force error for this test
           notification.status = 'failed';
           notification.error_message = 'Test error';
           await notification.save();
         }
-        
+
         return pendingNotifications.length;
       });
-      
+
       // Process queue
       await notificationService.processNotificationQueue();
-      
+
       // Check notification was marked as failed
       expect(pendingNotification.save).toHaveBeenCalled();
       expect(pendingNotification.status).toBe('failed');
       expect(pendingNotification.error_message).toBeDefined();
-      
+
       // Restore implementation
       notificationService.processNotificationQueue.mockImplementation(originalImplementation);
     });
@@ -240,13 +238,13 @@ describe('Notification Service', () => {
     test('should handle empty queue', async () => {
       // No notifications in the queue
       Notification.findAll.mockResolvedValueOnce([]);
-      
+
       // Spy on logger
       const infoSpy = jest.spyOn(logger, 'info');
-      
+
       // Process queue
       await notificationService.processNotificationQueue();
-      
+
       // Check log message
       expect(infoSpy).toHaveBeenCalledWith(expect.stringContaining('0 pending notifications'));
     });

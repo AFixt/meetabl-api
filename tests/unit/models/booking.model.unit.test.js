@@ -1,8 +1,8 @@
 /**
  * Booking model unit tests
- * 
+ *
  * Using the improved test setup for consistent mocking
- * 
+ *
  * @author meetabl Team
  */
 
@@ -15,43 +15,44 @@ setupControllerMocks();
 
 // Import models after mocks are set up
 const { Booking, Notification, User } = require('../../../src/models');
+
 const { v4: uuidv4 } = jest.requireActual('uuid');
 
 describe('Booking Model', () => {
   // User ID for tests
   const userId = 'test-user-id';
-  
+
   beforeEach(() => {
     // Reset mocks
     jest.clearAllMocks();
-    
+
     // Mock the Booking model create method
     Booking.create.mockImplementation(async (bookingData) => {
       // Validate start_time is before end_time
-      if (bookingData.start_time && bookingData.end_time &&
-          new Date(bookingData.start_time) >= new Date(bookingData.end_time)) {
+      if (bookingData.start_time && bookingData.end_time
+          && new Date(bookingData.start_time) >= new Date(bookingData.end_time)) {
         throw new Error('End time must be after start time');
       }
-      
+
       // Validate required fields
       if (!bookingData.user_id) {
         throw new Error('User ID is required');
       }
-      
+
       if (!bookingData.customer_name || bookingData.customer_name.trim() === '') {
         throw new Error('Customer name is required');
       }
-      
+
       if (!bookingData.customer_email) {
         throw new Error('Customer email is required');
       }
-      
+
       // Validate email format
       const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
       if (!emailRegex.test(bookingData.customer_email)) {
         throw new Error('Invalid email format');
       }
-      
+
       return {
         id: bookingData.id || uuidv4(),
         user_id: bookingData.user_id,
@@ -66,17 +67,17 @@ describe('Booking Model', () => {
         ...bookingData
       };
     });
-    
+
     // Mock the update method
     Booking.update.mockImplementation(async (updates, options) => {
       // Validate status if provided
       if (updates.status && !['confirmed', 'cancelled'].includes(updates.status)) {
         throw new Error('Invalid booking status');
       }
-      
+
       return [1];
     });
-    
+
     // Mock findAll to return bookings for a user
     Booking.findAll.mockImplementation(async ({ where }) => {
       if (where.user_id === userId) {
@@ -108,10 +109,10 @@ describe('Booking Model', () => {
   test('should create a booking successfully', async () => {
     const startTime = new Date();
     startTime.setHours(startTime.getHours() + 1);
-    
+
     const endTime = new Date(startTime);
     endTime.setHours(endTime.getHours() + 1);
-    
+
     const booking = await Booking.create({
       user_id: userId,
       customer_name: 'Test Customer',
@@ -119,7 +120,7 @@ describe('Booking Model', () => {
       start_time: startTime,
       end_time: endTime
     });
-    
+
     expect(booking).toBeDefined();
     expect(booking.id).toBeDefined();
     expect(booking.user_id).toBe(userId);
@@ -133,10 +134,10 @@ describe('Booking Model', () => {
   test('should validate start_time is before end_time', async () => {
     const startTime = new Date();
     startTime.setHours(startTime.getHours() + 2);
-    
+
     const endTime = new Date();
     endTime.setHours(endTime.getHours() + 1);
-    
+
     await expect(Booking.create({
       user_id: userId,
       customer_name: 'Test Customer',
@@ -149,10 +150,10 @@ describe('Booking Model', () => {
   test('should require user_id when creating booking', async () => {
     const startTime = new Date();
     startTime.setHours(startTime.getHours() + 1);
-    
+
     const endTime = new Date(startTime);
     endTime.setHours(endTime.getHours() + 1);
-    
+
     await expect(Booking.create({
       // missing user_id
       customer_name: 'Test Customer',
@@ -165,10 +166,10 @@ describe('Booking Model', () => {
   test('should require customer_name when creating booking', async () => {
     const startTime = new Date();
     startTime.setHours(startTime.getHours() + 1);
-    
+
     const endTime = new Date(startTime);
     endTime.setHours(endTime.getHours() + 1);
-    
+
     await expect(Booking.create({
       user_id: userId,
       // missing customer_name
@@ -181,10 +182,10 @@ describe('Booking Model', () => {
   test('should require valid customer_email when creating booking', async () => {
     const startTime = new Date();
     startTime.setHours(startTime.getHours() + 1);
-    
+
     const endTime = new Date(startTime);
     endTime.setHours(endTime.getHours() + 1);
-    
+
     await expect(Booking.create({
       user_id: userId,
       customer_name: 'Test Customer',
@@ -197,12 +198,12 @@ describe('Booking Model', () => {
   test('should create booking with calendar_event_id', async () => {
     const startTime = new Date();
     startTime.setHours(startTime.getHours() + 1);
-    
+
     const endTime = new Date(startTime);
     endTime.setHours(endTime.getHours() + 1);
-    
+
     const calendarEventId = 'calendar-event-123';
-    
+
     const booking = await Booking.create({
       user_id: userId,
       customer_name: 'Test Customer',
@@ -211,7 +212,7 @@ describe('Booking Model', () => {
       end_time: endTime,
       calendar_event_id: calendarEventId
     });
-    
+
     expect(booking).toBeDefined();
     expect(booking.calendar_event_id).toBe(calendarEventId);
   });
@@ -224,24 +225,22 @@ describe('Booking Model', () => {
       customer_email: 'customer@example.com',
       status: 'confirmed'
     });
-    
+
     // Mock booking update and findByPk
     booking.save.mockResolvedValueOnce(true);
-    
-    Booking.findByPk.mockImplementationOnce(() => {
-      return Promise.resolve({
-        ...booking,
-        status: 'cancelled'
-      });
-    });
-    
+
+    Booking.findByPk.mockImplementationOnce(() => Promise.resolve({
+      ...booking,
+      status: 'cancelled'
+    }));
+
     // Update booking status to cancelled
     booking.status = 'cancelled';
     await booking.save();
-    
+
     // Fetch booking again
     const updatedBooking = await Booking.findByPk(booking.id);
-    
+
     expect(updatedBooking.status).toBe('cancelled');
   });
 
@@ -256,7 +255,7 @@ describe('Booking Model', () => {
     const bookings = await Booking.findAll({
       where: { user_id: userId }
     });
-    
+
     expect(bookings).toBeDefined();
     expect(bookings.length).toBe(2);
     expect(bookings[0].user_id).toBe(userId);
@@ -267,7 +266,7 @@ describe('Booking Model', () => {
     const bookings = await Booking.findAll({
       where: { user_id: 'user-with-no-bookings' }
     });
-    
+
     expect(bookings).toEqual([]);
   });
 
@@ -279,7 +278,7 @@ describe('Booking Model', () => {
       start_time: new Date(),
       end_time: new Date(Date.now() + 3600000)
     });
-    
+
     expect(booking.id).toBeDefined();
     expect(booking.id.length).toBe(36); // UUID v4 format
   });
@@ -290,7 +289,7 @@ describe('Booking Model', () => {
       user: { type: 'belongsTo' },
       notifications: { type: 'hasMany' }
     };
-    
+
     // Check associations exist
     expect(Booking.associations).toBeDefined();
     expect(Booking.associations.user).toBeDefined();
@@ -301,11 +300,11 @@ describe('Booking Model', () => {
     // Mock the relationships directly
     User.hasMany = jest.fn();
     Booking.belongsTo = jest.fn();
-    
+
     // Manually call the relationship methods to test the one-to-many relationship
     User.hasMany(Booking, { foreignKey: 'user_id', onDelete: 'CASCADE' });
     Booking.belongsTo(User, { foreignKey: 'user_id' });
-    
+
     // Test that relationship methods were called
     expect(User.hasMany).toHaveBeenCalled();
     expect(Booking.belongsTo).toHaveBeenCalled();
