@@ -3,7 +3,7 @@
  *
  * Handles user registration, login, and token management
  *
- * @author AccessMeet Team
+ * @author meetabl Team
  */
 
 const jwt = require('jsonwebtoken');

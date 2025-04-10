@@ -3,7 +3,7 @@
  *
  * Defines routes for user profile management
  *
- * @author AccessMeet Team
+ * @author meetabl Team
  */
 
 const express = require('express');

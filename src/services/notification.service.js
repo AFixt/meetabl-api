@@ -3,7 +3,7 @@
  *
  * Manages sending email and SMS notifications
  *
- * @author AccessMeet Team
+ * @author meetabl Team
  */
 
 const { v4: uuidv4 } = require('uuid');

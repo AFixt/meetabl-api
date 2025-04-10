@@ -3,7 +3,7 @@
  * 
  * Using the improved test setup for consistent mocking
  * 
- * @author AccessMeet Team
+ * @author meetabl Team
  */
 
 // Load the test setup
@@ -119,10 +119,10 @@ describe('Calendar Service', () => {
     // Mock environment variables
     process.env.GOOGLE_CLIENT_ID = 'google-client-id';
     process.env.GOOGLE_CLIENT_SECRET = 'google-client-secret';
-    process.env.GOOGLE_REDIRECT_URI = 'https://accessmeet.example.com/auth/google/callback';
+    process.env.GOOGLE_REDIRECT_URI = 'https://meetabl.example.com/auth/google/callback';
     process.env.MICROSOFT_CLIENT_ID = 'microsoft-client-id';
     process.env.MICROSOFT_CLIENT_SECRET = 'microsoft-client-secret';
-    process.env.MICROSOFT_REDIRECT_URI = 'https://accessmeet.example.com/auth/microsoft/callback';
+    process.env.MICROSOFT_REDIRECT_URI = 'https://meetabl.example.com/auth/microsoft/callback';
     
     // Mock booking lookup
     Booking.findOne.mockResolvedValue({

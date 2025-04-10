@@ -1,7 +1,7 @@
 {
-  "name": "@afixt/accessmeet-api",
+  "name": "@afixt/meetabl-api",
   "version": "1.0.0",
-  "description": "WCAG 2.2 AA/AAA compliant booking API for the AccessMeet platform",
+  "description": "WCAG 2.2 AA/AAA compliant booking API for the meetabl platform",
   "main": "src/index.js",
   "scripts": {
     "start": "node src/index.js",
@@ -32,7 +32,7 @@
     "wcag",
     "appointment"
   ],
-  "author": "AccessMeet Team",
+  "author": "meetabl Team",
   "license": "ISC",
   "dependencies": {
     "@microsoft/microsoft-graph-client": "^3.0.7",

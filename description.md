@@ -1,6 +1,6 @@
-# AccessMeet Description
+# meetabl Description
 
-Accessmeet is a responsive + accessible microsaas booking UI (WCAG 2.2 AA/AAA compliant) designed to compete with Calendly and other inaccessble calendar booking products.
+meetabl is a responsive + accessible microsaas booking UI (WCAG 2.2 AA/AAA compliant) designed to compete with Calendly and other inaccessble calendar booking products.
 
 ## Core Features in MVP
 
@@ -9,7 +9,7 @@ Accessmeet is a responsive + accessible microsaas booking UI (WCAG 2.2 AA/AAA co
 3. Calendar Integrations: OAuth 2.0 for Google and Microsoft; real-time sync for availability and booked slots
 4. Notifications: Accessible email confirmations with .ics file + SMS reminders (optional toggle)
 5. Admin Dashboard: Manage availability, events, booking links, integrations, branding, accessibility settings
-6. Public Booking Link: Shareable public URL (e.g. accessmeet.com/jane)
+6. Public Booking Link: Shareable public URL (e.g. meetabl.com/jane)
 7. Security: JWT-based auth, hashed passwords, rate limiting, CSRF/XSS protection
 8. Compliance: Privacy-first data handling; VPAT-ready from Day 1
 

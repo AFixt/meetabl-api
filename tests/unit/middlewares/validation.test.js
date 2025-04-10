@@ -1,7 +1,7 @@
 /**
  * Validation middleware tests
  * 
- * @author AccessMeet Team
+ * @author meetabl Team
  */
 
 const { validateRequest } = require('../../../src/middlewares/validation');

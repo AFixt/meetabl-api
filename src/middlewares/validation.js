@@ -3,7 +3,7 @@
  *
  * Provides request validation functions using express-validator
  *
- * @author AccessMeet Team
+ * @author meetabl Team
  */
 
 const {

@@ -4,7 +4,7 @@
  * Defines the AvailabilityRule model for Sequelize ORM
  * Used to store user's recurring availability patterns
  *
- * @author AccessMeet Team
+ * @author meetabl Team
  */
 
 const { DataTypes } = require('sequelize');

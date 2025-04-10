@@ -4,7 +4,7 @@
  * Defines the CalendarToken model for Sequelize ORM
  * Used to store OAuth tokens for calendar providers
  *
- * @author AccessMeet Team
+ * @author meetabl Team
  */
 
 const { DataTypes } = require('sequelize');

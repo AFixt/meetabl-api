@@ -3,7 +3,7 @@
  *
  * Defines routes for booking management
  *
- * @author AccessMeet Team
+ * @author meetabl Team
  */
 
 const express = require('express');

@@ -3,7 +3,7 @@
  *
  * Provides a centralized logging mechanism for the application
  *
- * @author AccessMeet Team
+ * @author meetabl Team
  */
 
 const bunyan = require('bunyan');
@@ -27,14 +27,14 @@ const formatOut = isProduction
     ? { type: 'stream', stream: process.stdout }
     : {
       type: 'rotating-file',
-      path: path.join(__dirname, '../../logs/accessmeet.log'),
+      path: path.join(__dirname, '../../logs/meetabl.log'),
       period: '1d',
       count: 7
     };
 
 // Create the logger
 const logger = bunyan.createLogger({
-  name: 'accessmeet-api',
+  name: 'meetabl-api',
   level: isProduction ? 'info' : 'debug',
   serializers: bunyan.stdSerializers,
   streams: [

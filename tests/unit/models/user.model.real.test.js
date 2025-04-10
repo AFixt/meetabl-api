@@ -3,7 +3,7 @@
  * 
  * Tests for the User model using proper mocking of Sequelize
  * 
- * @author AccessMeet Team
+ * @author meetabl Team
  */
 
 // Import test setup

@@ -1,6 +1,6 @@
-# AccessMeet API Services
+# meetabl API Services
 
-This document describes the internal services available in the AccessMeet API.
+This document describes the internal services available in the meetabl API.
 
 ## Notification Service
 

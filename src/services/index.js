@@ -3,7 +3,7 @@
  *
  * Exposes all services for the application
  *
- * @author AccessMeet Team
+ * @author meetabl Team
  */
 
 const notificationService = require('./notification.service');

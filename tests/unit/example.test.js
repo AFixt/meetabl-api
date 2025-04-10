@@ -3,7 +3,7 @@
  * 
  * Demonstrates basic test setup
  * 
- * @author AccessMeet Team
+ * @author meetabl Team
  */
 
 describe('Example Test Suite', () => {

@@ -3,7 +3,7 @@
  *
  * Exports all models and establishes relationships
  *
- * @author AccessMeet Team
+ * @author meetabl Team
  */
 
 const User = require('./user.model');

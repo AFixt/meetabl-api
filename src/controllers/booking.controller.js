@@ -3,7 +3,7 @@
  *
  * Handles meeting/appointment bookings
  *
- * @author AccessMeet Team
+ * @author meetabl Team
  */
 
 const { v4: uuidv4 } = require('uuid');

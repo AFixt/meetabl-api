@@ -3,7 +3,7 @@
  *
  * Background job to process pending notifications
  *
- * @author AccessMeet Team
+ * @author meetabl Team
  */
 
 const logger = require('../config/logger');

@@ -3,7 +3,7 @@
  * 
  * This file configures all the necessary mocks for unit tests
  * 
- * @author AccessMeet Team
+ * @author meetabl Team
  */
 
 // Set test environment

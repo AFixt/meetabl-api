@@ -3,7 +3,7 @@
  * 
  * Provides mock functions for external services
  * 
- * @author AccessMeet Team
+ * @author meetabl Team
  */
 
 const jwt = require('jsonwebtoken');

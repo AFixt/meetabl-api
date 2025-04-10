@@ -4,7 +4,7 @@
  * Defines the AuditLog model for Sequelize ORM
  * Tracks user actions for security and compliance
  *
- * @author AccessMeet Team
+ * @author meetabl Team
  */
 
 const { DataTypes } = require('sequelize');

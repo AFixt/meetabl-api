@@ -1,6 +1,6 @@
-# AccessMeet API Deployment Guide
+# meetabl API Deployment Guide
 
-This document provides detailed instructions for deploying the AccessMeet API to various environments.
+This document provides detailed instructions for deploying the meetabl API to various environments.
 
 ## Table of Contents
 
@@ -20,7 +20,7 @@ This document provides detailed instructions for deploying the AccessMeet API to
 
 ## Prerequisites
 
-Before deploying the AccessMeet API, ensure you have:
+Before deploying the meetabl API, ensure you have:
 
 - Node.js (v16 or later recommended)
 - MySQL or MariaDB (v8.0 or later recommended)
@@ -32,25 +32,29 @@ Before deploying the AccessMeet API, ensure you have:
 ## Environment Setup
 
 1. **Clone the repository**:
+
    ```bash
-   git clone https://github.com/your-organization/accessmeet-api.git
-   cd accessmeet-api
+   git clone https://github.com/your-organization/meetabl-api.git
+   cd meetabl-api
    ```
 
 2. **Install dependencies**:
+
    ```bash
    npm install
    ```
 
 3. **Create environment file**:
    Create a `.env` file based on the `.env.example` template:
+
    ```bash
    cp .env.example .env
    ```
 
 4. **Configure environment variables**:
    Edit the `.env` file with your specific settings:
-   ```
+
+```
    # Server Configuration
    PORT=4000
    NODE_ENV=production
@@ -58,9 +62,9 @@ Before deploying the AccessMeet API, ensure you have:
    
    # Database Configuration
    DB_HOST=localhost
-   DB_USER=accessmeet_user
+   DB_USER=meetabl_user
    DB_PASSWORD=strong_password_here
-   DB_NAME=accessmeet
+   DB_NAME=meetabl
    DB_PORT=3306
    
    # JWT Configuration
@@ -82,23 +86,27 @@ Before deploying the AccessMeet API, ensure you have:
 ## Database Setup
 
 1. **Create the database**:
+
    ```bash
-   mysql -u root -p -e "CREATE DATABASE accessmeet CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
+   mysql -u root -p -e "CREATE DATABASE meetabl CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
    ```
 
 2. **Create a database user**:
+
    ```bash
-   mysql -u root -p -e "CREATE USER 'accessmeet_user'@'localhost' IDENTIFIED BY 'strong_password_here';"
-   mysql -u root -p -e "GRANT ALL PRIVILEGES ON accessmeet.* TO 'accessmeet_user'@'localhost';"
+   mysql -u root -p -e "CREATE USER 'meetabl_user'@'localhost' IDENTIFIED BY 'strong_password_here';"
+   mysql -u root -p -e "GRANT ALL PRIVILEGES ON meetabl.* TO 'meetabl_user'@'localhost';"
    mysql -u root -p -e "FLUSH PRIVILEGES;"
    ```
 
 3. **Import the database schema**:
+
    ```bash
-   mysql -u accessmeet_user -p accessmeet < install.sql
+   mysql -u meetabl_user -p meetabl < install.sql
    ```
 
 4. **Run database migrations** (if needed):
+
    ```bash
    npm run db:migrate
    ```
@@ -123,20 +131,24 @@ npm start
 
 1. **Set up Node.js on your server**:
    - Ubuntu/Debian:
+
      ```bash
      curl -fsSL https://deb.nodesource.com/setup_16.x | sudo -E bash -
      sudo apt-get install -y nodejs
      ```
+
    - CentOS/RHEL:
+
      ```bash
      curl -fsSL https://rpm.nodesource.com/setup_16.x | sudo bash -
      sudo yum install -y nodejs
      ```
 
 2. **Deploy the application code**:
+
    ```bash
-   git clone https://github.com/your-organization/accessmeet-api.git
-   cd accessmeet-api
+   git clone https://github.com/your-organization/meetabl-api.git
+   cd meetabl-api
    npm install --production
    ```
 
@@ -144,12 +156,13 @@ npm start
    Either create the `.env` file or set environment variables in your system.
 
 4. **Use PM2 for process management**:
+
    ```bash
    # Install PM2 globally
    npm install -g pm2
    
    # Start the application with PM2
-   pm2 start src/index.js --name "accessmeet-api"
+   pm2 start src/index.js --name "meetabl-api"
    
    # Configure PM2 to start on system boot
    pm2 startup
@@ -162,6 +175,7 @@ npm start
 #### Docker Deployment
 
 1. **Create a Dockerfile** in the project root:
+
    ```dockerfile
    FROM node:16-alpine
 
@@ -178,6 +192,7 @@ npm start
    ```
 
 2. **Create a docker-compose.yml file**:
+
    ```yaml
    version: '3'
 
@@ -200,8 +215,8 @@ npm start
          - "3306:3306"
        environment:
          - MYSQL_ROOT_PASSWORD=root_password
-         - MYSQL_DATABASE=accessmeet
-         - MYSQL_USER=accessmeet_user
+         - MYSQL_DATABASE=meetabl
+         - MYSQL_USER=meetabl_user
          - MYSQL_PASSWORD=strong_password_here
        volumes:
          - mysql_data:/var/lib/mysql
@@ -213,6 +228,7 @@ npm start
    ```
 
 3. **Build and run with Docker Compose**:
+
    ```bash
    docker-compose up -d
    ```
@@ -222,21 +238,25 @@ npm start
 ##### AWS Elastic Beanstalk
 
 1. **Install the EB CLI**:
+
    ```bash
    pip install awsebcli
    ```
 
 2. **Initialize EB application**:
+
    ```bash
    eb init
    ```
 
 3. **Create an environment and deploy**:
+
    ```bash
    eb create
    ```
 
 4. **Configure environment variables**:
+
    ```bash
    eb setenv NODE_ENV=production PORT=4000 JWT_SECRET=your_secret_key ...
    ```
@@ -244,36 +264,43 @@ npm start
 ##### Heroku
 
 1. **Install Heroku CLI**:
+
    ```bash
    npm install -g heroku
    ```
 
 2. **Login to Heroku**:
+
    ```bash
    heroku login
    ```
 
 3. **Create a Heroku app**:
+
    ```bash
-   heroku create accessmeet-api
+   heroku create meetabl-api
    ```
 
 4. **Add MySQL add-on**:
+
    ```bash
    heroku addons:create jawsdb:kitefin
    ```
 
 5. **Set environment variables**:
+
    ```bash
    heroku config:set NODE_ENV=production JWT_SECRET=your_secret_key ...
    ```
 
 6. **Deploy to Heroku**:
+
    ```bash
    git push heroku main
    ```
 
 7. **Run database migrations**:
+
    ```bash
    heroku run npm run db:migrate
    ```
@@ -282,16 +309,18 @@ npm start
 
 For production, always use HTTPS:
 
-### Using Nginx as a reverse proxy:
+### Using Nginx as a reverse proxy
 
 1. **Install Nginx**:
+
    ```bash
    sudo apt update
    sudo apt install -y nginx
    ```
 
 2. **Configure Nginx**:
-   Create a new site configuration at `/etc/nginx/sites-available/accessmeet-api`:
+   Create a new site configuration at `/etc/nginx/sites-available/meetabl-api`:
+
    ```nginx
    server {
        listen 80;
@@ -327,13 +356,15 @@ For production, always use HTTPS:
    ```
 
 3. **Enable the site and restart Nginx**:
+
    ```bash
-   sudo ln -s /etc/nginx/sites-available/accessmeet-api /etc/nginx/sites-enabled/
+   sudo ln -s /etc/nginx/sites-available/meetabl-api /etc/nginx/sites-enabled/
    sudo nginx -t
    sudo systemctl restart nginx
    ```
 
 4. **Set up Let's Encrypt for free SSL**:
+
    ```bash
    sudo apt install -y certbot python3-certbot-nginx
    sudo certbot --nginx -d api.your-domain.com
@@ -346,30 +377,35 @@ For production, always use HTTPS:
 The application uses Bunyan for logging. In production, logs are stored in the `logs` directory.
 
 To view structured logs:
+
 ```bash
-npx bunyan logs/accessmeet-api.log
+npx bunyan logs/meetabl-api.log
 ```
 
 ### Monitoring
 
 1. **Setup basic monitoring with PM2**:
+
    ```bash
    pm2 monit
    ```
 
 2. **Enable remote PM2 monitoring with PM2 Plus**:
+
    ```bash
    pm2 plus
    ```
 
 3. **Set up application performance monitoring with New Relic or similar**:
    Add this to your `.env` file:
+
    ```
    NEW_RELIC_LICENSE_KEY=your_license_key
-   NEW_RELIC_APP_NAME=AccessMeet API
+   NEW_RELIC_APP_NAME=meetabl API
    ```
 
    And install the dependency:
+
    ```bash
    npm install newrelic
    ```
@@ -380,28 +416,31 @@ npx bunyan logs/accessmeet-api.log
 
 1. **Set up automated MySQL backups**:
    Create a backup script `backup.sh`:
+
    ```bash
    #!/bin/bash
    BACKUP_DIR="/path/to/backups"
-   MYSQL_USER="accessmeet_user"
+   MYSQL_USER="meetabl_user"
    MYSQL_PASSWORD="your_password"
-   MYSQL_DATABASE="accessmeet"
+   MYSQL_DATABASE="meetabl"
    DATE=$(date +%Y-%m-%d-%H%M%S)
    
    # Create backup
-   mysqldump -u $MYSQL_USER -p$MYSQL_PASSWORD $MYSQL_DATABASE | gzip > $BACKUP_DIR/accessmeet-backup-$DATE.sql.gz
+   mysqldump -u $MYSQL_USER -p$MYSQL_PASSWORD $MYSQL_DATABASE | gzip > $BACKUP_DIR/meetabl-backup-$DATE.sql.gz
    
    # Keep only the last 7 days of backups
-   find $BACKUP_DIR -name "accessmeet-backup-*.sql.gz" -mtime +7 -delete
+   find $BACKUP_DIR -name "meetabl-backup-*.sql.gz" -mtime +7 -delete
    ```
 
 2. **Make it executable and schedule with cron**:
+
    ```bash
    chmod +x backup.sh
    crontab -e
    ```
-   
+
    Add this line to run the backup daily at 2 AM:
+
    ```
    0 2 * * * /path/to/backup.sh
    ```
@@ -409,8 +448,9 @@ npx bunyan logs/accessmeet-api.log
 ### Database Recovery
 
 To restore from a backup:
+
 ```bash
-gunzip -c backup-file.sql.gz | mysql -u accessmeet_user -p accessmeet
+gunzip -c backup-file.sql.gz | mysql -u meetabl_user -p meetabl
 ```
 
 ## Troubleshooting
@@ -425,7 +465,7 @@ gunzip -c backup-file.sql.gz | mysql -u accessmeet_user -p accessmeet
 
 2. **Application Won't Start**:
    - Check for syntax errors: `node -c src/index.js`
-   - Review logs: `cat logs/accessmeet-api.log | npx bunyan`
+   - Review logs: `cat logs/meetabl-api.log | npx bunyan`
    - Verify that all required environment variables are set
    - Check if the port is already in use: `lsof -i :4000`
 

@@ -1,10 +1,10 @@
 # Test Coverage
 
-This document outlines the test coverage for the AccessMeet API project. It includes information about code coverage metrics, test strategies, and areas of the codebase that are well-tested versus those that need additional test coverage.
+This document outlines the test coverage for the meetabl API project. It includes information about code coverage metrics, test strategies, and areas of the codebase that are well-tested versus those that need additional test coverage.
 
 ## Coverage Overview
 
-AccessMeet API uses Jest for unit and integration testing. The project aims to maintain a minimum code coverage threshold of 80% across branches, functions, lines, and statements.
+meetabl API uses Jest for unit and integration testing. The project aims to maintain a minimum code coverage threshold of 80% across branches, functions, lines, and statements.
 
 To run the coverage reports:
 
@@ -43,7 +43,7 @@ The latest test coverage metrics are displayed below:
 
 ## Test Strategy
 
-The AccessMeet API project follows these testing principles:
+The meetabl API project follows these testing principles:
 
 1. **Unit Tests**: Focused on testing individual components (models, controllers, services, utilities) in isolation
 2. **Mocking**: External dependencies are mocked to ensure tests are focused and do not rely on external services

@@ -1,6 +1,6 @@
-# AccessMeet API Test Suite
+# meetabl API Test Suite
 
-This directory contains tests for the AccessMeet API.
+This directory contains tests for the meetabl API.
 
 ## Recent Updates to Test Suite
 

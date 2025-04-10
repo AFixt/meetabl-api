@@ -3,7 +3,7 @@
  *
  * Handles JWT verification and user authentication
  *
- * @author AccessMeet Team
+ * @author meetabl Team
  */
 
 const jwt = require('jsonwebtoken');

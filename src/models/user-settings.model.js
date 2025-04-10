@@ -4,7 +4,7 @@
  * Defines the UserSettings model for Sequelize ORM
  * Stores user preferences, branding, and accessibility settings
  *
- * @author AccessMeet Team
+ * @author meetabl Team
  */
 
 const { DataTypes } = require('sequelize');

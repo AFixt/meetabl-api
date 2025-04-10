@@ -3,7 +3,7 @@
  *
  * Defines the User model for Sequelize ORM
  *
- * @author AccessMeet Team
+ * @author meetabl Team
  */
 
 const { DataTypes } = require('sequelize');
