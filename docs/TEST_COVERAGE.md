@@ -27,10 +27,10 @@ The latest test coverage metrics are displayed below:
 
 | Category   | Current | Target |
 |------------|---------|--------|
-| Branches  | 30.92% | 80%    |
-| Functions | 20.51% | 80%    |
-| Lines     | 27.18% | 80%    |
-| Statements | 27.19% | 80%    |
+| Branches  | 51.37% | 80%    |
+| Functions | 38.75% | 80%    |
+| Lines     | 47.42% | 80%    |
+| Statements | 47.47% | 80%    |
 
 > **Note**: The current coverage is low because we've recently migrated from integration tests to unit tests with proper mocking. We are actively working on improving test coverage.
 
@@ -79,11 +79,11 @@ Based on current coverage analysis, these components need the most testing:
 
 | Component              | Current Coverage | Priority |
 |------------------------|------------------|----------|
-| Controllers            | ~13%             | High     |
-| Models                 | ~0%              | High     |
+| Controllers            | ~74%             | Medium   |
+| Models                 | ~20%             | High     |
 | Services               | ~0%              | High     |
 | Routes                 | ~0%              | Medium   |
-| Config                 | ~39%             | Low      |
+| Config                 | ~42%             | Low      |
 
 The middlewares are well-tested (~95%) and should be used as examples for testing other components.
 

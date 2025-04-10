@@ -108,7 +108,8 @@ global.createMockResponse = () => {
   res.json = jest.fn().mockReturnValue(res);
   res.send = jest.fn().mockReturnValue(res);
   res.set = jest.fn().mockReturnValue(res);
-  res.redirect = jest.fn().mockReturnValue(res);
+  res.redirect = jest.fn().mockImplementation(() => res);
+  res.end = jest.fn().mockReturnValue(res);
   return res;
 };
 
