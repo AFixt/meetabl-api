@@ -3,7 +3,7 @@
  *
  * Handles availability rules and time slot management
  *
- * @author AccessMeet Team
+ * @author meetabl Team
  */
 
 const { v4: uuidv4 } = require('uuid');

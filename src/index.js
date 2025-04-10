@@ -3,7 +3,7 @@
  *
  * Initializes and starts the Express server
  *
- * @author AccessMeet Team
+ * @author meetabl Team
  */
 
 // Load environment variables
@@ -23,7 +23,7 @@ const PORT = process.env.PORT || 3000;
 
     // Start the server
     app.listen(PORT, () => {
-      logger.info(`AccessMeet API server running on port ${PORT}`);
+      logger.info(`meetabl API server running on port ${PORT}`);
       logger.info(`Environment: ${process.env.NODE_ENV || 'development'}`);
     });
 

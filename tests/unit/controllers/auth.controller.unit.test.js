@@ -3,7 +3,7 @@
  * 
  * Using mocked functions for consistent testing
  * 
- * @author AccessMeet Team
+ * @author meetabl Team
  */
 
 // Load the test setup

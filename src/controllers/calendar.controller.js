@@ -3,7 +3,7 @@
  *
  * Handles OAuth integration with Google Calendar and Microsoft Graph
  *
- * @author AccessMeet Team
+ * @author meetabl Team
  */
 
 const { v4: uuidv4 } = require('uuid');

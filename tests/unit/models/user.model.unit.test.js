@@ -3,7 +3,7 @@
  * 
  * Using the improved test setup for consistent mocking
  * 
- * @author AccessMeet Team
+ * @author meetabl Team
  */
 
 // Load the test setup

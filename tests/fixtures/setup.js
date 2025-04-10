@@ -3,7 +3,7 @@
  * 
  * Global setup and teardown for tests
  * 
- * @author AccessMeet Team
+ * @author meetabl Team
  */
 
 // Mock environment variables

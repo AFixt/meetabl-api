@@ -4,7 +4,7 @@
  * Defines the Notification model for Sequelize ORM
  * Used to track email and SMS notifications sent for bookings
  *
- * @author AccessMeet Team
+ * @author meetabl Team
  */
 
 const { DataTypes } = require('sequelize');

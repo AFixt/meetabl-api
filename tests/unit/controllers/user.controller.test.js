@@ -3,7 +3,7 @@
  * 
  * Tests for the user controller functionality
  * 
- * @author AccessMeet Team
+ * @author meetabl Team
  */
 
 // Import test setup

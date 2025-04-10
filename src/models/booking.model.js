@@ -4,7 +4,7 @@
  * Defines the Booking model for Sequelize ORM
  * Represents a scheduled meeting or appointment
  *
- * @author AccessMeet Team
+ * @author meetabl Team
  */
 
 const { DataTypes } = require('sequelize');

@@ -3,7 +3,7 @@
  *
  * Defines routes for calendar integration
  *
- * @author AccessMeet Team
+ * @author meetabl Team
  */
 
 const express = require('express');

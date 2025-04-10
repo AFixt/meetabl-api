@@ -3,7 +3,7 @@
  *
  * Initializes database tables based on Sequelize models
  *
- * @author AccessMeet Team
+ * @author meetabl Team
  */
 
 require('dotenv').config();

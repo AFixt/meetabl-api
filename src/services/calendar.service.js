@@ -3,7 +3,7 @@
  *
  * Manages external calendar integrations and event syncing
  *
- * @author AccessMeet Team
+ * @author meetabl Team
  */
 
 const { google } = require('googleapis');
@@ -187,7 +187,7 @@ const createCalendarEvent = async (booking) => {
     if (user.calendar_provider === 'google') {
       return await createGoogleCalendarEvent(user.id, {
         summary: `Meeting with ${booking.customer_name}`,
-        description: booking.description || 'AccessMeet booking',
+        description: booking.description || 'meetabl booking',
         start: { dateTime: startTime, timeZone: user.timezone },
         end: { dateTime: endTime, timeZone: user.timezone },
         attendees: [{ email: booking.customer_email }]
@@ -197,7 +197,7 @@ const createCalendarEvent = async (booking) => {
         subject: `Meeting with ${booking.customer_name}`,
         body: {
           contentType: 'text',
-          content: booking.description || 'AccessMeet booking'
+          content: booking.description || 'meetabl booking'
         },
         start: { dateTime: startTime, timeZone: user.timezone },
         end: { dateTime: endTime, timeZone: user.timezone },

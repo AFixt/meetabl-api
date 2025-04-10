@@ -3,7 +3,7 @@
  *
  * Configures and initializes the Sequelize connection to MySQL/MariaDB
  *
- * @author AccessMeet Team
+ * @author meetabl Team
  */
 
 const { Sequelize } = require('sequelize');

@@ -3,7 +3,7 @@
  * 
  * Comprehensive tests for the auth controller functionality
  * 
- * @author AccessMeet Team
+ * @author meetabl Team
  */
 
 // Import test setup

@@ -3,7 +3,7 @@
  * 
  * Provides common utilities for testing with mocked dependencies
  * 
- * @author AccessMeet Team
+ * @author meetabl Team
  */
 
 const path = require('path');

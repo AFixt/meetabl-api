@@ -3,7 +3,7 @@
  * 
  * This provides mock implementations of auth controller functions
  * 
- * @author AccessMeet Team
+ * @author meetabl Team
  */
 
 // Mock controller functions

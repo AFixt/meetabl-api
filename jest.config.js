@@ -1,5 +1,5 @@
 /**
- * Jest configuration for AccessMeet API
+ * Jest configuration for meetabl API
  */
 
 module.exports = {

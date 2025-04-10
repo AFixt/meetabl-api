@@ -3,7 +3,7 @@
  *
  * Configures the Express application with middlewares, routes, and error handling
  *
- * @author AccessMeet Team
+ * @author meetabl Team
  */
 
 const express = require('express');
@@ -79,7 +79,7 @@ app.use('/api/calendar', calendarRoutes);
 // Default route
 app.get('/', (req, res) => {
   res.status(200).json({
-    message: 'AccessMeet API is running',
+    message: 'meetabl API is running',
     version: '1.0.0',
     documentation: 'See README.md for API documentation'
   });

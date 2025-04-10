@@ -3,7 +3,7 @@
  * 
  * Creates all models with an SQLite database for testing
  * 
- * @author AccessMeet Team
+ * @author meetabl Team
  */
 
 // Import Sequelize

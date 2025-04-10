@@ -1,6 +1,6 @@
-# AccessMeet API
+# meetabl API
 
-A WCAG 2.2 AA/AAA compliant booking API for the AccessMeet platform. AccessMeet is a responsive and accessible microsaas booking system designed to compete with Calendly and other inaccessible calendar booking products.
+A WCAG 2.2 AA/AAA compliant booking API for the meetabl platform. meetabl is a responsive and accessible microsaas booking system designed to compete with Calendly and other inaccessible calendar booking products.
 
 ## Features
 
@@ -31,8 +31,8 @@ A WCAG 2.2 AA/AAA compliant booking API for the AccessMeet platform. AccessMeet 
 
 1. Clone the repository
    ```bash
-   git clone https://github.com/your-org/accessmeet-api.git
-   cd accessmeet-api
+   git clone https://github.com/your-org/meetabl-api.git
+   cd meetabl-api
    ```
 
 2. Install dependencies
@@ -49,10 +49,10 @@ A WCAG 2.2 AA/AAA compliant booking API for the AccessMeet platform. AccessMeet 
 4. Setup the database
    ```bash
    # Create the database
-   mysql -u root -p -e "CREATE DATABASE accessmeet"
+   mysql -u root -p -e "CREATE DATABASE meetabl"
    
    # Import schema
-   mysql -u root -p accessmeet < install.sql
+   mysql -u root -p meetabl < install.sql
    ```
 
 5. Start the development server
@@ -119,7 +119,7 @@ A WCAG 2.2 AA/AAA compliant booking API for the AccessMeet platform. AccessMeet 
 ## Project Structure
 
 ```
-accessmeet-api/
+meetabl-api/
 ├── src/                    # Source code
 │   ├── config/             # Configuration files
 │   │   ├── database.js     # Database configuration
@@ -169,7 +169,7 @@ accessmeet-api/
 
 ## Accessibility Compliance
 
-AccessMeet API is designed to support WCAG 2.2 AA/AAA compliance in the following ways:
+meetabl API is designed to support WCAG 2.2 AA/AAA compliance in the following ways:
 
 1. **Accessible API Responses**: All error messages and user-facing content are designed to be clear and understandable.
 2. **Timezone Support**: Full timezone support ensures appropriate time display for users with disabilities.
@@ -179,7 +179,7 @@ AccessMeet API is designed to support WCAG 2.2 AA/AAA compliance in the followin
 
 ## Testing and Code Quality
 
-AccessMeet API follows a comprehensive testing strategy to ensure code reliability and maintainability.
+meetabl API follows a comprehensive testing strategy to ensure code reliability and maintainability.
 
 ### Test Coverage
 

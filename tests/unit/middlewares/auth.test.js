@@ -1,7 +1,7 @@
 /**
  * Auth middleware tests
  * 
- * @author AccessMeet Team
+ * @author meetabl Team
  */
 
 const { authenticateJWT } = require('../../../src/middlewares/auth');
