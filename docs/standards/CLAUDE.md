@@ -20,7 +20,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **Lint JavaScript**: `npm run lint:js`
 - **Lint Markdown**: `npm run lint:md`
 - **Lint everything**: `npm run lint`
-- **Run database migrations**: `npm run db:migrate`
+
+## Database Commands
+
+- **Run migrations (current env)**: `npm run db:migrate`
+- **Run migrations (development)**: `npm run db:migrate:dev`
+- **Run migrations (test)**: `npm run db:migrate:test`
+- **Run migrations (production)**: `npm run db:migrate:prod`
+- **Seed database**: `npm run db:seed`
 
 ## Code Style Guidelines
 
@@ -34,5 +41,16 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **Error Handling**: Always use try/catch with proper logging via the logger utility
 - **Validation**: Validate all inputs using express-validator
 - **Security**: Never expose sensitive data, use environment variables for secrets
+
+## Database Configuration
+
+Database configuration is managed through `src/config/database.json` with environment-specific settings:
+
+- `development` - Local development environment
+- `test` - Used for unit/integration testing
+- `production` - Production deployment
+- `serverless` - Serverless/cloud deployment
+
+All credential values are populated from environment variables to maintain security.
 
 Always refer to detailed standards in the `docs/standards/` directory.
