@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Booking Cancelled</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .header {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+        .booking-details {
+            background-color: #f9f9f9;
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+        }
+        .booking-details h2 {
+            margin-top: 0;
+            color: #333;
+        }
+        .footer {
+            font-size: 12px;
+            color: #666;
+            margin-top: 30px;
+            text-align: center;
+        }
+        .button {
+            display: inline-block;
+            background-color: #4CAF50;
+            color: white;
+            padding: 10px 20px;
+            text-decoration: none;
+            border-radius: 5px;
+            margin-top: 15px;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>Booking Cancelled</h1>
+    </div>
+    
+    <p>Hi {{name}},</p>
+    
+    <p>Your booking with {{host}} has been cancelled. Here are the details of the cancelled booking:</p>
+    
+    <div class="booking-details">
+        <h2>Booking Details</h2>
+        <p><strong>Date:</strong> {{date}}</p>
+        <p><strong>Time:</strong> {{time}}</p>
+        <p><strong>Duration:</strong> {{duration}} minutes</p>
+        <p><strong>Host:</strong> {{host}}</p>
+        <p><strong>Type:</strong> {{meetingType}}</p>
+        {{#if cancelledBy}}
+        <p><strong>Cancelled by:</strong> {{cancelledBy}}</p>
+        {{/if}}
+        {{#if cancellationReason}}
+        <p><strong>Reason:</strong> {{cancellationReason}}</p>
+        {{/if}}
+    </div>
+    
+    <p>You can book a new meeting at any time:</p>
+    <a href="{{bookingUrl}}" class="button">Book New Meeting</a>
+    
+    <div class="footer">
+        <p>This is an automated message from meetabl - the accessible booking platform.</p>
+        <p>&copy; {{year}} meetabl. All rights reserved.</p>
+    </div>
+</body>
+</html>

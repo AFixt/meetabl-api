@@ -1,0 +1,61 @@
+language: node_js
+node_js:
+  - "18"
+
+cache:
+  directories:
+    - node_modules
+
+branches:
+  only:
+    - main
+    - develop
+
+services:
+  - mysql
+  - redis-server
+
+env:
+  global:
+    - NODE_ENV=test
+    - PORT=3000
+    - DB_HOST=localhost
+    - DB_USER=root
+    - DB_NAME=meetabl_test
+    - DB_PORT=3306
+    - REDIS_HOST=localhost
+    - REDIS_PORT=6379
+    - JWT_SECRET=test_jwt_secret
+    - JWT_EXPIRATION=1h
+
+before_install:
+  - mysql -e 'CREATE DATABASE IF NOT EXISTS meetabl_test;'
+
+install:
+  - npm ci
+
+before_script:
+  - npm run db:migrate:test
+  - npm run db:seed
+
+script:
+  - npm run lint
+  - npm test
+  - npm run test:coverage
+
+after_success:
+  - npm run test:coverage:badges
+
+deploy:
+  provider: script
+  script: bash scripts/deploy.sh
+  on:
+    branch: main
+    condition: $TRAVIS_PULL_REQUEST = false
+
+notifications:
+  email:
+    recipients:
+      - team@meetabl.com
+    on_success: change
+    on_failure: always
