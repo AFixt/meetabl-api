@@ -15,10 +15,12 @@ const cookieParser = require('cookie-parser');
 const logger = require('./config/logger');
 const { processNotifications } = require('./jobs/notification-processor');
 
-// Use test database configuration when in test environment
+// Use appropriate database configuration based on environment
 const { initializeDatabase } = process.env.NODE_ENV === 'test'
   ? require('./models/test-models')
-  : require('./config/database');
+  : process.env.AWS_LAMBDA_FUNCTION_NAME 
+    ? require('./config/database-serverless')
+    : require('./config/database');
 
 // Create Express app
 const app = express();
