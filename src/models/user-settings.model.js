@@ -44,6 +44,26 @@ const UserSettings = sequelize.define('UserSettings', {
   alt_text_enabled: {
     type: DataTypes.BOOLEAN,
     defaultValue: true
+  },
+  public_name: {
+    type: DataTypes.STRING(100),
+    allowNull: true
+  },
+  public_bio: {
+    type: DataTypes.TEXT,
+    allowNull: true
+  },
+  public_avatar_url: {
+    type: DataTypes.STRING(500),
+    allowNull: true
+  },
+  booking_page_title: {
+    type: DataTypes.STRING(100),
+    allowNull: true
+  },
+  booking_page_description: {
+    type: DataTypes.TEXT,
+    allowNull: true
   }
 }, {
   tableName: 'user_settings',

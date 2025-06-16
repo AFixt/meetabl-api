@@ -7,14 +7,34 @@
  */
 
 const { v4: uuidv4 } = require('uuid');
-const moment = require('moment');
+const {
+  isValid,
+  parseISO,
+  parse,
+  isAfter,
+  isEqual,
+  isBefore,
+  startOfDay,
+  endOfDay,
+  addMinutes,
+  set,
+  getDay,
+  getHours,
+  getMinutes,
+  differenceInMinutes,
+  format
+} = require('date-fns');
 const logger = require('../config/logger');
 const {
   Booking, User, Notification, AuditLog, AvailabilityRule
 } = require('../models');
-const { sequelize } = require('../config/database');
+const { sequelize, Op } = require('../config/database');
 const notificationService = require('../services/notification.service');
 const calendarService = require('../services/calendar.service');
+
+// Helper functions for date-fns
+const isSameOrBefore = (date1, date2) => isEqual(date1, date2) || isBefore(date1, date2);
+const isSameOrAfter = (date1, date2) => isEqual(date1, date2) || isAfter(date1, date2);
 
 /**
  * Get all bookings for current user
@@ -79,7 +99,7 @@ const createBooking = async (req, res) => {
     } = req.body;
 
     // Validate datetime format
-    if (!moment(startTime).isValid() || !moment(endTime).isValid()) {
+    if (!isValid(parseISO(startTime)) || !isValid(parseISO(endTime))) {
       return res.status(400).json({
         error: {
           code: 'bad_request',
@@ -99,7 +119,9 @@ const createBooking = async (req, res) => {
     }
 
     // Validate time range
-    if (moment(startTime).isSameOrAfter(moment(endTime))) {
+    const startDate = parseISO(startTime);
+    const endDate = parseISO(endTime);
+    if (isAfter(startDate, endDate) || isEqual(startDate, endDate)) {
       return res.status(400).json({
         error: {
           code: 'bad_request',
@@ -119,28 +141,28 @@ const createBooking = async (req, res) => {
       where: {
         user_id: userId,
         status: 'confirmed',
-        [sequelize.Op.or]: [
+        [Op.or]: [
           {
             // Starts during another booking
             start_time: {
-              [sequelize.Op.lt]: endTime,
-              [sequelize.Op.gte]: startTime
+              [Op.lt]: endTime,
+              [Op.gte]: startTime
             }
           },
           {
             // Ends during another booking
             end_time: {
-              [sequelize.Op.lte]: endTime,
-              [sequelize.Op.gt]: startTime
+              [Op.lte]: endTime,
+              [Op.gt]: startTime
             }
           },
           {
             // Completely overlaps another booking
             start_time: {
-              [sequelize.Op.lte]: startTime
+              [Op.lte]: startTime
             },
             end_time: {
-              [sequelize.Op.gte]: endTime
+              [Op.gte]: endTime
             }
           }
         ]
@@ -375,7 +397,7 @@ const getPublicBookings = async (req, res) => {
     // Find user by username
     const user = await User.findOne({
       where: {
-        [sequelize.Op.or]: [
+        [Op.or]: [
           { name: username }, // Check if username matches name
           { id: username } // Check if username matches ID
         ]
@@ -395,7 +417,8 @@ const getPublicBookings = async (req, res) => {
     const { date, duration = 60 } = req.query;
 
     // Validate date
-    if (!date || !moment(date, 'YYYY-MM-DD').isValid()) {
+    const parsedDate = date ? parse(date, 'yyyy-MM-dd', new Date()) : null;
+    if (!date || !isValid(parsedDate)) {
       return res.status(400).json({
         error: {
           code: 'bad_request',
@@ -411,8 +434,8 @@ const getPublicBookings = async (req, res) => {
     }
 
     // Parse date and get day of week (0 = Sunday, 6 = Saturday)
-    const targetDate = moment(date, 'YYYY-MM-DD');
-    const dayOfWeek = targetDate.day();
+    const targetDate = parse(date, 'yyyy-MM-dd', new Date());
+    const dayOfWeek = getDay(targetDate);
 
     // Validate duration
     const slotDuration = parseInt(duration, 10) || 60; // Default 60 minutes
@@ -448,14 +471,14 @@ const getPublicBookings = async (req, res) => {
     }
 
     // Get bookings for this date
-    const startOfDay = moment(date).startOf('day').toDate();
-    const endOfDay = moment(date).endOf('day').toDate();
+    const dayStart = startOfDay(targetDate);
+    const dayEnd = endOfDay(targetDate);
 
     const bookings = await Booking.findAll({
       where: {
         user_id: userId,
-        start_time: { [sequelize.Op.gte]: startOfDay },
-        end_time: { [sequelize.Op.lte]: endOfDay },
+        start_time: { [Op.gte]: dayStart },
+        end_time: { [Op.lte]: dayEnd },
         status: 'confirmed'
       }
     });
@@ -466,35 +489,40 @@ const getPublicBookings = async (req, res) => {
     // Use forEach instead of for...of
     rules.forEach((rule) => {
       // Parse rule times
-      const startTime = moment(rule.start_time, 'HH:mm:ss');
-      const endTime = moment(rule.end_time, 'HH:mm:ss');
+      const ruleStartTime = parse(rule.start_time, 'HH:mm:ss', new Date());
+      const ruleEndTime = parse(rule.end_time, 'HH:mm:ss', new Date());
 
       // Create slots with specified duration
-      const slotStart = moment(targetDate)
-        .hours(startTime.hours())
-        .minutes(startTime.minutes())
-        .seconds(0);
-      const ruleEnd = moment(targetDate)
-        .hours(endTime.hours())
-        .minutes(endTime.minutes())
-        .seconds(0);
+      let slotStart = set(targetDate, {
+        hours: getHours(ruleStartTime),
+        minutes: getMinutes(ruleStartTime),
+        seconds: 0
+      });
+      const ruleEnd = set(targetDate, {
+        hours: getHours(ruleEndTime),
+        minutes: getMinutes(ruleEndTime),
+        seconds: 0
+      });
 
-      while (slotStart.add(slotDuration, 'minutes').isSameOrBefore(ruleEnd)) {
+      while (isSameOrBefore(addMinutes(slotStart, slotDuration), ruleEnd)) {
+        const slotEnd = addMinutes(slotStart, slotDuration);
         const slot = {
-          start: moment(slotStart).subtract(slotDuration, 'minutes').toISOString(),
-          end: slotStart.toISOString()
+          start: slotStart.toISOString(),
+          end: slotEnd.toISOString()
         };
 
         // Check if slot conflicts with any booking
         const isConflict = bookings.some((booking) => {
-          const bookingStart = moment(booking.start_time);
-          const bookingEnd = moment(booking.end_time);
+          const bookingStart = new Date(booking.start_time);
+          const bookingEnd = new Date(booking.end_time);
 
           // Check for overlap
+          const slotStartWithBuffer = addMinutes(new Date(slot.start), -rule.buffer_minutes);
+          const slotEndWithBuffer = addMinutes(new Date(slot.end), rule.buffer_minutes);
+          
           return (
-            (moment(slot.start).isBefore(bookingEnd) && moment(slot.end).isAfter(bookingStart))
-            || (moment(slot.start).add(rule.buffer_minutes, 'minutes').isBefore(bookingEnd)
-            && moment(slot.end).subtract(rule.buffer_minutes, 'minutes').isAfter(bookingStart))
+            (isBefore(new Date(slot.start), bookingEnd) && isAfter(new Date(slot.end), bookingStart))
+            || (isBefore(slotStartWithBuffer, bookingEnd) && isAfter(slotEndWithBuffer, bookingStart))
           );
         });
 
@@ -502,11 +530,14 @@ const getPublicBookings = async (req, res) => {
         if (!isConflict) {
           allSlots.push(slot);
         }
+        
+        // Move to next slot
+        slotStart = slotEnd;
       }
     });
 
     // Sort slots by start time
-    allSlots.sort((a, b) => moment(a.start).diff(moment(b.start)));
+    allSlots.sort((a, b) => differenceInMinutes(new Date(a.start), new Date(b.start)));
 
     return res.status(200).json({
       user: {
@@ -548,7 +579,7 @@ const createPublicBooking = async (req, res) => {
     // Find user by username
     const user = await User.findOne({
       where: {
-        [sequelize.Op.or]: [
+        [Op.or]: [
           { name: username }, // Check if username matches name
           { id: username } // Check if username matches ID
         ]
@@ -567,8 +598,10 @@ const createPublicBooking = async (req, res) => {
     const userId = user.id;
 
     // Validate datetime format and range
-    if (!moment(startTime).isValid() || !moment(endTime).isValid()
-        || moment(startTime).isSameOrAfter(moment(endTime))) {
+    const startDate = parseISO(startTime);
+    const endDate = parseISO(endTime);
+    if (!isValid(startDate) || !isValid(endDate)
+        || isAfter(startDate, endDate) || isEqual(startDate, endDate)) {
       return res.status(400).json({
         error: {
           code: 'bad_request',
@@ -592,25 +625,25 @@ const createPublicBooking = async (req, res) => {
       where: {
         user_id: userId,
         status: 'confirmed',
-        [sequelize.Op.or]: [
+        [Op.or]: [
           {
             start_time: {
-              [sequelize.Op.lt]: endTime,
-              [sequelize.Op.gte]: startTime
+              [Op.lt]: endTime,
+              [Op.gte]: startTime
             }
           },
           {
             end_time: {
-              [sequelize.Op.lte]: endTime,
-              [sequelize.Op.gt]: startTime
+              [Op.lte]: endTime,
+              [Op.gt]: startTime
             }
           },
           {
             start_time: {
-              [sequelize.Op.lte]: startTime
+              [Op.lte]: startTime
             },
             end_time: {
-              [sequelize.Op.gte]: endTime
+              [Op.gte]: endTime
             }
           }
         ]
@@ -705,11 +738,342 @@ const createPublicBooking = async (req, res) => {
   }
 };
 
+/**
+ * Reschedule booking
+ * @param {Object} req - Express request object
+ * @param {Object} res - Express response object
+ */
+const rescheduleBooking = async (req, res) => {
+  const transaction = await sequelize.transaction();
+
+  try {
+    const userId = req.user.id;
+    const { id } = req.params;
+    const {
+      start_time: startTime,
+      end_time: endTime
+    } = req.body;
+
+    // Find booking
+    const booking = await Booking.findOne({
+      where: { id, user_id: userId }
+    });
+
+    if (!booking) {
+      return res.status(404).json({
+        error: {
+          code: 'not_found',
+          message: 'Booking not found'
+        }
+      });
+    }
+
+    // Check if booking is already cancelled
+    if (booking.status === 'cancelled') {
+      return res.status(400).json({
+        error: {
+          code: 'bad_request',
+          message: 'Cannot reschedule a cancelled booking'
+        }
+      });
+    }
+
+    // Validate datetime format
+    if (!isValid(parseISO(startTime)) || !isValid(parseISO(endTime))) {
+      return res.status(400).json({
+        error: {
+          code: 'bad_request',
+          message: 'Invalid date format',
+          params: [
+            {
+              param: 'start_time',
+              message: 'Start time must be a valid ISO 8601 date-time'
+            },
+            {
+              param: 'end_time',
+              message: 'End time must be a valid ISO 8601 date-time'
+            }
+          ]
+        }
+      });
+    }
+
+    // Validate time range
+    const startDateValidation = parseISO(startTime);
+    const endDateValidation = parseISO(endTime);
+    if (isAfter(startDateValidation, endDateValidation) || isEqual(startDateValidation, endDateValidation)) {
+      return res.status(400).json({
+        error: {
+          code: 'bad_request',
+          message: 'End time must be after start time',
+          params: [
+            {
+              param: 'end_time',
+              message: 'End time must be after start time'
+            }
+          ]
+        }
+      });
+    }
+
+    // Check for overlapping bookings (excluding current booking)
+    const overlappingBookings = await Booking.findOne({
+      where: {
+        user_id: userId,
+        id: { [Op.ne]: id }, // Exclude current booking
+        status: 'confirmed',
+        [Op.or]: [
+          {
+            start_time: {
+              [Op.lt]: endTime,
+              [Op.gte]: startTime
+            }
+          },
+          {
+            end_time: {
+              [Op.lte]: endTime,
+              [Op.gt]: startTime
+            }
+          },
+          {
+            start_time: {
+              [Op.lte]: startTime
+            },
+            end_time: {
+              [Op.gte]: endTime
+            }
+          }
+        ]
+      }
+    });
+
+    if (overlappingBookings) {
+      return res.status(400).json({
+        error: {
+          code: 'bad_request',
+          message: 'Time slot is not available',
+          params: [
+            {
+              param: 'start_time',
+              message: 'Time slot overlaps with an existing booking'
+            }
+          ]
+        }
+      });
+    }
+
+    // Store old times for audit log
+    const oldStartTime = booking.start_time;
+    const oldEndTime = booking.end_time;
+
+    // Update booking times
+    booking.start_time = startTime;
+    booking.end_time = endTime;
+    await booking.save({ transaction });
+
+    // Create reschedule notification
+    await Notification.create({
+      id: uuidv4(),
+      booking_id: id,
+      type: 'email',
+      status: 'pending'
+    }, { transaction });
+
+    // Create audit log
+    await AuditLog.create({
+      id: uuidv4(),
+      user_id: userId,
+      action: 'booking.reschedule',
+      metadata: {
+        bookingId: id,
+        old_start_time: oldStartTime,
+        old_end_time: oldEndTime,
+        new_start_time: startTime,
+        new_end_time: endTime
+      }
+    }, { transaction });
+
+    // Commit transaction
+    await transaction.commit();
+
+    // Log reschedule
+    logger.info(`Booking rescheduled: ${id}`);
+
+    // Queue email notification job for reschedule
+    await notificationService.queueNotification(id, 'email');
+
+    // Update calendar event if user has calendar integration
+    try {
+      await calendarService.createCalendarEvent(booking);
+    } catch (calendarError) {
+      logger.error(`Failed to update calendar event for rescheduled booking ${id}:`, calendarError);
+      // Non-critical error, don't fail the reschedule
+    }
+
+    return res.status(200).json(booking);
+  } catch (error) {
+    // Rollback transaction
+    await transaction.rollback();
+
+    logger.error('Error rescheduling booking:', error);
+
+    return res.status(500).json({
+      error: {
+        code: 'internal_server_error',
+        message: 'Failed to reschedule booking'
+      }
+    });
+  }
+};
+
+/**
+ * Bulk cancel bookings
+ * @param {Object} req - Express request object
+ * @param {Object} res - Express response object
+ */
+const bulkCancelBookings = async (req, res) => {
+  const transaction = await sequelize.transaction();
+
+  try {
+    const userId = req.user.id;
+    const { booking_ids: bookingIds } = req.body;
+
+    // Validate input
+    if (!bookingIds || !Array.isArray(bookingIds) || bookingIds.length === 0) {
+      return res.status(400).json({
+        error: {
+          code: 'bad_request',
+          message: 'Booking IDs are required',
+          params: [
+            {
+              param: 'booking_ids',
+              message: 'Must be a non-empty array of booking IDs'
+            }
+          ]
+        }
+      });
+    }
+
+    // Limit bulk operations to 100 bookings
+    if (bookingIds.length > 100) {
+      return res.status(400).json({
+        error: {
+          code: 'bad_request',
+          message: 'Cannot cancel more than 100 bookings at once',
+          params: [
+            {
+              param: 'booking_ids',
+              message: 'Array must contain 100 or fewer booking IDs'
+            }
+          ]
+        }
+      });
+    }
+
+    // Find all bookings to cancel
+    const bookings = await Booking.findAll({
+      where: {
+        id: { [Op.in]: bookingIds },
+        user_id: userId,
+        status: { [Op.ne]: 'cancelled' } // Only non-cancelled bookings
+      }
+    });
+
+    if (bookings.length === 0) {
+      return res.status(404).json({
+        error: {
+          code: 'not_found',
+          message: 'No valid bookings found to cancel'
+        }
+      });
+    }
+
+    // Cancel each booking
+    const cancelledBookings = [];
+    const notifications = [];
+    const auditLogs = [];
+
+    for (const booking of bookings) {
+      booking.status = 'cancelled';
+      await booking.save({ transaction });
+      
+      cancelledBookings.push(booking.id);
+
+      // Prepare notification
+      notifications.push({
+        id: uuidv4(),
+        booking_id: booking.id,
+        type: 'email',
+        status: 'pending'
+      });
+
+      // Prepare audit log
+      auditLogs.push({
+        id: uuidv4(),
+        user_id: userId,
+        action: 'booking.bulk_cancel',
+        metadata: {
+          bookingId: booking.id,
+          bulk_operation: true
+        }
+      });
+    }
+
+    // Create all notifications
+    await Notification.bulkCreate(notifications, { transaction });
+
+    // Create all audit logs
+    await AuditLog.bulkCreate(auditLogs, { transaction });
+
+    // Commit transaction
+    await transaction.commit();
+
+    // Log bulk cancellation
+    logger.info(`Bulk booking cancellation: ${cancelledBookings.length} bookings cancelled`);
+
+    // Queue email notifications for all cancelled bookings
+    for (const bookingId of cancelledBookings) {
+      await notificationService.queueNotification(bookingId, 'email');
+    }
+
+    // Update calendar events if user has calendar integration
+    for (const booking of bookings) {
+      try {
+        booking.description = `CANCELLED: ${booking.description || ''}`;
+        await calendarService.createCalendarEvent(booking);
+      } catch (calendarError) {
+        logger.error(`Failed to update calendar event for cancelled booking ${booking.id}:`, calendarError);
+        // Non-critical error, continue with other bookings
+      }
+    }
+
+    return res.status(200).json({
+      cancelled_count: cancelledBookings.length,
+      cancelled_booking_ids: cancelledBookings,
+      message: `Successfully cancelled ${cancelledBookings.length} bookings`
+    });
+  } catch (error) {
+    // Rollback transaction
+    await transaction.rollback();
+
+    logger.error('Error bulk cancelling bookings:', error);
+
+    return res.status(500).json({
+      error: {
+        code: 'internal_server_error',
+        message: 'Failed to cancel bookings'
+      }
+    });
+  }
+};
+
 module.exports = {
   getUserBookings,
   createBooking,
   getBooking,
   cancelBooking,
   getPublicBookings,
-  createPublicBooking
+  createPublicBooking,
+  rescheduleBooking,
+  bulkCancelBookings
 };

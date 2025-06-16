@@ -20,7 +20,9 @@ const {
   getBooking,
   cancelBooking,
   getPublicBookings,
-  createPublicBooking
+  createPublicBooking,
+  rescheduleBooking,
+  bulkCancelBookings
 } = require('../../../src/controllers/booking.controller');
 
 // Ensure createMockRequest, createMockResponse, createMockNext are available
@@ -336,5 +338,250 @@ describe('Booking Controller', () => {
     });
   });
 
-  // Additional tests for getPublicBookings and createPublicBooking would follow
+  describe('rescheduleBooking', () => {
+    test('should reschedule booking successfully', async () => {
+      // Mock dependencies
+      const { Booking, Notification, AuditLog, sequelize } = require('../../../src/models');
+      const notificationService = require('../../../src/services/notification.service');
+      const calendarService = require('../../../src/services/calendar.service');
+
+      // Mock booking lookup
+      const mockBooking = {
+        id: 'booking-id',
+        user_id: 'test-user-id',
+        start_time: '2024-01-01T10:00:00Z',
+        end_time: '2024-01-01T11:00:00Z',
+        status: 'confirmed',
+        save: jest.fn().mockResolvedValue({})
+      };
+
+      Booking.findOne
+        .mockResolvedValueOnce(mockBooking) // For finding the booking
+        .mockResolvedValueOnce(null); // No overlapping bookings
+
+      // Create request with new times
+      const req = createMockRequest({
+        params: { id: 'booking-id' },
+        body: {
+          start_time: '2024-01-02T10:00:00Z',
+          end_time: '2024-01-02T11:00:00Z'
+        }
+      });
+      const res = createMockResponse();
+
+      // Execute the controller
+      await rescheduleBooking(req, res);
+
+      // Verify booking was updated
+      expect(mockBooking.start_time).toBe('2024-01-02T10:00:00Z');
+      expect(mockBooking.end_time).toBe('2024-01-02T11:00:00Z');
+      expect(mockBooking.save).toHaveBeenCalled();
+
+      // Verify notification was created
+      expect(Notification.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          booking_id: 'booking-id',
+          type: 'email',
+          status: 'pending'
+        }),
+        expect.objectContaining({ transaction: expect.any(Object) })
+      );
+
+      // Verify the response
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(res.json).toHaveBeenCalledWith(mockBooking);
+    });
+
+    test('should reject reschedule for cancelled booking', async () => {
+      // Mock cancelled booking
+      const { Booking } = require('../../../src/models');
+      Booking.findOne.mockResolvedValueOnce({
+        id: 'booking-id',
+        user_id: 'test-user-id',
+        status: 'cancelled'
+      });
+
+      // Create request
+      const req = createMockRequest({
+        params: { id: 'booking-id' },
+        body: {
+          start_time: '2024-01-02T10:00:00Z',
+          end_time: '2024-01-02T11:00:00Z'
+        }
+      });
+      const res = createMockResponse();
+
+      // Execute the controller
+      await rescheduleBooking(req, res);
+
+      // Verify the response
+      expect(res.status).toHaveBeenCalledWith(400);
+      expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
+        error: expect.objectContaining({
+          code: 'bad_request',
+          message: 'Cannot reschedule a cancelled booking'
+        })
+      }));
+    });
+
+    test('should detect overlapping bookings during reschedule', async () => {
+      // Mock booking lookup
+      const { Booking } = require('../../../src/models');
+      Booking.findOne
+        .mockResolvedValueOnce({ // The booking to reschedule
+          id: 'booking-id',
+          user_id: 'test-user-id',
+          status: 'confirmed'
+        })
+        .mockResolvedValueOnce({ // An overlapping booking
+          id: 'other-booking-id'
+        });
+
+      // Create request
+      const req = createMockRequest({
+        params: { id: 'booking-id' },
+        body: {
+          start_time: '2024-01-02T10:00:00Z',
+          end_time: '2024-01-02T11:00:00Z'
+        }
+      });
+      const res = createMockResponse();
+
+      // Execute the controller
+      await rescheduleBooking(req, res);
+
+      // Verify the response
+      expect(res.status).toHaveBeenCalledWith(400);
+      expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
+        error: expect.objectContaining({
+          code: 'bad_request',
+          message: 'Time slot is not available'
+        })
+      }));
+    });
+  });
+
+  describe('bulkCancelBookings', () => {
+    test('should bulk cancel bookings successfully', async () => {
+      // Mock dependencies
+      const { Booking, Notification, AuditLog } = require('../../../src/models');
+      const notificationService = require('../../../src/services/notification.service');
+      const calendarService = require('../../../src/services/calendar.service');
+
+      // Mock bookings lookup
+      const mockBookings = [
+        {
+          id: 'booking-1',
+          user_id: 'test-user-id',
+          status: 'confirmed',
+          save: jest.fn().mockResolvedValue({})
+        },
+        {
+          id: 'booking-2',
+          user_id: 'test-user-id',
+          status: 'confirmed',
+          save: jest.fn().mockResolvedValue({})
+        }
+      ];
+
+      Booking.findAll.mockResolvedValueOnce(mockBookings);
+
+      // Create request
+      const req = createMockRequest({
+        body: { booking_ids: ['booking-1', 'booking-2'] }
+      });
+      const res = createMockResponse();
+
+      // Execute the controller
+      await bulkCancelBookings(req, res);
+
+      // Verify bookings were cancelled
+      mockBookings.forEach(booking => {
+        expect(booking.status).toBe('cancelled');
+        expect(booking.save).toHaveBeenCalled();
+      });
+
+      // Verify notifications were created
+      expect(Notification.bulkCreate).toHaveBeenCalledWith(
+        expect.arrayContaining([
+          expect.objectContaining({ booking_id: 'booking-1' }),
+          expect.objectContaining({ booking_id: 'booking-2' })
+        ]),
+        expect.objectContaining({ transaction: expect.any(Object) })
+      );
+
+      // Verify the response
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
+        cancelled_count: 2,
+        cancelled_booking_ids: ['booking-1', 'booking-2'],
+        message: 'Successfully cancelled 2 bookings'
+      }));
+    });
+
+    test('should reject invalid booking IDs', async () => {
+      // Create request with invalid data
+      const req = createMockRequest({
+        body: { booking_ids: [] }
+      });
+      const res = createMockResponse();
+
+      // Execute the controller
+      await bulkCancelBookings(req, res);
+
+      // Verify the response
+      expect(res.status).toHaveBeenCalledWith(400);
+      expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
+        error: expect.objectContaining({
+          code: 'bad_request',
+          message: 'Booking IDs are required'
+        })
+      }));
+    });
+
+    test('should limit bulk operations to 100 bookings', async () => {
+      // Create request with too many IDs
+      const tooManyIds = Array(101).fill('booking-id');
+      const req = createMockRequest({
+        body: { booking_ids: tooManyIds }
+      });
+      const res = createMockResponse();
+
+      // Execute the controller
+      await bulkCancelBookings(req, res);
+
+      // Verify the response
+      expect(res.status).toHaveBeenCalledWith(400);
+      expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
+        error: expect.objectContaining({
+          code: 'bad_request',
+          message: 'Cannot cancel more than 100 bookings at once'
+        })
+      }));
+    });
+
+    test('should handle no valid bookings found', async () => {
+      // Mock no bookings found
+      const { Booking } = require('../../../src/models');
+      Booking.findAll.mockResolvedValueOnce([]);
+
+      // Create request
+      const req = createMockRequest({
+        body: { booking_ids: ['booking-1', 'booking-2'] }
+      });
+      const res = createMockResponse();
+
+      // Execute the controller
+      await bulkCancelBookings(req, res);
+
+      // Verify the response
+      expect(res.status).toHaveBeenCalledWith(404);
+      expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
+        error: expect.objectContaining({
+          code: 'not_found',
+          message: 'No valid bookings found to cancel'
+        })
+      }));
+    });
+  });
 });

@@ -44,4 +44,42 @@ router.get('/settings', userController.getUserSettings);
  */
 router.put('/settings', validateUserSettings, userController.updateUserSettings);
 
+/**
+ * @route PUT /api/users/me/password
+ * @desc Change user password
+ * @access Private
+ */
+router.put('/me/password', userController.changePassword);
+
+/**
+ * @route POST /api/users/me/resend-verification
+ * @desc Resend email verification
+ * @access Private
+ */
+const { resendVerificationEmail } = require('../controllers/auth.controller');
+router.post('/me/resend-verification', resendVerificationEmail);
+
+/**
+ * @route DELETE /api/users/me
+ * @desc Delete user account
+ * @access Private
+ */
+router.delete('/me', userController.deleteAccount);
+
+/**
+ * @route PUT /api/users/me/public-profile
+ * @desc Update public profile settings
+ * @access Private
+ */
+router.put('/me/public-profile', userController.updatePublicProfile);
+
+// Public routes (no authentication required)
+
+/**
+ * @route GET /api/users/:username/profile
+ * @desc Get public profile data
+ * @access Public
+ */
+router.get('/:username/profile', userController.getPublicProfile);
+
 module.exports = router;

@@ -7,8 +7,31 @@
  */
 
 const { v4: uuidv4 } = require('uuid');
+const nodemailer = require('nodemailer');
+const fs = require('fs').promises;
+const path = require('path');
 const logger = require('../config/logger');
 const { Notification, Booking, User } = require('../models');
+
+// Create reusable transporter object using SMTP transport
+const createTransporter = () => {
+  if (process.env.NODE_ENV === 'test') {
+    // Return a mock transporter for tests
+    return {
+      sendMail: async () => ({ messageId: 'test-message-id' })
+    };
+  }
+
+  return nodemailer.createTransporter({
+    host: process.env.SMTP_HOST || 'smtp.gmail.com',
+    port: process.env.SMTP_PORT || 587,
+    secure: false, // true for 465, false for other ports
+    auth: {
+      user: process.env.SMTP_USER,
+      pass: process.env.SMTP_PASS
+    }
+  });
+};
 
 /**
  * Process notification queue
@@ -63,18 +86,45 @@ const processNotificationQueue = async () => {
  * @returns {Promise<void>}
  */
 const sendEmailNotification = async (notification) => {
-  // This would typically use a real email service like SendGrid, Mailgun, etc.
-  // For now, we'll just log the email details
-  const booking = notification.Booking;
-  const user = booking.User;
+  try {
+    const booking = notification.Booking;
+    const user = booking.User;
+    const transporter = createTransporter();
 
-  logger.info(`[MOCK EMAIL] Sending email notification for booking ${booking.id}`);
-  logger.info(`[MOCK EMAIL] To: ${booking.customer_email}`);
-  logger.info(`[MOCK EMAIL] Subject: Your booking with ${user.name}`);
-  logger.info(`[MOCK EMAIL] Body: Your booking has been ${booking.status} for ${new Date(booking.start_time).toLocaleString()} to ${new Date(booking.end_time).toLocaleString()}`);
+    // Determine template based on booking status
+    let templateName = 'booking-confirmation.html';
+    let subject = `Booking Confirmation with ${user.name}`;
+    
+    if (booking.status === 'cancelled') {
+      templateName = 'booking-cancelled.html';
+      subject = `Booking Cancelled with ${user.name}`;
+    }
 
-  // Simulate email sending delay
-  await new Promise((resolve) => setTimeout(resolve, 500));
+    // Load email template
+    const templatePath = path.join(__dirname, '..', 'config', 'templates', templateName);
+    let emailTemplate = await fs.readFile(templatePath, 'utf8');
+
+    // Replace template variables
+    emailTemplate = emailTemplate
+      .replace(/{{customerName}}/g, booking.customer_name)
+      .replace(/{{providerName}}/g, user.name)
+      .replace(/{{startTime}}/g, new Date(booking.start_time).toLocaleString())
+      .replace(/{{endTime}}/g, new Date(booking.end_time).toLocaleString())
+      .replace(/{{status}}/g, booking.status);
+
+    // Send email
+    const info = await transporter.sendMail({
+      from: process.env.SMTP_FROM || 'noreply@meetabl.com',
+      to: booking.customer_email,
+      subject,
+      html: emailTemplate
+    });
+
+    logger.info(`Email sent: ${info.messageId}`);
+  } catch (error) {
+    logger.error('Error sending email notification:', error);
+    throw error;
+  }
 };
 
 /**
@@ -119,7 +169,79 @@ const queueNotification = async (bookingId, type = 'email') => {
   }
 };
 
+/**
+ * Send password reset email
+ * @param {Object} user - User instance
+ * @param {string} resetToken - Password reset token
+ * @returns {Promise<void>}
+ */
+const sendPasswordResetEmail = async (user, resetToken) => {
+  try {
+    const transporter = createTransporter();
+    const resetUrl = `${process.env.FRONTEND_URL || 'http://localhost:3001'}/reset-password?token=${resetToken}`;
+
+    // Load email template
+    const templatePath = path.join(__dirname, '..', 'config', 'templates', 'password-reset.html');
+    let emailTemplate = await fs.readFile(templatePath, 'utf8');
+
+    // Replace template variables
+    emailTemplate = emailTemplate
+      .replace(/{{name}}/g, user.name)
+      .replace(/{{resetUrl}}/g, resetUrl);
+
+    // Send email
+    const info = await transporter.sendMail({
+      from: process.env.SMTP_FROM || 'noreply@meetabl.com',
+      to: user.email,
+      subject: 'Password Reset Request - Meetabl',
+      html: emailTemplate
+    });
+
+    logger.info(`Password reset email sent to ${user.email}: ${info.messageId}`);
+  } catch (error) {
+    logger.error('Error sending password reset email:', error);
+    throw error;
+  }
+};
+
+/**
+ * Send email verification email
+ * @param {Object} user - User instance
+ * @param {string} verificationToken - Email verification token
+ * @returns {Promise<void>}
+ */
+const sendEmailVerification = async (user, verificationToken) => {
+  try {
+    const transporter = createTransporter();
+    const verificationUrl = `${process.env.FRONTEND_URL || 'http://localhost:3001'}/verify-email?token=${verificationToken}`;
+
+    // Load email template
+    const templatePath = path.join(__dirname, '..', 'config', 'templates', 'email-verification.html');
+    let emailTemplate = await fs.readFile(templatePath, 'utf8');
+
+    // Replace template variables
+    emailTemplate = emailTemplate
+      .replace(/{{name}}/g, user.name)
+      .replace(/{{verificationUrl}}/g, verificationUrl);
+
+    // Send email
+    const info = await transporter.sendMail({
+      from: process.env.SMTP_FROM || 'noreply@meetabl.com',
+      to: user.email,
+      subject: 'Verify Your Email - Meetabl',
+      html: emailTemplate
+    });
+
+    logger.info(`Email verification sent to ${user.email}: ${info.messageId}`);
+  } catch (error) {
+    logger.error('Error sending email verification:', error);
+    throw error;
+  }
+};
+
 module.exports = {
   processNotificationQueue,
-  queueNotification
+  queueNotification,
+  sendPasswordResetEmail,
+  sendEmailVerification
 };

@@ -49,7 +49,7 @@ describe('Availability Controller', () => {
       
       // Check response
       expect(res.status).toHaveBeenCalledWith(200);
-      expect(res.json).toHaveBeenCalledWith(mockRules);
+      expect(res.json).toHaveBeenCalledWith({ rules: mockRules });
       expect(res.set).toHaveBeenCalled();
       
       // Check query
@@ -113,7 +113,7 @@ describe('Availability Controller', () => {
       
       // Check response
       expect(res.status).toHaveBeenCalledWith(201);
-      expect(res.json).toHaveBeenCalledWith(mockCreatedRule);
+      expect(res.json).toHaveBeenCalledWith({ rule: mockCreatedRule });
     });
     
     test('should validate time range', async () => {
@@ -209,7 +209,7 @@ describe('Availability Controller', () => {
       
       // Check response
       expect(res.status).toHaveBeenCalledWith(200);
-      expect(res.json).toHaveBeenCalledWith(mockRule);
+      expect(res.json).toHaveBeenCalledWith({ rule: mockRule });
       
       // Check query
       expect(AvailabilityRule.findOne).toHaveBeenCalledWith({

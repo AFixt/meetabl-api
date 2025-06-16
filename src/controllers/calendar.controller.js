@@ -9,7 +9,7 @@
 const { v4: uuidv4 } = require('uuid');
 const { google } = require('googleapis');
 const { Client } = require('@microsoft/microsoft-graph-client');
-const moment = require('moment');
+const { addSeconds } = require('date-fns');
 const logger = require('../config/logger');
 const { User, CalendarToken, AuditLog } = require('../models');
 const { sequelize } = require('../config/database');
@@ -102,7 +102,7 @@ const handleGoogleCallback = async (req, res) => {
     });
 
     // Calculate expiry date
-    const expiresAt = moment().add(tokens.expires_in, 'seconds').toDate();
+    const expiresAt = addSeconds(new Date(), tokens.expires_in);
 
     if (existingToken) {
       // Update existing token
@@ -253,7 +253,7 @@ const handleMicrosoftCallback = async (req, res) => {
     });
 
     // Calculate expiry date
-    const expiresAt = moment().add(tokens.expires_in, 'seconds').toDate();
+    const expiresAt = addSeconds(new Date(), tokens.expires_in);
 
     if (existingToken) {
       // Update existing token

@@ -6,7 +6,8 @@
  * @author meetabl Team
  */
 
-const AWS = require('aws-sdk');
+const { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand } = require('@aws-sdk/client-s3');
+const { getSignedUrl } = require('@aws-sdk/s3-request-presigner');
 const fs = require('fs');
 const path = require('path');
 const util = require('util');
@@ -15,15 +16,17 @@ const logger = require('../config/logger');
 
 // Convert fs.readFile to use Promises
 const readFile = util.promisify(fs.readFile);
+const unlink = util.promisify(fs.unlink);
 
 // Configure AWS S3 client
-AWS.config.update({
-  accessKeyId: process.env.AWS_ACCESS_KEY_ID,
-  secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
-  region: process.env.AWS_REGION || 'us-east-1'
+const s3Client = new S3Client({
+  region: process.env.AWS_REGION || 'us-east-1',
+  credentials: {
+    accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY
+  }
 });
 
-const s3 = new AWS.S3();
 const bucketName = process.env.AWS_S3_BUCKET;
 
 /**
@@ -43,24 +46,27 @@ async function uploadFile(fileData, folder = 'uploads') {
     const filename = `${uuidv4()}${fileExtension}`;
     const key = folder ? `${folder}/${filename}` : filename;
     
-    const params = {
+    const command = new PutObjectCommand({
       Bucket: bucketName,
       Key: key,
       Body: fileContent,
       ContentType: fileData.mimetype,
       ACL: 'private'
-    };
+    });
     
     logger.info(`Uploading file to S3: ${key}`);
     
-    const uploadResult = await s3.upload(params).promise();
+    await s3Client.send(command);
     
-    // Remove temporary file
-    fs.unlinkSync(fileData.path);
+    // Remove temporary file using async unlink
+    await unlink(fileData.path);
+    
+    // Construct the URL (SDK v3 doesn't return Location)
+    const location = `https://${bucketName}.s3.${process.env.AWS_REGION || 'us-east-1'}.amazonaws.com/${key}`;
     
     return {
-      key: uploadResult.Key,
-      url: uploadResult.Location,
+      key: key,
+      url: location,
       filename: filename,
       originalName: fileData.originalname,
       contentType: fileData.mimetype,
@@ -79,15 +85,14 @@ async function uploadFile(fileData, folder = 'uploads') {
  * @param {number} expiresIn - URL expiration time in seconds (default: 1 hour)
  * @returns {Promise<string>} The pre-signed URL
  */
-async function getSignedUrl(key, expiresIn = 3600) {
+async function getPresignedUrl(key, expiresIn = 3600) {
   try {
-    const params = {
+    const command = new GetObjectCommand({
       Bucket: bucketName,
-      Key: key,
-      Expires: expiresIn
-    };
+      Key: key
+    });
     
-    return s3.getSignedUrlPromise('getObject', params);
+    return await getSignedUrl(s3Client, command, { expiresIn });
   } catch (error) {
     logger.error('Error generating signed URL:', error);
     throw error;
@@ -102,13 +107,15 @@ async function getSignedUrl(key, expiresIn = 3600) {
  */
 async function deleteFile(key) {
   try {
-    const params = {
+    const command = new DeleteObjectCommand({
       Bucket: bucketName,
       Key: key
-    };
+    });
     
     logger.info(`Deleting file from S3: ${key}`);
-    return s3.deleteObject(params).promise();
+    
+    const result = await s3Client.send(command);
+    return result;
   } catch (error) {
     logger.error('Error deleting file from S3:', error);
     throw error;
@@ -117,6 +124,6 @@ async function deleteFile(key) {
 
 module.exports = {
   uploadFile,
-  getSignedUrl,
+  getSignedUrl: getPresignedUrl, // Keep the same export name for backward compatibility
   deleteFile
 };

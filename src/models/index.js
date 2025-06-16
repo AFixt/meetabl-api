@@ -13,6 +13,12 @@ const Booking = require('./booking.model');
 const Notification = require('./notification.model');
 const UserSettings = require('./user-settings.model');
 const AuditLog = require('./audit-log.model');
+const JwtBlacklist = require('./jwt-blacklist.model');
+const Team = require('./team.model');
+const TeamMember = require('./team-member.model');
+const Payment = require('./payment.model');
+const PricingRule = require('./pricing-rule.model');
+const Invoice = require('./invoice.model');
 
 // Note: Relationships are defined in individual model files
 // This ensures proper loading order regardless of import order
@@ -24,5 +30,11 @@ module.exports = {
   Booking,
   Notification,
   UserSettings,
-  AuditLog
+  AuditLog,
+  JwtBlacklist,
+  Team,
+  TeamMember,
+  Payment,
+  PricingRule,
+  Invoice
 };

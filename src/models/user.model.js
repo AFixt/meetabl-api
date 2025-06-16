@@ -45,6 +45,27 @@ const User = sequelize.define('User', {
     type: DataTypes.ENUM('none', 'google', 'microsoft'),
     defaultValue: 'none'
   },
+  password_reset_token: {
+    type: DataTypes.STRING(255),
+    allowNull: true
+  },
+  password_reset_expires: {
+    type: DataTypes.DATE,
+    allowNull: true
+  },
+  email_verified: {
+    type: DataTypes.BOOLEAN,
+    defaultValue: false,
+    allowNull: false
+  },
+  email_verification_token: {
+    type: DataTypes.STRING(255),
+    allowNull: true
+  },
+  email_verification_expires: {
+    type: DataTypes.DATE,
+    allowNull: true
+  },
   created: {
     type: DataTypes.DATE,
     defaultValue: DataTypes.NOW

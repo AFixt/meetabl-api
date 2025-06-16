@@ -8,7 +8,7 @@
 
 // Load the test setup
 require('../test-setup');
-const moment = require('moment');
+const { formatISO } = require('date-fns');
 const fetch = require('node-fetch');
 const { Client } = require('@microsoft/microsoft-graph-client');
 const { google } = require('googleapis');
@@ -425,8 +425,8 @@ describe('Calendar Service', () => {
 
     test('should format booking start and end times correctly', async () => {
       const booking = await Booking.findOne({ where: { id: bookingId } });
-      const formattedStartTime = moment(booking.start_time).format();
-      const formattedEndTime = moment(booking.end_time).format();
+      const formattedStartTime = formatISO(new Date(booking.start_time));
+      const formattedEndTime = formatISO(new Date(booking.end_time));
 
       expect(formattedStartTime).toBeDefined();
       expect(formattedEndTime).toBeDefined();

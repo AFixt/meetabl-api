@@ -41,6 +41,7 @@ const mockModels = () => {
     findOne: createMockFunction({ id: 'test-id', name: `Test ${name}`, save: jest.fn() }),
     findByPk: createMockFunction({ id: 'test-id', name: `Test ${name}`, save: jest.fn() }),
     create: createMockFunction({ id: 'test-id', name: `Test ${name}` }),
+    bulkCreate: createMockFunction([{ id: 'test-id-1' }, { id: 'test-id-2' }]),
     update: createMockFunction([1]),
     destroy: createMockFunction(1),
     count: createMockFunction(5),
@@ -99,7 +100,9 @@ const mockSequelize = () => ({
     notBetween: Symbol('notBetween'),
     or: Symbol('or'),
     and: Symbol('and')
-  }
+  },
+  fn: jest.fn((fnName, col) => `${fnName}(${col})`),
+  col: jest.fn((colName) => colName)
 });
 
 /**
@@ -172,10 +175,35 @@ const setupControllerMocks = () => {
   jest.mock('../../src/models', () => mockModels());
 
   // Mock database
-  jest.mock('../../src/config/database', () => ({
-    sequelize: mockSequelize(),
-    initializeDatabase: jest.fn().mockResolvedValue({})
-  }));
+  jest.mock('../../src/config/database', () => {
+    const mockSeq = {
+      transaction: jest.fn().mockImplementation(() => ({
+        commit: jest.fn().mockResolvedValue(null),
+        rollback: jest.fn().mockResolvedValue(null)
+      })),
+      Op: {
+        gt: Symbol('gt'),
+        gte: Symbol('gte'),
+        lt: Symbol('lt'),
+        lte: Symbol('lte'),
+        eq: Symbol('eq'),
+        ne: Symbol('ne'),
+        in: Symbol('in'),
+        notIn: Symbol('notIn'),
+        between: Symbol('between'),
+        notBetween: Symbol('notBetween'),
+        or: Symbol('or'),
+        and: Symbol('and')
+      },
+      fn: jest.fn((fnName, col) => `${fnName}(${col})`),
+      col: jest.fn((colName) => colName)
+    };
+    return {
+      sequelize: mockSeq,
+      Op: mockSeq.Op,
+      initializeDatabase: jest.fn().mockResolvedValue({})
+    };
+  });
 
   // Mock bcrypt
   jest.mock('bcrypt', () => mockBcrypt());

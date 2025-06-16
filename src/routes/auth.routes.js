@@ -8,6 +8,7 @@
 
 const express = require('express');
 const { validateUserRegistration, validateUserLogin } = require('../middlewares/validation');
+const { authenticateJWT } = require('../middlewares/auth');
 const authController = require('../controllers/auth.controller');
 
 const router = express.Router();
@@ -32,5 +33,33 @@ router.post('/login', validateUserLogin, authController.login);
  * @access Public
  */
 router.post('/refresh-token', authController.refreshToken);
+
+/**
+ * @route POST /api/auth/logout
+ * @desc Logout user
+ * @access Private (requires authentication)
+ */
+router.post('/logout', authenticateJWT, authController.logout);
+
+/**
+ * @route POST /api/auth/forgot-password
+ * @desc Request password reset
+ * @access Public
+ */
+router.post('/forgot-password', authController.forgotPassword);
+
+/**
+ * @route POST /api/auth/reset-password
+ * @desc Reset password with token
+ * @access Public
+ */
+router.post('/reset-password', authController.resetPassword);
+
+/**
+ * @route POST /api/auth/verify-email
+ * @desc Verify email with token
+ * @access Public
+ */
+router.post('/verify-email', authController.verifyEmail);
 
 module.exports = router;

@@ -8,7 +8,7 @@
 
 const jwt = require('jsonwebtoken');
 const logger = require('../config/logger');
-const { User } = require('../models');
+const { User, JwtBlacklist } = require('../models');
 
 /**
  * Verify JWT token and attach user to request
@@ -44,6 +44,22 @@ const authenticateJWT = async (req, res, next) => {
 
     // Verify token
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
+
+    // Check if token is blacklisted
+    if (decoded.jti) {
+      const blacklistedToken = await JwtBlacklist.findOne({
+        where: { jwtId: decoded.jti }
+      });
+
+      if (blacklistedToken) {
+        return res.status(401).json({
+          error: {
+            code: 'unauthorized',
+            message: 'Token has been revoked'
+          }
+        });
+      }
+    }
 
     // Get user from database
     const user = await User.findOne({ where: { id: decoded.userId } });

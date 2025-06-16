@@ -8,8 +8,10 @@
 
 const notificationService = require('./notification.service');
 const calendarService = require('./calendar.service');
+const teamService = require('./team.service');
 
 module.exports = {
   notificationService,
-  calendarService
+  calendarService,
+  teamService
 };

@@ -44,6 +44,20 @@ router.get('/my/:id', validateUuid, bookingController.getBooking);
  */
 router.put('/my/:id/cancel', validateUuid, bookingController.cancelBooking);
 
+/**
+ * @route PUT /api/bookings/my/:id/reschedule
+ * @desc Reschedule booking
+ * @access Private
+ */
+router.put('/my/:id/reschedule', validateUuid, validateBooking, bookingController.rescheduleBooking);
+
+/**
+ * @route POST /api/bookings/my/bulk-cancel
+ * @desc Bulk cancel bookings
+ * @access Private
+ */
+router.post('/my/bulk-cancel', bookingController.bulkCancelBookings);
+
 // Public routes (no authentication required)
 
 /**

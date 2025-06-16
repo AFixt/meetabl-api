@@ -7,10 +7,11 @@
  */
 
 const { v4: uuidv4 } = require('uuid');
-const moment = require('moment');
+const { parse, isValid, getDay, startOfDay, endOfDay, setHours, setMinutes, setSeconds, addMinutes, compareAsc, isBefore, isAfter, isSameOrBefore, format, toDate } = require('date-fns');
 const logger = require('../config/logger');
 const { AvailabilityRule, Booking, AuditLog } = require('../models');
 const { sequelize } = require('../config/database');
+const { Op } = require('sequelize');
 
 /**
  * Get availability rules for current user
@@ -37,7 +38,7 @@ const getAvailabilityRules = async (req, res) => {
       'X-Current-Page': 1
     });
 
-    return res.status(200).json(rules);
+    return res.status(200).json({ rules });
   } catch (error) {
     logger.error('Error getting availability rules:', error);
 
@@ -111,7 +112,7 @@ const createAvailabilityRule = async (req, res) => {
     // Log creation
     logger.info(`Availability rule created: ${rule.id}`);
 
-    return res.status(201).json(rule);
+    return res.status(201).json({ rule });
   } catch (error) {
     logger.error('Error creating availability rule:', error);
 
@@ -148,7 +149,7 @@ const getAvailabilityRule = async (req, res) => {
       });
     }
 
-    return res.status(200).json(rule);
+    return res.status(200).json({ rule });
   } catch (error) {
     logger.error('Error getting availability rule:', error);
 
@@ -237,7 +238,7 @@ const updateAvailabilityRule = async (req, res) => {
     // Log update
     logger.info(`Availability rule updated: ${rule.id}`);
 
-    return res.status(200).json(rule);
+    return res.status(200).json({ rule });
   } catch (error) {
     logger.error('Error updating availability rule:', error);
 
@@ -314,7 +315,8 @@ const getAvailableTimeSlots = async (req, res) => {
     const { date, duration } = req.query;
 
     // Validate date
-    if (!date || !moment(date, 'YYYY-MM-DD').isValid()) {
+    const parsedDate = parse(date, 'yyyy-MM-dd', new Date());
+    if (!date || !isValid(parsedDate)) {
       return res.status(400).json({
         error: {
           code: 'bad_request',
@@ -347,8 +349,8 @@ const getAvailableTimeSlots = async (req, res) => {
     }
 
     // Parse date and get day of week (0 = Sunday, 6 = Saturday)
-    const targetDate = moment(date, 'YYYY-MM-DD');
-    const dayOfWeek = targetDate.day();
+    const targetDate = parse(date, 'yyyy-MM-dd', new Date());
+    const dayOfWeek = getDay(targetDate);
 
     // Get availability rules for this day of week
     const rules = await AvailabilityRule.findAll({
@@ -360,14 +362,14 @@ const getAvailableTimeSlots = async (req, res) => {
     }
 
     // Get bookings for this date
-    const startOfDay = moment(date).startOf('day').toDate();
-    const endOfDay = moment(date).endOf('day').toDate();
+    const dayStart = startOfDay(targetDate);
+    const dayEnd = endOfDay(targetDate);
 
     const bookings = await Booking.findAll({
       where: {
         user_id: userId,
-        start_time: { [sequelize.Op.gte]: startOfDay },
-        end_time: { [sequelize.Op.lte]: endOfDay },
+        start_time: { [Op.gte]: dayStart },
+        end_time: { [Op.lte]: dayEnd },
         status: 'confirmed'
       }
     });
@@ -378,36 +380,32 @@ const getAvailableTimeSlots = async (req, res) => {
     // Use forEach instead of for...of
     rules.forEach((rule) => {
       // Parse rule times
-      const startTime = moment(rule.start_time, 'HH:mm:ss');
-      const endTime = moment(rule.end_time, 'HH:mm:ss');
+      const startTime = parse(rule.start_time, 'HH:mm:ss', new Date());
+      const endTime = parse(rule.end_time, 'HH:mm:ss', new Date());
 
       // Create slots with specified duration
-      const slotStart = moment(targetDate)
-        .hours(startTime.hours())
-        .minutes(startTime.minutes())
-        .seconds(0);
-      const ruleEnd = moment(targetDate)
-        .hours(endTime.hours())
-        .minutes(endTime.minutes())
-        .seconds(0);
+      let slotStart = setSeconds(setMinutes(setHours(targetDate, startTime.getHours()), startTime.getMinutes()), 0);
+      const ruleEnd = setSeconds(setMinutes(setHours(targetDate, endTime.getHours()), endTime.getMinutes()), 0);
 
-      while (slotStart.add(slotDuration, 'minutes').isSameOrBefore(ruleEnd)) {
+      while (isSameOrBefore(addMinutes(slotStart, slotDuration), ruleEnd)) {
         const slot = {
-          start: moment(slotStart).subtract(slotDuration, 'minutes').toISOString(),
-          end: slotStart.toISOString()
+          start: slotStart.toISOString(),
+          end: addMinutes(slotStart, slotDuration).toISOString()
         };
 
         // Check if slot conflicts with any booking
         const isConflict = bookings.some((booking) => {
-          const bookingStart = moment(booking.start_time);
-          const bookingEnd = moment(booking.end_time);
+          const bookingStart = new Date(booking.start_time);
+          const bookingEnd = new Date(booking.end_time);
+          const slotStartDate = new Date(slot.start);
+          const slotEndDate = new Date(slot.end);
 
           // Check for overlap
-          const normalOverlap = moment(slot.start).isBefore(bookingEnd)
-            && moment(slot.end).isAfter(bookingStart);
+          const normalOverlap = isBefore(slotStartDate, bookingEnd)
+            && isAfter(slotEndDate, bookingStart);
 
-          const bufferOverlap = moment(slot.start).add(rule.buffer_minutes, 'minutes').isBefore(bookingEnd)
-            && moment(slot.end).subtract(rule.buffer_minutes, 'minutes').isAfter(bookingStart);
+          const bufferOverlap = isBefore(addMinutes(slotStartDate, rule.buffer_minutes), bookingEnd)
+            && isAfter(addMinutes(slotEndDate, -rule.buffer_minutes), bookingStart);
 
           return normalOverlap || bufferOverlap;
         });
@@ -416,11 +414,14 @@ const getAvailableTimeSlots = async (req, res) => {
         if (!isConflict) {
           allSlots.push(slot);
         }
+        
+        // Move to next slot
+        slotStart = addMinutes(slotStart, slotDuration);
       }
     });
 
     // Sort slots by start time
-    allSlots.sort((a, b) => moment(a.start).diff(moment(b.start)));
+    allSlots.sort((a, b) => compareAsc(new Date(a.start), new Date(b.start)));
 
     return res.status(200).json(allSlots);
   } catch (error) {

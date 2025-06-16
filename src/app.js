@@ -31,6 +31,11 @@ app.use(cors({
   origin: process.env.FRONTEND_URL,
   credentials: true
 }));
+
+// Add raw body parsing for Stripe webhooks
+app.use('/api/payments/webhook', express.raw({ type: 'application/json' }));
+
+// Apply JSON body parsing to all other routes
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(cookieParser());
@@ -70,6 +75,10 @@ const userRoutes = require('./routes/user.routes');
 const availabilityRoutes = require('./routes/availability.routes');
 const bookingRoutes = require('./routes/booking.routes');
 const calendarRoutes = require('./routes/calendar.routes');
+const notificationRoutes = require('./routes/notification.routes');
+const analyticsRoutes = require('./routes/analytics.routes');
+const teamRoutes = require('./routes/team.routes');
+const paymentRoutes = require('./routes/payment.routes');
 
 // Apply routes
 app.use('/api/auth', authRoutes);
@@ -77,6 +86,10 @@ app.use('/api/users', userRoutes);
 app.use('/api/availability', availabilityRoutes);
 app.use('/api/bookings', bookingRoutes);
 app.use('/api/calendar', calendarRoutes);
+app.use('/api/notifications', notificationRoutes);
+app.use('/api/analytics', analyticsRoutes);
+app.use('/api/teams', teamRoutes);
+app.use('/api/payments', paymentRoutes);
 
 // Default route
 app.get('/', (req, res) => {

@@ -8,7 +8,7 @@
 
 const { google } = require('googleapis');
 const { Client } = require('@microsoft/microsoft-graph-client');
-const moment = require('moment');
+const { isBefore, addSeconds, formatISO } = require('date-fns');
 const logger = require('../config/logger');
 const { CalendarToken, User } = require('../models');
 
@@ -29,7 +29,7 @@ const getGoogleAuthClient = async (userId) => {
     }
 
     // Check if token is expired
-    if (moment(token.expires_at).isBefore(moment())) {
+    if (isBefore(new Date(token.expires_at), new Date())) {
       await refreshGoogleToken(token);
     }
 
@@ -77,7 +77,7 @@ const refreshGoogleToken = async (token) => {
 
     // Update token in database
     token.access_token = credentials.access_token;
-    token.expires_at = moment().add(credentials.expires_in, 'seconds').toDate();
+    token.expires_at = addSeconds(new Date(), credentials.expires_in);
     await token.save();
 
     logger.info(`Refreshed Google token for user ${token.user_id}`);
@@ -104,7 +104,7 @@ const getMicrosoftGraphClient = async (userId) => {
     }
 
     // Check if token is expired
-    if (moment(token.expires_at).isBefore(moment())) {
+    if (isBefore(new Date(token.expires_at), new Date())) {
       await refreshMicrosoftToken(token);
     }
 
@@ -154,7 +154,7 @@ const refreshMicrosoftToken = async (token) => {
     // Update token in database
     token.access_token = tokens.access_token;
     token.refresh_token = tokens.refresh_token || token.refresh_token;
-    token.expires_at = moment().add(tokens.expires_in, 'seconds').toDate();
+    token.expires_at = addSeconds(new Date(), tokens.expires_in);
     await token.save();
 
     logger.info(`Refreshed Microsoft token for user ${token.user_id}`);
@@ -180,8 +180,8 @@ const createCalendarEvent = async (booking) => {
     }
 
     // Format event times
-    const startTime = moment(booking.start_time).format();
-    const endTime = moment(booking.end_time).format();
+    const startTime = formatISO(new Date(booking.start_time));
+    const endTime = formatISO(new Date(booking.end_time));
 
     // Create event based on provider
     if (user.calendar_provider === 'google') {

@@ -232,6 +232,130 @@ const validateUserSettings = [
   validateRequest
 ];
 
+/**
+ * Validate team creation/update
+ */
+const validateTeam = [
+  body('name')
+    .notEmpty()
+    .withMessage('Team name is required')
+    .isLength({ max: 100 })
+    .withMessage('Team name must be at most 100 characters'),
+
+  body('description')
+    .optional()
+    .isString()
+    .withMessage('Description must be a string')
+    .isLength({ max: 1000 })
+    .withMessage('Description must be at most 1000 characters'),
+
+  validateRequest
+];
+
+/**
+ * Validate team member addition
+ */
+const validateTeamMember = [
+  body('user_id')
+    .notEmpty()
+    .withMessage('User ID is required')
+    .isUUID(4)
+    .withMessage('User ID must be a valid UUID'),
+
+  body('role')
+    .optional()
+    .isIn(['admin', 'member'])
+    .withMessage('Role must be either "admin" or "member"'),
+
+  validateRequest
+];
+
+/**
+ * Validate user ID parameter
+ */
+const validateUserIdParam = [
+  param('userId')
+    .isUUID(4)
+    .withMessage('User ID must be a valid UUID'),
+
+  validateRequest
+];
+
+/**
+ * Validate payment processing
+ */
+const validatePayment = [
+  body('booking_id')
+    .notEmpty()
+    .withMessage('Booking ID is required')
+    .isUUID(4)
+    .withMessage('Booking ID must be a valid UUID'),
+
+  validateRequest
+];
+
+/**
+ * Validate refund request
+ */
+const validateRefund = [
+  body('payment_id')
+    .notEmpty()
+    .withMessage('Payment ID is required')
+    .isUUID(4)
+    .withMessage('Payment ID must be a valid UUID'),
+
+  body('amount')
+    .optional()
+    .isFloat({ min: 0.01 })
+    .withMessage('Amount must be greater than 0')
+    .toFloat(),
+
+  body('reason')
+    .optional()
+    .isIn(['duplicate', 'fraudulent', 'requested_by_customer'])
+    .withMessage('Invalid refund reason'),
+
+  validateRequest
+];
+
+/**
+ * Validate pricing rule creation/update
+ */
+const validatePricingRule = [
+  body('name')
+    .notEmpty()
+    .withMessage('Name is required')
+    .isLength({ max: 100 })
+    .withMessage('Name must be at most 100 characters'),
+
+  body('description')
+    .optional()
+    .isString()
+    .withMessage('Description must be a string'),
+
+  body('price_per_slot')
+    .notEmpty()
+    .withMessage('Price per slot is required')
+    .isFloat({ min: 0 })
+    .withMessage('Price per slot must be a non-negative number')
+    .toFloat(),
+
+  body('currency')
+    .optional()
+    .isLength({ min: 3, max: 3 })
+    .withMessage('Currency must be a 3-letter code')
+    .isUppercase()
+    .withMessage('Currency must be uppercase'),
+
+  body('is_active')
+    .optional()
+    .isBoolean()
+    .withMessage('Is active must be a boolean')
+    .toBoolean(),
+
+  validateRequest
+];
+
 module.exports = {
   validateRequest,
   validateGetRequest,
@@ -240,5 +364,11 @@ module.exports = {
   validateUserLogin,
   validateAvailabilityRule,
   validateBooking,
-  validateUserSettings
+  validateUserSettings,
+  validateTeam,
+  validateTeamMember,
+  validateUserIdParam,
+  validatePayment,
+  validateRefund,
+  validatePricingRule
 };

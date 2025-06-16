@@ -63,6 +63,15 @@ jest.mock('../../../src/models', () => ({
   }
 }));
 
+jest.mock('../../../src/config/database', () => ({
+  sequelize: {
+    transaction: jest.fn().mockResolvedValue({
+      commit: jest.fn().mockResolvedValue({}),
+      rollback: jest.fn().mockResolvedValue({})
+    })
+  }
+}));
+
 jest.mock('../../../src/config/logger', () => ({
   info: jest.fn(),
   error: jest.fn(),
@@ -75,7 +84,9 @@ const {
   getCurrentUser,
   updateUser,
   getUserSettings,
-  updateUserSettings
+  updateUserSettings,
+  changePassword,
+  deleteAccount
 } = require('../../../src/controllers/user.controller');
 const { User, UserSettings, AuditLog } = require('../../../src/models');
 const logger = require('../../../src/config/logger');
@@ -383,6 +394,162 @@ describe('User Controller', () => {
 
       // Verify the response
       expect(res.status).toHaveBeenCalledWith(200);
+    });
+  });
+
+  describe('deleteAccount', () => {
+    test('should delete account successfully with valid password', async () => {
+      // Mock user lookup with validatePassword method
+      const mockUser = {
+        id: 'test-user-id',
+        email: 'test@example.com',
+        validatePassword: jest.fn().mockResolvedValue(true),
+        destroy: jest.fn().mockResolvedValue({})
+      };
+
+      User.findOne.mockResolvedValueOnce(mockUser);
+
+      // Create request with password
+      const req = createMockRequest({
+        user: { id: 'test-user-id' },
+        body: { password: 'correctpassword' }
+      });
+      const res = createMockResponse();
+
+      // Execute the controller
+      await deleteAccount(req, res);
+
+      // Verify password was validated
+      expect(mockUser.validatePassword).toHaveBeenCalledWith('correctpassword');
+      
+      // Verify user was destroyed
+      expect(mockUser.destroy).toHaveBeenCalled();
+
+      // Verify audit log was created
+      expect(AuditLog.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          user_id: 'test-user-id',
+          action: 'user.account.deleted'
+        }),
+        expect.objectContaining({ transaction: expect.any(Object) })
+      );
+
+      // Verify the response
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(res.json).toHaveBeenCalledWith({
+        message: 'Account deleted successfully'
+      });
+    });
+
+    test('should reject deletion with invalid password', async () => {
+      // Mock user lookup with validatePassword method
+      const mockUser = {
+        id: 'test-user-id',
+        email: 'test@example.com',
+        validatePassword: jest.fn().mockResolvedValue(false)
+      };
+
+      User.findOne.mockResolvedValueOnce(mockUser);
+
+      // Create request with incorrect password
+      const req = createMockRequest({
+        user: { id: 'test-user-id' },
+        body: { password: 'wrongpassword' }
+      });
+      const res = createMockResponse();
+
+      // Execute the controller
+      await deleteAccount(req, res);
+
+      // Verify password was validated
+      expect(mockUser.validatePassword).toHaveBeenCalledWith('wrongpassword');
+
+      // Verify the response
+      expect(res.status).toHaveBeenCalledWith(401);
+      expect(res.json).toHaveBeenCalledWith({
+        error: {
+          code: 'unauthorized',
+          message: 'Invalid password'
+        }
+      });
+    });
+
+    test('should reject deletion without password', async () => {
+      // Create request without password
+      const req = createMockRequest({
+        user: { id: 'test-user-id' },
+        body: {}
+      });
+      const res = createMockResponse();
+
+      // Execute the controller
+      await deleteAccount(req, res);
+
+      // Verify the response
+      expect(res.status).toHaveBeenCalledWith(400);
+      expect(res.json).toHaveBeenCalledWith({
+        error: {
+          code: 'bad_request',
+          message: 'Password is required to delete account',
+          params: [
+            {
+              param: 'password',
+              message: 'Password is required'
+            }
+          ]
+        }
+      });
+    });
+
+    test('should handle user not found', async () => {
+      // Mock user not found
+      User.findOne.mockResolvedValueOnce(null);
+
+      // Create request
+      const req = createMockRequest({
+        user: { id: 'non-existent-id' },
+        body: { password: 'somepassword' }
+      });
+      const res = createMockResponse();
+
+      // Execute the controller
+      await deleteAccount(req, res);
+
+      // Verify the response
+      expect(res.status).toHaveBeenCalledWith(404);
+      expect(res.json).toHaveBeenCalledWith({
+        error: {
+          code: 'not_found',
+          message: 'User not found'
+        }
+      });
+    });
+
+    test('should handle database errors', async () => {
+      // Mock database error
+      User.findOne.mockRejectedValueOnce(new Error('Database error'));
+
+      // Create request
+      const req = createMockRequest({
+        user: { id: 'test-user-id' },
+        body: { password: 'somepassword' }
+      });
+      const res = createMockResponse();
+
+      // Execute the controller
+      await deleteAccount(req, res);
+
+      // Verify the response
+      expect(res.status).toHaveBeenCalledWith(500);
+      expect(res.json).toHaveBeenCalledWith({
+        error: {
+          code: 'internal_server_error',
+          message: 'Failed to delete account'
+        }
+      });
+
+      // Verify error was logged
+      expect(logger.error).toHaveBeenCalled();
     });
   });
 });
