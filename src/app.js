@@ -70,8 +70,52 @@ const { initializeDatabase } = process.env.NODE_ENV === 'test'
 // Create Express app
 const app = express();
 
-// Apply basic middlewares
-app.use(helmet());
+// Apply security middlewares with comprehensive CSP
+app.use(helmet({
+  contentSecurityPolicy: {
+    useDefaults: true,
+    directives: {
+      defaultSrc: ["'self'"],
+      styleSrc: [
+        "'self'",
+        "'unsafe-inline'", // Required for some UI frameworks
+        "https://fonts.googleapis.com"
+      ],
+      fontSrc: [
+        "'self'",
+        "https://fonts.gstatic.com"
+      ],
+      scriptSrc: [
+        "'self'",
+        "'unsafe-inline'", // Required for some analytics
+        "https://apis.google.com",
+        "https://accounts.google.com"
+      ],
+      connectSrc: [
+        "'self'",
+        "https://api.github.com", // For OAuth
+        "https://graph.microsoft.com", // For Microsoft Calendar
+        "https://login.microsoftonline.com",
+        "https://accounts.google.com",
+        "https://www.googleapis.com"
+      ],
+      imgSrc: [
+        "'self'",
+        "data:",
+        "https://*.gravatar.com",
+        "https://avatar.githubusercontent.com"
+      ],
+      frameSrc: [
+        "'self'",
+        "https://accounts.google.com"
+      ],
+      objectSrc: ["'none'"],
+      upgradeInsecureRequests: process.env.NODE_ENV === 'production' ? [] : null
+    }
+  },
+  crossOriginEmbedderPolicy: false, // Disable for OAuth compatibility
+  crossOriginResourcePolicy: { policy: "cross-origin" } // Allow cross-origin for API
+}));
 
 // Configure CORS for multiple origins
 const allowedOrigins = process.env.ALLOWED_ORIGINS 
