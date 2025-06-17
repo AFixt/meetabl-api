@@ -48,16 +48,24 @@ const getUserBookings = async (req, res) => {
       limit = 100, offset = 0, order = 'start_time', dir = 'desc'
     } = req.query;
 
-    // Find all bookings for this user
+    // Find all bookings for this user with optimized includes to prevent N+1 queries
     const bookings = await Booking.findAndCountAll({
       where: { user_id: userId },
       limit,
       offset,
       order: [[order, dir]],
-      include: [{
-        model: Notification,
-        required: false
-      }]
+      include: [
+        {
+          model: User,
+          attributes: ['id', 'name', 'email', 'timezone'],
+          required: true
+        },
+        {
+          model: Notification,
+          required: false,
+          attributes: ['id', 'type', 'status', 'scheduled_for', 'sent_at']
+        }
+      ]
     });
 
     // Set pagination headers
@@ -260,13 +268,21 @@ const getBooking = async (req, res) => {
     const userId = req.user.id;
     const { id } = req.params;
 
-    // Find booking
+    // Find booking with optimized includes to prevent N+1 queries
     const booking = await Booking.findOne({
       where: { id, user_id: userId },
-      include: [{
-        model: Notification,
-        required: false
-      }]
+      include: [
+        {
+          model: User,
+          attributes: ['id', 'name', 'email', 'timezone'],
+          required: true
+        },
+        {
+          model: Notification,
+          required: false,
+          attributes: ['id', 'type', 'status', 'scheduled_for', 'sent_at']
+        }
+      ]
     });
 
     if (!booking) {

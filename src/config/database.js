@@ -23,9 +23,15 @@ if (process.env.DB_CONFIG === 'local') {
   const localConfig = require('./database-local');
   const config = localConfig[env];
   
-  // Setup logging based on configuration
+  // Setup enhanced logging with query monitoring
   const loggingConfig = config.logging === true 
-    ? (msg) => logger.debug(msg)
+    ? (msg, timing) => {
+        if (timing && timing > 1000) { // Log slow queries (>1s)
+          logger.warn(`Slow query detected (${timing}ms): ${msg}`);
+        } else if (env === 'development') {
+          logger.debug(`Query (${timing}ms): ${msg}`);
+        }
+      }
     : config.logging;
 
   // Create Sequelize instance for local development
