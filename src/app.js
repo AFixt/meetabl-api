@@ -162,23 +162,52 @@ app.use(session({
 // Initialize CSRF protection
 app.use(initializeCsrf);
 
-// Apply rate limiting
-const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100, // limit each IP to 100 requests per windowMs
+// Apply rate limiting with different limits for different endpoint types
+const createRateLimiter = (windowMs, max, message) => rateLimit({
+  windowMs,
+  max,
   standardHeaders: true,
   legacyHeaders: false,
   handler: (req, res) => {
-    logger.warn(`Rate limit exceeded for IP: ${req.ip}`);
+    logger.warn(`Rate limit exceeded for IP: ${req.ip}, endpoint: ${req.path}`);
     return res.status(429).json({
       error: {
         code: 'too_many_requests',
-        message: 'Too many requests, please try again later.'
+        message
       }
     });
   }
 });
-app.use(limiter);
+
+// General API rate limiting (higher limit)
+const generalLimiter = createRateLimiter(
+  15 * 60 * 1000, // 15 minutes
+  200, // Increased from 100 for normal operations
+  'Too many requests, please try again later.'
+);
+
+// Strict rate limiting for authentication endpoints
+const authLimiter = createRateLimiter(
+  15 * 60 * 1000, // 15 minutes  
+  5, // Very restrictive for login attempts
+  'Too many authentication attempts, please try again in 15 minutes.'
+);
+
+// Moderate rate limiting for password reset endpoints
+const passwordResetLimiter = createRateLimiter(
+  60 * 60 * 1000, // 1 hour
+  3, // Only 3 password reset attempts per hour
+  'Too many password reset requests, please try again in 1 hour.'
+);
+
+// Apply general rate limiting to all routes
+app.use(generalLimiter);
+
+// Apply strict rate limiting to authentication endpoints
+app.use('/api/auth/login', authLimiter);
+app.use('/api/auth/register', authLimiter);
+app.use('/api/auth/forgot-password', passwordResetLimiter);
+app.use('/api/auth/reset-password', passwordResetLimiter);
 
 // Add request logging middleware
 app.use((req, res, next) => {
