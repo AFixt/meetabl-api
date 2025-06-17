@@ -21,14 +21,15 @@ try {
   skipTests = true;
 }
 
-// Mock json2csv only if it exists
-if (!skipTests) {
-  jest.mock('json2csv', () => ({
-    Parser: jest.fn().mockImplementation(() => ({
-      parse: jest.fn().mockReturnValue('id,customer_name,customer_email\n1,John Doe,john@example.com')
-    }))
-  }));
-}
+// Mock json2csv
+const mockParseMethod = jest.fn().mockReturnValue('id,customer_name,customer_email\n1,John Doe,john@example.com');
+const mockParser = jest.fn().mockImplementation(() => ({
+  parse: mockParseMethod
+}));
+
+jest.mock('json2csv', () => ({
+  Parser: mockParser
+}));
 
 // Import controller after mocks are set up
 const {
@@ -251,7 +252,6 @@ describe('Analytics Controller', () => {
     test('should export bookings as CSV successfully', async () => {
       // Mock dependencies
       const { Booking } = require('../../../src/models');
-      const { Parser } = require('json2csv');
       
       // Mock bookings data
       Booking.findAll.mockResolvedValueOnce([
@@ -277,7 +277,7 @@ describe('Analytics Controller', () => {
       await exportBookings(req, res);
 
       // Verify CSV generation
-      expect(Parser).toHaveBeenCalled();
+      expect(mockParser).toHaveBeenCalled();
       expect(res.setHeader).toHaveBeenCalledWith('Content-Type', 'text/csv');
       expect(res.setHeader).toHaveBeenCalledWith('Content-Disposition', 'attachment; filename="bookings.csv"');
       expect(res.send).toHaveBeenCalled();

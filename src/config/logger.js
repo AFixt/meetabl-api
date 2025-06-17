@@ -8,13 +8,20 @@
 
 const bunyan = require('bunyan');
 const path = require('path');
-const fs = require('fs');
+const fs = require('fs').promises;
 
 // Create logs directory if it doesn't exist
 const logsDir = path.join(__dirname, '../../logs');
-if (!fs.existsSync(logsDir)) {
-  fs.mkdirSync(logsDir, { recursive: true });
-}
+const ensureLogsDir = async () => {
+  try {
+    await fs.access(logsDir);
+  } catch {
+    await fs.mkdir(logsDir, { recursive: true });
+  }
+};
+
+// Initialize logs directory
+ensureLogsDir().catch(console.error);
 
 // Determine environment
 const isProduction = process.env.NODE_ENV === 'production';

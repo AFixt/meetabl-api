@@ -18,9 +18,18 @@ const { User, JwtBlacklist } = require('../models');
  */
 const authenticateJWT = async (req, res, next) => {
   try {
-    const authHeader = req.headers.authorization;
+    // Try to get token from cookie first, then Authorization header (for backward compatibility)
+    let token = req.cookies.token;
+    
+    if (!token) {
+      const authHeader = req.headers.authorization;
+      
+      if (authHeader && authHeader.startsWith('Bearer ')) {
+        token = authHeader.substring(7);
+      }
+    }
 
-    if (!authHeader) {
+    if (!token) {
       return res.status(401).json({
         error: {
           code: 'unauthorized',
@@ -28,19 +37,6 @@ const authenticateJWT = async (req, res, next) => {
         }
       });
     }
-
-    const tokenParts = authHeader.split(' ');
-
-    if (tokenParts.length !== 2 || tokenParts[0] !== 'Bearer') {
-      return res.status(401).json({
-        error: {
-          code: 'unauthorized',
-          message: 'Invalid authentication format'
-        }
-      });
-    }
-
-    const token = tokenParts[1];
 
     // Verify token
     const decoded = jwt.verify(token, process.env.JWT_SECRET);

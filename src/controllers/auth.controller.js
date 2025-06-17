@@ -106,14 +106,23 @@ const register = async (req, res) => {
     // Log successful registration
     logger.info(`User registered: ${email}`);
 
-    // Return user data and token
+    // Set secure httpOnly cookies for tokens
+    const cookieOptions = {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'strict',
+      maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
+    };
+
+    res.cookie('token', token, cookieOptions);
+
+    // Return user data without token
     return res.status(201).json({
       id: user.id,
       name: user.name,
       email: user.email,
       timezone: user.timezone,
-      email_verified: user.email_verified,
-      token
+      email_verified: user.email_verified
     });
   } catch (error) {
     // Rollback transaction
@@ -192,14 +201,30 @@ const login = async (req, res) => {
     // Log successful login
     logger.info(`User logged in: ${email}`);
 
-    // Return user data and tokens
+    // Set secure httpOnly cookies for tokens
+    const cookieOptions = {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'strict',
+      maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
+    };
+
+    const refreshCookieOptions = {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'strict',
+      maxAge: 30 * 24 * 60 * 60 * 1000 // 30 days
+    };
+
+    res.cookie('token', token, cookieOptions);
+    res.cookie('refreshToken', refreshToken, refreshCookieOptions);
+
+    // Return user data without tokens
     return res.status(200).json({
       id: user.id,
       name: user.name,
       email: user.email,
-      timezone: user.timezone,
-      token,
-      refreshToken
+      timezone: user.timezone
     });
   } catch (error) {
     logger.error('Login error:', error);
@@ -220,25 +245,20 @@ const login = async (req, res) => {
  */
 const refreshToken = async (req, res) => {
   try {
-    const { refreshToken: tokenFromBody } = req.body;
+    // Get refresh token from cookie instead of body
+    const tokenFromCookie = req.cookies.refreshToken;
 
-    if (!tokenFromBody) {
+    if (!tokenFromCookie) {
       return res.status(400).json({
         error: {
           code: 'bad_request',
-          message: 'Refresh token is required',
-          params: [
-            {
-              param: 'refreshToken',
-              message: 'Refresh token is required'
-            }
-          ]
+          message: 'Refresh token is required'
         }
       });
     }
 
     // Verify refresh token
-    const decoded = jwt.verify(tokenFromBody, process.env.JWT_SECRET);
+    const decoded = jwt.verify(tokenFromCookie, process.env.JWT_SECRET);
 
     if (!decoded.userId || decoded.type !== 'refresh') {
       return res.status(401).json({
@@ -288,10 +308,27 @@ const refreshToken = async (req, res) => {
     // Log token refresh
     logger.info(`Token refreshed for user: ${user.id}`);
 
-    // Return new tokens
+    // Set secure httpOnly cookies for new tokens
+    const cookieOptions = {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'strict',
+      maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
+    };
+
+    const refreshCookieOptions = {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'strict',
+      maxAge: 30 * 24 * 60 * 60 * 1000 // 30 days
+    };
+
+    res.cookie('token', token, cookieOptions);
+    res.cookie('refreshToken', newRefreshToken, refreshCookieOptions);
+
+    // Return success without tokens
     return res.status(200).json({
-      token,
-      refreshToken: newRefreshToken
+      message: 'Tokens refreshed successfully'
     });
   } catch (error) {
     // Handle JWT errors
@@ -329,9 +366,13 @@ const refreshToken = async (req, res) => {
  */
 const logout = async (req, res) => {
   try {
-    // Get token from Authorization header
-    const authHeader = req.headers.authorization;
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    // Get token from cookie or Authorization header
+    const token = req.cookies.token || 
+                  (req.headers.authorization && req.headers.authorization.startsWith('Bearer ') 
+                    ? req.headers.authorization.substring(7) 
+                    : null);
+
+    if (!token) {
       return res.status(400).json({
         error: {
           code: 'bad_request',
@@ -339,8 +380,6 @@ const logout = async (req, res) => {
         }
       });
     }
-
-    const token = authHeader.substring(7);
     
     // Decode token to get jti and expiration
     const decoded = jwt.decode(token);
@@ -377,6 +416,10 @@ const logout = async (req, res) => {
     });
 
     logger.info(`User logged out: ${decoded.userId}`);
+
+    // Clear cookies
+    res.clearCookie('token');
+    res.clearCookie('refreshToken');
 
     return res.status(200).json({
       message: 'Logged out successfully'

@@ -7,7 +7,8 @@
  * @author meetabl Team
  */
 
-const fs = require('fs');
+const fs = require('fs').promises;
+const fsSync = require('fs');
 const path = require('path');
 const { Sequelize } = require('sequelize');
 const logger = require('./logger');
@@ -65,7 +66,7 @@ if (process.env.DB_CONFIG === 'local') {
 
 // Load database configuration file for MySQL
 const configPath = path.join(__dirname, 'database.json');
-const configTemplate = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+const configTemplate = JSON.parse(fsSync.readFileSync(configPath, 'utf8'));
 
 // Process environment variables in the config
 const processEnvVars = (obj) => {
