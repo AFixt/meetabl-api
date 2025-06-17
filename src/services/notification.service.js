@@ -54,25 +54,63 @@ const processNotificationQueue = async () => {
 
     logger.info(`Processing ${pendingNotifications.length} pending notifications`);
 
-    for (const notification of pendingNotifications) {
-      try {
-        if (notification.type === 'email') {
-          await sendEmailNotification(notification);
-        } else if (notification.type === 'sms') {
-          await sendSmsNotification(notification);
+    // Process notifications in parallel with batch status updates
+    const notificationUpdates = [];
+    
+    const processedNotifications = await Promise.allSettled(
+      pendingNotifications.map(async (notification) => {
+        try {
+          if (notification.type === 'email') {
+            await sendEmailNotification(notification);
+          } else if (notification.type === 'sms') {
+            await sendSmsNotification(notification);
+          }
+
+          // Prepare batch update data for successful notifications
+          notificationUpdates.push({
+            id: notification.id,
+            status: 'sent',
+            sent_at: new Date(),
+            error_message: null
+          });
+
+          return { success: true, notificationId: notification.id };
+        } catch (error) {
+          logger.error(`Failed to process notification ${notification.id}:`, error);
+
+          // Prepare batch update data for failed notifications
+          notificationUpdates.push({
+            id: notification.id,
+            status: 'failed',
+            error_message: error.message,
+            sent_at: null
+          });
+
+          return { success: false, notificationId: notification.id, error };
         }
+      })
+    );
 
-        // Update notification status
-        notification.status = 'sent';
-        notification.sent_at = new Date();
-        await notification.save();
-      } catch (error) {
-        logger.error(`Failed to process notification ${notification.id}:`, error);
-
-        // Update notification status
-        notification.status = 'failed';
-        notification.error_message = error.message;
-        await notification.save();
+    // Batch update notification statuses
+    if (notificationUpdates.length > 0) {
+      try {
+        for (const update of notificationUpdates) {
+          await Notification.update(
+            {
+              status: update.status,
+              sent_at: update.sent_at,
+              error_message: update.error_message
+            },
+            { where: { id: update.id } }
+          );
+        }
+        
+        const successCount = processedNotifications.filter(r => r.value?.success).length;
+        const failureCount = processedNotifications.length - successCount;
+        
+        logger.info(`Notification processing complete: ${successCount} sent, ${failureCount} failed`);
+      } catch (batchError) {
+        logger.error('Error updating notification statuses:', batchError);
       }
     }
   } catch (error) {

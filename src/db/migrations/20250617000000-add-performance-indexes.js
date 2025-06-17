@@ -133,6 +133,18 @@ module.exports = {
         fields: ['created'],
         name: 'idx_notifications_created'
       });
+
+      // Index for sent_at timestamp queries in analytics
+      await queryInterface.addIndex('notifications', {
+        fields: ['sent_at'],
+        name: 'idx_notifications_sent_at'
+      });
+
+      // Composite index for type and status analytics queries
+      await queryInterface.addIndex('notifications', {
+        fields: ['type', 'status'],
+        name: 'idx_notifications_type_status'
+      });
     } catch (error) {
       console.log('Notifications table does not exist, skipping indexes');
     }
@@ -158,6 +170,18 @@ module.exports = {
         fields: ['created'],
         name: 'idx_audit_logs_created'
       });
+
+      // Index for action-based queries in analytics
+      await queryInterface.addIndex('audit_logs', {
+        fields: ['action'],
+        name: 'idx_audit_logs_action'
+      });
+
+      // Composite index for user activity analytics
+      await queryInterface.addIndex('audit_logs', {
+        fields: ['user_id', 'action', 'createdAt'],
+        name: 'idx_audit_logs_user_action_created'
+      });
     } catch (error) {
       console.log('AuditLogs table does not exist, skipping indexes');
     }
@@ -182,11 +206,15 @@ module.exports = {
       { table: 'calendar_tokens', name: 'idx_calendar_tokens_expires_at' },
       { table: 'calendar_tokens', name: 'idx_calendar_tokens_provider' },
       { table: 'calendar_tokens', name: 'idx_calendar_tokens_user_id' },
+      { table: 'notifications', name: 'idx_notifications_type_status' },
+      { table: 'notifications', name: 'idx_notifications_sent_at' },
       { table: 'notifications', name: 'idx_notifications_created' },
       { table: 'notifications', name: 'idx_notifications_recipient' },
       { table: 'notifications', name: 'idx_notifications_status' },
       { table: 'notifications', name: 'idx_notifications_booking_id' },
       { table: 'notifications', name: 'idx_notifications_user_id' },
+      { table: 'audit_logs', name: 'idx_audit_logs_user_action_created' },
+      { table: 'audit_logs', name: 'idx_audit_logs_action' },
       { table: 'audit_logs', name: 'idx_audit_logs_created' },
       { table: 'audit_logs', name: 'idx_audit_logs_entity_id' },
       { table: 'audit_logs', name: 'idx_audit_logs_entity' },

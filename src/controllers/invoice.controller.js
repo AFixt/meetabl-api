@@ -27,14 +27,17 @@ const getInvoices = async (req, res) => {
       where.status = status;
     }
 
+    // Optimized query with flattened includes to reduce deep nesting
     const invoices = await Invoice.findAndCountAll({
       where,
       include: [{
         model: Payment,
         required: true,
         where: { user_id: userId },
+        attributes: ['id', 'booking_id', 'amount', 'currency', 'status', 'payment_method'],
         include: [{
           model: Booking,
+          attributes: ['id', 'customer_name', 'customer_email', 'start_time', 'end_time', 'user_id'],
           include: [{
             model: User,
             attributes: ['id', 'name', 'email']

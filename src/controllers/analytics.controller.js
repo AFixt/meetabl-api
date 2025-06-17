@@ -276,36 +276,32 @@ const getUserAnalytics = async (req, res) => {
     // Calculate account age
     const accountAgeDays = differenceInDays(new Date(), new Date(user.created));
 
-    // Get notification delivery stats
-    const notificationStats = await Notification.findAll({
-      attributes: [
-        'type',
-        'status',
-        [sequelize.fn('COUNT', sequelize.col('Notification.id')), 'count']
-      ],
-      include: [{
-        model: Booking,
-        required: true,
-        where: { user_id: userId },
-        attributes: []
-      }],
-      where: {
-        sent_at: { [Op.gte]: startDate }
-      },
-      group: ['type', 'status'],
-      raw: true
+    // Get notification delivery stats with optimized query
+    const notificationStats = await sequelize.query(`
+      SELECT 
+        n.type,
+        n.status,
+        COUNT(n.id) as count
+      FROM Notifications n
+      INNER JOIN Bookings b ON n.booking_id = b.id
+      WHERE b.user_id = :userId 
+        AND n.sent_at >= :startDate
+      GROUP BY n.type, n.status
+    `, {
+      replacements: { userId, startDate },
+      type: sequelize.QueryTypes.SELECT
     });
 
-    // Format notification stats
-    const notificationSummary = {
+    // Format notification stats using reduce for better performance
+    const notificationSummary = notificationStats.reduce((summary, stat) => {
+      if (!summary[stat.type]) {
+        summary[stat.type] = { sent: 0, failed: 0, pending: 0 };
+      }
+      summary[stat.type][stat.status] = parseInt(stat.count, 10);
+      return summary;
+    }, {
       email: { sent: 0, failed: 0, pending: 0 },
       sms: { sent: 0, failed: 0, pending: 0 }
-    };
-
-    notificationStats.forEach(stat => {
-      if (notificationSummary[stat.type]) {
-        notificationSummary[stat.type][stat.status] = parseInt(stat.count, 10);
-      }
     });
 
     return res.status(200).json({

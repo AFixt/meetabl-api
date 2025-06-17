@@ -213,9 +213,7 @@ const updateTeam = async (teamId, userId, updateData) => {
       details: updateData
     }, { transaction });
 
-    await transaction.commit();
-
-    // Return updated team with owner info
+    // Get updated team with owner info within transaction to avoid extra query
     const updatedTeam = await Team.findByPk(teamId, {
       include: [
         {
@@ -223,8 +221,11 @@ const updateTeam = async (teamId, userId, updateData) => {
           as: 'owner',
           attributes: ['id', 'name', 'email']
         }
-      ]
+      ],
+      transaction
     });
+
+    await transaction.commit();
 
     logger.info(`Team updated: ${teamId} by user ${userId}`);
     return updatedTeam;

@@ -1,0 +1,760 @@
+/**
+ * Team controller unit tests
+ *
+ * Tests for team management functionality
+ *
+ * @author meetabl Team
+ */
+
+// Load the test setup
+require('../test-setup');
+const { setupControllerMocks } = require('../../fixtures/test-helper');
+
+// Setup controller mocks
+setupControllerMocks();
+
+// Ensure test utilities are available
+if (typeof global.createMockRequest !== 'function'
+    || typeof global.createMockResponse !== 'function') {
+  global.createMockRequest = (overrides = {}) => ({
+    body: {},
+    params: {},
+    query: {},
+    headers: {},
+    user: { id: 'test-user-id' },
+    ...overrides
+  });
+
+  global.createMockResponse = () => {
+    const res = {};
+    res.status = jest.fn().mockReturnValue(res);
+    res.json = jest.fn().mockReturnValue(res);
+    res.send = jest.fn().mockReturnValue(res);
+    res.set = jest.fn().mockReturnValue(res);
+    return res;
+  };
+}
+
+// Mock team service
+jest.mock('../../../src/services/team.service', () => ({
+  createTeam: jest.fn(),
+  getUserTeams: jest.fn(),
+  getTeamById: jest.fn(),
+  updateTeam: jest.fn(),
+  deleteTeam: jest.fn(),
+  addTeamMember: jest.fn(),
+  removeTeamMember: jest.fn(),
+  getTeamMembers: jest.fn(),
+  updateMemberRole: jest.fn(),
+  createTeamCalendar: jest.fn(),
+  getTeamCalendars: jest.fn(),
+  deleteTeamCalendar: jest.fn()
+}));
+
+// Import controller after mocks are set up
+const {
+  createTeam,
+  getUserTeams,
+  getTeam,
+  updateTeam,
+  deleteTeam,
+  addMember,
+  removeMember,
+  getMembers,
+  updateMemberRole,
+  createCalendar,
+  getCalendars,
+  deleteCalendar
+} = require('../../../src/controllers/team.controller');
+
+const teamService = require('../../../src/services/team.service');
+
+describe('Team Controller', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  describe('createTeam', () => {
+    test('should create team successfully', async () => {
+      // Mock team service
+      const mockTeam = {
+        id: 'team-id',
+        name: 'Test Team',
+        description: 'Test Description',
+        owner_id: 'test-user-id'
+      };
+      teamService.createTeam.mockResolvedValueOnce(mockTeam);
+
+      // Create request
+      const req = createMockRequest({
+        user: { id: 'test-user-id' },
+        body: {
+          name: 'Test Team',
+          description: 'Test Description'
+        }
+      });
+      const res = createMockResponse();
+
+      // Execute controller
+      await createTeam(req, res);
+
+      // Verify service was called
+      expect(teamService.createTeam).toHaveBeenCalledWith('test-user-id', {
+        name: 'Test Team',
+        description: 'Test Description'
+      });
+
+      // Verify response
+      expect(res.status).toHaveBeenCalledWith(201);
+      expect(res.json).toHaveBeenCalledWith({
+        message: 'Team created successfully',
+        team: mockTeam
+      });
+    });
+
+    test('should handle validation errors', async () => {
+      // Mock validation error
+      const validationError = new Error('Validation failed');
+      validationError.name = 'SequelizeValidationError';
+      validationError.errors = [
+        { path: 'name', message: 'Name is required' }
+      ];
+      teamService.createTeam.mockRejectedValueOnce(validationError);
+
+      // Create request
+      const req = createMockRequest({
+        user: { id: 'test-user-id' },
+        body: { name: '' }
+      });
+      const res = createMockResponse();
+
+      // Execute controller
+      await createTeam(req, res);
+
+      // Verify response
+      expect(res.status).toHaveBeenCalledWith(400);
+      expect(res.json).toHaveBeenCalledWith({
+        error: {
+          code: 'validation_error',
+          message: 'Validation failed',
+          details: [
+            { field: 'name', message: 'Name is required' }
+          ]
+        }
+      });
+    });
+
+    test('should handle service errors', async () => {
+      // Mock service error
+      teamService.createTeam.mockRejectedValueOnce(new Error('Service error'));
+
+      // Create request
+      const req = createMockRequest({
+        user: { id: 'test-user-id' },
+        body: { name: 'Test Team' }
+      });
+      const res = createMockResponse();
+
+      // Execute controller
+      await createTeam(req, res);
+
+      // Verify response
+      expect(res.status).toHaveBeenCalledWith(500);
+      expect(res.json).toHaveBeenCalledWith({
+        error: {
+          code: 'internal_server_error',
+          message: 'Failed to create team'
+        }
+      });
+    });
+  });
+
+  describe('getUserTeams', () => {
+    test('should get user teams successfully', async () => {
+      // Mock teams data
+      const mockTeams = [
+        { id: 'team-1', name: 'Team 1' },
+        { id: 'team-2', name: 'Team 2' }
+      ];
+      teamService.getUserTeams.mockResolvedValueOnce(mockTeams);
+
+      // Create request
+      const req = createMockRequest({
+        user: { id: 'test-user-id' }
+      });
+      const res = createMockResponse();
+
+      // Execute controller
+      await getUserTeams(req, res);
+
+      // Verify service was called
+      expect(teamService.getUserTeams).toHaveBeenCalledWith('test-user-id');
+
+      // Verify response
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(res.json).toHaveBeenCalledWith({
+        message: 'Teams retrieved successfully',
+        teams: mockTeams
+      });
+    });
+
+    test('should handle service errors', async () => {
+      // Mock service error
+      teamService.getUserTeams.mockRejectedValueOnce(new Error('Service error'));
+
+      // Create request
+      const req = createMockRequest({
+        user: { id: 'test-user-id' }
+      });
+      const res = createMockResponse();
+
+      // Execute controller
+      await getUserTeams(req, res);
+
+      // Verify response
+      expect(res.status).toHaveBeenCalledWith(500);
+      expect(res.json).toHaveBeenCalledWith({
+        error: {
+          code: 'internal_server_error',
+          message: 'Failed to get teams'
+        }
+      });
+    });
+  });
+
+  describe('getTeam', () => {
+    test('should get team successfully', async () => {
+      // Mock team data
+      const mockTeam = {
+        id: 'team-id',
+        name: 'Test Team',
+        description: 'Test Description'
+      };
+      teamService.getTeamById.mockResolvedValueOnce(mockTeam);
+
+      // Create request
+      const req = createMockRequest({
+        user: { id: 'test-user-id' },
+        params: { id: 'team-id' }
+      });
+      const res = createMockResponse();
+
+      // Execute controller
+      await getTeam(req, res);
+
+      // Verify service was called
+      expect(teamService.getTeamById).toHaveBeenCalledWith('team-id', 'test-user-id');
+
+      // Verify response
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(res.json).toHaveBeenCalledWith({
+        message: 'Team retrieved successfully',
+        team: mockTeam
+      });
+    });
+
+    test('should handle team not found', async () => {
+      // Mock team not found
+      const notFoundError = new Error('Team not found');
+      notFoundError.statusCode = 404;
+      teamService.getTeamById.mockRejectedValueOnce(notFoundError);
+
+      // Create request
+      const req = createMockRequest({
+        user: { id: 'test-user-id' },
+        params: { id: 'non-existent-id' }
+      });
+      const res = createMockResponse();
+
+      // Execute controller
+      await getTeam(req, res);
+
+      // Verify response
+      expect(res.status).toHaveBeenCalledWith(404);
+      expect(res.json).toHaveBeenCalledWith({
+        error: {
+          code: 'not_found',
+          message: 'Team not found or access denied'
+        }
+      });
+    });
+  });
+
+  describe('updateTeam', () => {
+    test('should update team successfully', async () => {
+      // Mock updated team
+      const mockTeam = {
+        id: 'team-id',
+        name: 'Updated Team',
+        description: 'Updated Description'
+      };
+      teamService.updateTeam.mockResolvedValueOnce(mockTeam);
+
+      // Create request
+      const req = createMockRequest({
+        user: { id: 'test-user-id' },
+        params: { id: 'team-id' },
+        body: {
+          name: 'Updated Team',
+          description: 'Updated Description'
+        }
+      });
+      const res = createMockResponse();
+
+      // Execute controller
+      await updateTeam(req, res);
+
+      // Verify service was called
+      expect(teamService.updateTeam).toHaveBeenCalledWith('team-id', 'test-user-id', {
+        name: 'Updated Team',
+        description: 'Updated Description'
+      });
+
+      // Verify response
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(res.json).toHaveBeenCalledWith({
+        message: 'Team updated successfully',
+        team: mockTeam
+      });
+    });
+
+    test('should handle validation errors', async () => {
+      // Mock validation error
+      const validationError = new Error('Validation failed');
+      validationError.name = 'SequelizeValidationError';
+      validationError.errors = [
+        { path: 'name', message: 'Name cannot be empty' }
+      ];
+      teamService.updateTeam.mockRejectedValueOnce(validationError);
+
+      // Create request
+      const req = createMockRequest({
+        user: { id: 'test-user-id' },
+        params: { id: 'team-id' },
+        body: { name: '' }
+      });
+      const res = createMockResponse();
+
+      // Execute controller
+      await updateTeam(req, res);
+
+      // Verify response
+      expect(res.status).toHaveBeenCalledWith(400);
+      expect(res.json).toHaveBeenCalledWith({
+        error: {
+          code: 'validation_error',
+          message: 'Validation failed',
+          details: [
+            { field: 'name', message: 'Name cannot be empty' }
+          ]
+        }
+      });
+    });
+  });
+
+  describe('deleteTeam', () => {
+    test('should delete team successfully', async () => {
+      // Mock successful deletion
+      teamService.deleteTeam.mockResolvedValueOnce();
+
+      // Create request
+      const req = createMockRequest({
+        user: { id: 'test-user-id' },
+        params: { id: 'team-id' }
+      });
+      const res = createMockResponse();
+
+      // Execute controller
+      await deleteTeam(req, res);
+
+      // Verify service was called
+      expect(teamService.deleteTeam).toHaveBeenCalledWith('team-id', 'test-user-id');
+
+      // Verify response
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(res.json).toHaveBeenCalledWith({
+        message: 'Team deleted successfully'
+      });
+    });
+
+    test('should handle unauthorized deletion', async () => {
+      // Mock unauthorized error
+      const unauthorizedError = new Error('Unauthorized');
+      unauthorizedError.statusCode = 403;
+      teamService.deleteTeam.mockRejectedValueOnce(unauthorizedError);
+
+      // Create request
+      const req = createMockRequest({
+        user: { id: 'test-user-id' },
+        params: { id: 'team-id' }
+      });
+      const res = createMockResponse();
+
+      // Execute controller
+      await deleteTeam(req, res);
+
+      // Verify response
+      expect(res.status).toHaveBeenCalledWith(403);
+      expect(res.json).toHaveBeenCalledWith({
+        error: {
+          code: 'forbidden',
+          message: 'Team not found or access denied'
+        }
+      });
+    });
+  });
+
+  describe('addMember', () => {
+    test('should add member successfully', async () => {
+      // Mock member addition
+      const mockMember = {
+        id: 'member-id',
+        user_id: 'new-user-id',
+        team_id: 'team-id',
+        role: 'member'
+      };
+      teamService.addTeamMember.mockResolvedValueOnce(mockMember);
+
+      // Create request
+      const req = createMockRequest({
+        user: { id: 'test-user-id' },
+        params: { id: 'team-id' },
+        body: {
+          user_id: 'new-user-id',
+          role: 'member'
+        }
+      });
+      const res = createMockResponse();
+
+      // Execute controller
+      await addMember(req, res);
+
+      // Verify service was called
+      expect(teamService.addTeamMember).toHaveBeenCalledWith('team-id', 'test-user-id', {
+        user_id: 'new-user-id',
+        role: 'member'
+      });
+
+      // Verify response
+      expect(res.status).toHaveBeenCalledWith(201);
+      expect(res.json).toHaveBeenCalledWith({
+        message: 'Member added successfully',
+        member: mockMember
+      });
+    });
+
+    test('should handle duplicate member error', async () => {
+      // Mock duplicate error
+      const duplicateError = new Error('User already a member');
+      duplicateError.statusCode = 409;
+      teamService.addTeamMember.mockRejectedValueOnce(duplicateError);
+
+      // Create request
+      const req = createMockRequest({
+        user: { id: 'test-user-id' },
+        params: { id: 'team-id' },
+        body: {
+          user_id: 'existing-user-id',
+          role: 'member'
+        }
+      });
+      const res = createMockResponse();
+
+      // Execute controller
+      await addMember(req, res);
+
+      // Verify response
+      expect(res.status).toHaveBeenCalledWith(409);
+      expect(res.json).toHaveBeenCalledWith({
+        error: {
+          code: 'conflict',
+          message: 'Failed to add member'
+        }
+      });
+    });
+  });
+
+  describe('removeMember', () => {
+    test('should remove member successfully', async () => {
+      // Mock successful removal
+      teamService.removeTeamMember.mockResolvedValueOnce();
+
+      // Create request
+      const req = createMockRequest({
+        user: { id: 'test-user-id' },
+        params: { 
+          id: 'team-id',
+          memberId: 'member-id'
+        }
+      });
+      const res = createMockResponse();
+
+      // Execute controller
+      await removeMember(req, res);
+
+      // Verify service was called
+      expect(teamService.removeTeamMember).toHaveBeenCalledWith('team-id', 'member-id', 'test-user-id');
+
+      // Verify response
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(res.json).toHaveBeenCalledWith({
+        message: 'Member removed successfully'
+      });
+    });
+
+    test('should handle member not found', async () => {
+      // Mock member not found
+      const notFoundError = new Error('Member not found');
+      notFoundError.statusCode = 404;
+      teamService.removeTeamMember.mockRejectedValueOnce(notFoundError);
+
+      // Create request
+      const req = createMockRequest({
+        user: { id: 'test-user-id' },
+        params: { 
+          id: 'team-id',
+          memberId: 'non-existent-id'
+        }
+      });
+      const res = createMockResponse();
+
+      // Execute controller
+      await removeMember(req, res);
+
+      // Verify response
+      expect(res.status).toHaveBeenCalledWith(404);
+      expect(res.json).toHaveBeenCalledWith({
+        error: {
+          code: 'not_found',
+          message: 'Failed to remove member'
+        }
+      });
+    });
+  });
+
+  describe('getMembers', () => {
+    test('should get team members successfully', async () => {
+      // Mock members data
+      const mockMembers = [
+        { id: 'member-1', user_id: 'user-1', role: 'admin' },
+        { id: 'member-2', user_id: 'user-2', role: 'member' }
+      ];
+      teamService.getTeamMembers.mockResolvedValueOnce(mockMembers);
+
+      // Create request
+      const req = createMockRequest({
+        user: { id: 'test-user-id' },
+        params: { id: 'team-id' }
+      });
+      const res = createMockResponse();
+
+      // Execute controller
+      await getMembers(req, res);
+
+      // Verify service was called
+      expect(teamService.getTeamMembers).toHaveBeenCalledWith('team-id', 'test-user-id');
+
+      // Verify response
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(res.json).toHaveBeenCalledWith({
+        message: 'Members retrieved successfully',
+        members: mockMembers
+      });
+    });
+  });
+
+  describe('updateMemberRole', () => {
+    test('should update member role successfully', async () => {
+      // Mock updated member
+      const mockMember = {
+        id: 'member-id',
+        user_id: 'user-id',
+        role: 'admin'
+      };
+      teamService.updateMemberRole.mockResolvedValueOnce(mockMember);
+
+      // Create request
+      const req = createMockRequest({
+        user: { id: 'test-user-id' },
+        params: { 
+          id: 'team-id',
+          memberId: 'member-id'
+        },
+        body: { role: 'admin' }
+      });
+      const res = createMockResponse();
+
+      // Execute controller
+      await updateMemberRole(req, res);
+
+      // Verify service was called
+      expect(teamService.updateMemberRole).toHaveBeenCalledWith('team-id', 'member-id', 'test-user-id', 'admin');
+
+      // Verify response
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(res.json).toHaveBeenCalledWith({
+        message: 'Member role updated successfully',
+        member: mockMember
+      });
+    });
+
+    test('should handle invalid role', async () => {
+      // Mock validation error
+      const validationError = new Error('Invalid role');
+      validationError.statusCode = 400;
+      teamService.updateMemberRole.mockRejectedValueOnce(validationError);
+
+      // Create request
+      const req = createMockRequest({
+        user: { id: 'test-user-id' },
+        params: { 
+          id: 'team-id',
+          memberId: 'member-id'
+        },
+        body: { role: 'invalid-role' }
+      });
+      const res = createMockResponse();
+
+      // Execute controller
+      await updateMemberRole(req, res);
+
+      // Verify response
+      expect(res.status).toHaveBeenCalledWith(400);
+      expect(res.json).toHaveBeenCalledWith({
+        error: {
+          code: 'bad_request',
+          message: 'Failed to update member role'
+        }
+      });
+    });
+  });
+
+  describe('createCalendar', () => {
+    test('should create team calendar successfully', async () => {
+      // Mock calendar creation
+      const mockCalendar = {
+        id: 'calendar-id',
+        team_id: 'team-id',
+        name: 'Team Calendar',
+        description: 'Team calendar description'
+      };
+      teamService.createTeamCalendar.mockResolvedValueOnce(mockCalendar);
+
+      // Create request
+      const req = createMockRequest({
+        user: { id: 'test-user-id' },
+        params: { id: 'team-id' },
+        body: {
+          name: 'Team Calendar',
+          description: 'Team calendar description'
+        }
+      });
+      const res = createMockResponse();
+
+      // Execute controller
+      await createCalendar(req, res);
+
+      // Verify service was called
+      expect(teamService.createTeamCalendar).toHaveBeenCalledWith('team-id', 'test-user-id', {
+        name: 'Team Calendar',
+        description: 'Team calendar description'
+      });
+
+      // Verify response
+      expect(res.status).toHaveBeenCalledWith(201);
+      expect(res.json).toHaveBeenCalledWith({
+        message: 'Calendar created successfully',
+        calendar: mockCalendar
+      });
+    });
+  });
+
+  describe('getCalendars', () => {
+    test('should get team calendars successfully', async () => {
+      // Mock calendars data
+      const mockCalendars = [
+        { id: 'calendar-1', name: 'Calendar 1' },
+        { id: 'calendar-2', name: 'Calendar 2' }
+      ];
+      teamService.getTeamCalendars.mockResolvedValueOnce(mockCalendars);
+
+      // Create request
+      const req = createMockRequest({
+        user: { id: 'test-user-id' },
+        params: { id: 'team-id' }
+      });
+      const res = createMockResponse();
+
+      // Execute controller
+      await getCalendars(req, res);
+
+      // Verify service was called
+      expect(teamService.getTeamCalendars).toHaveBeenCalledWith('team-id', 'test-user-id');
+
+      // Verify response
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(res.json).toHaveBeenCalledWith({
+        message: 'Calendars retrieved successfully',
+        calendars: mockCalendars
+      });
+    });
+  });
+
+  describe('deleteCalendar', () => {
+    test('should delete team calendar successfully', async () => {
+      // Mock successful deletion
+      teamService.deleteTeamCalendar.mockResolvedValueOnce();
+
+      // Create request
+      const req = createMockRequest({
+        user: { id: 'test-user-id' },
+        params: { 
+          id: 'team-id',
+          calendarId: 'calendar-id'
+        }
+      });
+      const res = createMockResponse();
+
+      // Execute controller
+      await deleteCalendar(req, res);
+
+      // Verify service was called
+      expect(teamService.deleteTeamCalendar).toHaveBeenCalledWith('team-id', 'calendar-id', 'test-user-id');
+
+      // Verify response
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(res.json).toHaveBeenCalledWith({
+        message: 'Calendar deleted successfully'
+      });
+    });
+
+    test('should handle calendar not found', async () => {
+      // Mock calendar not found
+      const notFoundError = new Error('Calendar not found');
+      notFoundError.statusCode = 404;
+      teamService.deleteTeamCalendar.mockRejectedValueOnce(notFoundError);
+
+      // Create request
+      const req = createMockRequest({
+        user: { id: 'test-user-id' },
+        params: { 
+          id: 'team-id',
+          calendarId: 'non-existent-id'
+        }
+      });
+      const res = createMockResponse();
+
+      // Execute controller
+      await deleteCalendar(req, res);
+
+      // Verify response
+      expect(res.status).toHaveBeenCalledWith(404);
+      expect(res.json).toHaveBeenCalledWith({
+        error: {
+          code: 'not_found',
+          message: 'Failed to delete calendar'
+        }
+      });
+    });
+  });
+});

@@ -1047,13 +1047,18 @@ const bulkCancelBookings = async (req, res) => {
     // Log bulk cancellation
     logger.info(`Bulk booking cancellation: ${cancelledBookings.length} bookings cancelled`);
 
-    // Queue email notifications for all cancelled bookings
-    for (const bookingId of cancelledBookings) {
-      await notificationService.queueNotification(bookingId, 'email');
+    // Queue email notifications for all cancelled bookings - batch operation
+    try {
+      await Promise.allSettled(
+        cancelledBookings.map(bookingId => notificationService.queueNotification(bookingId, 'email'))
+      );
+    } catch (error) {
+      logger.error('Error queuing bulk notifications:', error);
+      // Non-critical error, don't fail the cancellation
     }
 
-    // Update calendar events if user has calendar integration
-    for (const booking of bookings) {
+    // Update calendar events if user has calendar integration - parallel processing
+    const calendarUpdates = bookings.map(async (booking) => {
       try {
         booking.description = `CANCELLED: ${booking.description || ''}`;
         await calendarService.createCalendarEvent(booking);
@@ -1061,6 +1066,13 @@ const bulkCancelBookings = async (req, res) => {
         logger.error(`Failed to update calendar event for cancelled booking ${booking.id}:`, calendarError);
         // Non-critical error, continue with other bookings
       }
+    });
+
+    try {
+      await Promise.allSettled(calendarUpdates);
+    } catch (error) {
+      logger.error('Error updating calendar events:', error);
+      // Non-critical error, don't fail the cancellation
     }
 
     return res.status(200).json({
