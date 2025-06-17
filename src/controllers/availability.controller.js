@@ -7,7 +7,10 @@
  */
 
 const { v4: uuidv4 } = require('uuid');
-const { parse, isValid, getDay, startOfDay, endOfDay, setHours, setMinutes, setSeconds, addMinutes, compareAsc, isBefore, isAfter, isSameOrBefore, format, toDate } = require('date-fns');
+const { parse, isValid, getDay, startOfDay, endOfDay, setHours, setMinutes, setSeconds, addMinutes, compareAsc, isBefore, isAfter, isEqual, format, toDate } = require('date-fns');
+
+// Helper function to check if date1 is same or before date2
+const isSameOrBefore = (date1, date2) => isEqual(date1, date2) || isBefore(date1, date2);
 const logger = require('../config/logger');
 const { AvailabilityRule, Booking, AuditLog } = require('../models');
 const { sequelize } = require('../config/database');
