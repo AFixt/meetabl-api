@@ -57,11 +57,10 @@ if (process.env.DB_CONFIG === 'local') {
 
   module.exports = {
     sequelize,
+    Op: Sequelize.Op,
     initializeDatabase,
     config
   };
-  
-  return;
 }
 
 // Load database configuration file for MySQL
