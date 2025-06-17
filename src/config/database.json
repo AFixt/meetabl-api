@@ -15,7 +15,11 @@
     },
     "dialectOptions": {
       "dateStrings": true,
-      "typeCast": true
+      "typeCast": true,
+      "connectTimeout": 60000,
+      "acquireTimeout": 60000,
+      "timeout": 60000,
+      "charset": "utf8mb4"
     },
     "pool": {
       "max": 10,
@@ -40,7 +44,11 @@
     },
     "dialectOptions": {
       "dateStrings": true,
-      "typeCast": true
+      "typeCast": true,
+      "connectTimeout": 60000,
+      "acquireTimeout": 60000,
+      "timeout": 60000,
+      "charset": "utf8mb4"
     },
     "pool": {
       "max": 5,
@@ -66,6 +74,10 @@
     "dialectOptions": {
       "dateStrings": true,
       "typeCast": true,
+      "connectTimeout": 60000,
+      "acquireTimeout": 60000,
+      "timeout": 60000,
+      "charset": "utf8mb4",
       "ssl": {
         "require": true,
         "rejectUnauthorized": "${process.env.DB_SSL_REJECT_UNAUTHORIZED !== 'false'}"
@@ -95,6 +107,10 @@
     "dialectOptions": {
       "dateStrings": true,
       "typeCast": true,
+      "connectTimeout": 60000,
+      "acquireTimeout": 60000,
+      "timeout": 60000,
+      "charset": "utf8mb4",
       "ssl": {
         "require": true,
         "rejectUnauthorized": "${process.env.DB_SSL_REJECT_UNAUTHORIZED !== 'false'}"
