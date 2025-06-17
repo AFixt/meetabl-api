@@ -213,8 +213,9 @@ app.use('/api/auth/reset-password', passwordResetLimiter);
 app.use((req, res, next) => {
   logger.info({
     method: req.method,
-    url: req.url,
-    ip: req.ip
+    url: req.url.replace(/\/\d+/g, '/[ID]'), // Replace numeric IDs with placeholder
+    ip: req.ip,
+    userAgent: req.get('User-Agent') || 'Unknown'
   }, 'Request received');
   next();
 });
@@ -276,20 +277,48 @@ app.use((req, res) => {
   });
 });
 
+// Utility function to sanitize sensitive data from logs
+const sanitizeForLogging = (data) => {
+  if (!data || typeof data !== 'object') return data;
+  
+  const sensitiveFields = [
+    'password', 'token', 'secret', 'authorization', 'cookie',
+    'email', 'phone', 'ssn', 'credit_card', 'customer_email',
+    'customer_phone', 'customer_name', 'name'
+  ];
+  
+  const sanitized = Array.isArray(data) ? [] : {};
+  
+  for (const [key, value] of Object.entries(data)) {
+    const lowerKey = key.toLowerCase();
+    
+    if (sensitiveFields.some(field => lowerKey.includes(field))) {
+      sanitized[key] = '[REDACTED]';
+    } else if (value && typeof value === 'object') {
+      sanitized[key] = sanitizeForLogging(value);
+    } else {
+      sanitized[key] = value;
+    }
+  }
+  
+  return sanitized;
+};
+
 // Error handling middleware
 app.use((err, req, res, next) => {
   logger.error({
     err: {
       message: err.message,
-      stack: err.stack
+      stack: process.env.NODE_ENV === 'development' ? err.stack : '[REDACTED]'
     },
     request: {
       method: req.method,
-      url: req.url,
-      headers: req.headers,
-      params: req.params,
-      query: req.query,
-      body: req.body
+      url: req.url.replace(/\/\d+/g, '/[ID]'), // Replace numeric IDs with placeholder
+      headers: sanitizeForLogging(req.headers),
+      params: sanitizeForLogging(req.params),
+      query: sanitizeForLogging(req.query),
+      body: sanitizeForLogging(req.body),
+      ip: req.ip // Keep IP for security analysis
     }
   }, 'Error processing request');
 
