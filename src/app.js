@@ -12,8 +12,10 @@ const cors = require('cors');
 const bodyParser = require('body-parser');
 const rateLimit = require('express-rate-limit');
 const cookieParser = require('cookie-parser');
+const session = require('express-session');
 const logger = require('./config/logger');
 const { processNotifications } = require('./jobs/notification-processor');
+const { initializeCsrf, protectCsrf, provideCsrfToken } = require('./middlewares/csrf');
 
 // Use appropriate database configuration based on environment
 const { initializeDatabase } = process.env.NODE_ENV === 'test'
@@ -39,6 +41,21 @@ app.use('/api/payments/webhook', express.raw({ type: 'application/json' }));
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(cookieParser());
+
+// Session configuration for CSRF protection
+app.use(session({
+  secret: process.env.SESSION_SECRET || 'fallback-session-secret-change-in-production',
+  resave: false,
+  saveUninitialized: false,
+  cookie: {
+    secure: process.env.NODE_ENV === 'production', // HTTPS only in production
+    httpOnly: true,
+    maxAge: 24 * 60 * 60 * 1000 // 24 hours
+  }
+}));
+
+// Initialize CSRF protection
+app.use(initializeCsrf);
 
 // Apply rate limiting
 const limiter = rateLimit({
@@ -79,6 +96,20 @@ const notificationRoutes = require('./routes/notification.routes');
 const analyticsRoutes = require('./routes/analytics.routes');
 const teamRoutes = require('./routes/team.routes');
 const paymentRoutes = require('./routes/payment.routes');
+
+// CSRF token endpoint
+app.get('/api/csrf-token', provideCsrfToken);
+
+// Apply CSRF protection to state-changing routes
+// Skip authentication routes as they typically don't need CSRF (using JWT)
+app.use('/api/users', protectCsrf);
+app.use('/api/availability', protectCsrf);
+app.use('/api/bookings', protectCsrf);
+app.use('/api/calendar', protectCsrf);
+app.use('/api/notifications', protectCsrf);
+app.use('/api/analytics', protectCsrf);
+app.use('/api/teams', protectCsrf);
+app.use('/api/payments', protectCsrf);
 
 // Apply routes
 app.use('/api/auth', authRoutes);
