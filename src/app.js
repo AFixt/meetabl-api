@@ -17,6 +17,49 @@ const logger = require('./config/logger');
 const { processNotifications } = require('./jobs/notification-processor');
 const { initializeCsrf, protectCsrf, provideCsrfToken } = require('./middlewares/csrf');
 
+// Validate critical environment variables at startup
+function validateEnvironment() {
+  const requiredEnvVars = {
+    JWT_SECRET: process.env.JWT_SECRET,
+    NODE_ENV: process.env.NODE_ENV
+  };
+
+  const missing = [];
+  const invalid = [];
+
+  for (const [key, value] of Object.entries(requiredEnvVars)) {
+    if (!value) {
+      missing.push(key);
+    }
+  }
+
+  // Validate JWT_SECRET strength
+  if (process.env.JWT_SECRET) {
+    const jwtSecret = process.env.JWT_SECRET;
+    if (jwtSecret.length < 32) {
+      invalid.push('JWT_SECRET must be at least 32 characters long');
+    }
+    if (!/[A-Z]/.test(jwtSecret) || !/[a-z]/.test(jwtSecret) || !/[0-9]/.test(jwtSecret)) {
+      invalid.push('JWT_SECRET should contain uppercase, lowercase, and numeric characters');
+    }
+  }
+
+  if (missing.length > 0) {
+    logger.error(`Missing required environment variables: ${missing.join(', ')}`);
+    process.exit(1);
+  }
+
+  if (invalid.length > 0) {
+    logger.error(`Invalid environment configuration: ${invalid.join(', ')}`);
+    process.exit(1);
+  }
+
+  logger.info('Environment validation passed');
+}
+
+// Validate environment before proceeding
+validateEnvironment();
+
 // Use appropriate database configuration based on environment
 const { initializeDatabase } = process.env.NODE_ENV === 'test'
   ? require('./models/test-models')
