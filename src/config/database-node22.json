@@ -1,0 +1,203 @@
+{
+  "development": {
+    "username": "${process.env.DB_USER}",
+    "password": "${process.env.DB_PASSWORD}",
+    "database": "${process.env.DB_NAME}",
+    "host": "${process.env.DB_HOST}",
+    "port": "${process.env.DB_PORT || 3306}",
+    "dialect": "mysql",
+    "logging": true,
+    "define": {
+      "timestamps": true,
+      "underscored": false,
+      "createdAt": "created",
+      "updatedAt": "updated"
+    },
+    "dialectOptions": {
+      "dateStrings": true,
+      "typeCast": true,
+      "connectTimeout": 60000,
+      "acquireTimeout": 60000,
+      "timeout": 60000,
+      "charset": "utf8mb4",
+      "flags": ["+FOUND_ROWS"],
+      "supportBigNumbers": true,
+      "bigNumberStrings": false,
+      "decimalNumbers": true,
+      "multipleStatements": true
+    },
+    "pool": {
+      "max": 10,
+      "min": 0,
+      "acquire": 30000,
+      "idle": 10000,
+      "evict": 5000
+    },
+    "retry": {
+      "max": 3,
+      "match": [
+        "ETIMEDOUT",
+        "ECONNRESET",
+        "ENOTFOUND",
+        "EHOSTUNREACH",
+        "ECONNREFUSED"
+      ]
+    },
+    "benchmark": true,
+    "omitNull": false,
+    "native": false
+  },
+  "test": {
+    "username": "${process.env.TEST_DB_USER || process.env.DB_USER}",
+    "password": "${process.env.TEST_DB_PASSWORD || process.env.DB_PASSWORD}",
+    "database": "${process.env.TEST_DB_NAME || 'meetabl_test'}",
+    "host": "${process.env.TEST_DB_HOST || process.env.DB_HOST}",
+    "port": "${process.env.TEST_DB_PORT || process.env.DB_PORT || 3306}",
+    "dialect": "mysql",
+    "logging": false,
+    "define": {
+      "timestamps": true,
+      "underscored": false,
+      "createdAt": "created",
+      "updatedAt": "updated"
+    },
+    "dialectOptions": {
+      "dateStrings": true,
+      "typeCast": true,
+      "connectTimeout": 60000,
+      "acquireTimeout": 60000,
+      "timeout": 60000,
+      "charset": "utf8mb4",
+      "flags": ["+FOUND_ROWS"],
+      "supportBigNumbers": true,
+      "bigNumberStrings": false,
+      "decimalNumbers": true
+    },
+    "pool": {
+      "max": 5,
+      "min": 0,
+      "acquire": 30000,
+      "idle": 10000,
+      "evict": 5000
+    },
+    "retry": {
+      "max": 3
+    },
+    "benchmark": false,
+    "omitNull": false,
+    "native": false
+  },
+  "production": {
+    "username": "${process.env.DB_USER}",
+    "password": "${process.env.DB_PASSWORD}",
+    "database": "${process.env.DB_NAME}",
+    "host": "${process.env.DB_HOST}",
+    "port": "${process.env.DB_PORT || 3306}",
+    "dialect": "mysql",
+    "logging": false,
+    "define": {
+      "timestamps": true,
+      "underscored": false,
+      "createdAt": "created",
+      "updatedAt": "updated"
+    },
+    "dialectOptions": {
+      "dateStrings": true,
+      "typeCast": true,
+      "connectTimeout": 60000,
+      "acquireTimeout": 60000,
+      "timeout": 60000,
+      "charset": "utf8mb4",
+      "ssl": {
+        "require": true,
+        "rejectUnauthorized": "${process.env.DB_SSL_REJECT_UNAUTHORIZED !== 'false'}"
+      },
+      "flags": ["+FOUND_ROWS"],
+      "supportBigNumbers": true,
+      "bigNumberStrings": false,
+      "decimalNumbers": true,
+      "multipleStatements": false
+    },
+    "pool": {
+      "max": 20,
+      "min": 5,
+      "acquire": 60000,
+      "idle": 10000,
+      "evict": 5000,
+      "handleDisconnects": true
+    },
+    "retry": {
+      "max": 5,
+      "match": [
+        "ETIMEDOUT",
+        "ECONNRESET",
+        "ENOTFOUND",
+        "EHOSTUNREACH",
+        "ECONNREFUSED",
+        "PROTOCOL_CONNECTION_LOST",
+        "PROTOCOL_PACKETS_OUT_OF_ORDER"
+      ]
+    },
+    "benchmark": false,
+    "omitNull": false,
+    "native": false,
+    "replication": {
+      "read": [
+        {
+          "host": "${process.env.DB_READ_HOST || process.env.DB_HOST}",
+          "username": "${process.env.DB_USER}",
+          "password": "${process.env.DB_PASSWORD}"
+        }
+      ],
+      "write": {
+        "host": "${process.env.DB_HOST}",
+        "username": "${process.env.DB_USER}",
+        "password": "${process.env.DB_PASSWORD}"
+      }
+    }
+  },
+  "serverless": {
+    "username": "${process.env.DB_USER}",
+    "password": "${process.env.DB_PASSWORD}",
+    "database": "${process.env.DB_NAME}",
+    "host": "${process.env.DB_HOST}",
+    "port": "${process.env.DB_PORT || 3306}",
+    "dialect": "mysql",
+    "logging": false,
+    "define": {
+      "timestamps": true,
+      "underscored": false,
+      "createdAt": "created",
+      "updatedAt": "updated"
+    },
+    "dialectOptions": {
+      "dateStrings": true,
+      "typeCast": true,
+      "connectTimeout": 60000,
+      "acquireTimeout": 60000,
+      "timeout": 60000,
+      "charset": "utf8mb4",
+      "ssl": {
+        "require": true,
+        "rejectUnauthorized": "${process.env.DB_SSL_REJECT_UNAUTHORIZED !== 'false'}"
+      },
+      "flags": ["+FOUND_ROWS"],
+      "supportBigNumbers": true,
+      "bigNumberStrings": false,
+      "decimalNumbers": true
+    },
+    "pool": {
+      "max": 2,
+      "min": 0,
+      "acquire": 30000,
+      "idle": 1000,
+      "evict": 1000
+    },
+    "retry": {
+      "max": 3
+    },
+    "benchmark": false,
+    "omitNull": false,
+    "native": false
+  }
+}

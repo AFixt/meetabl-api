@@ -65,13 +65,21 @@ if (process.env.DB_CONFIG === 'local') {
 }
 
 // Load database configuration file for MySQL
-const configPath = path.join(__dirname, 'database.json');
+// Use optimized config for Node.js 22 if available
+const nodeVersion = process.versions.node.split('.')[0];
+const configFileName = nodeVersion >= '22' && fsSync.existsSync(path.join(__dirname, 'database-node22.json')) 
+  ? 'database-node22.json' 
+  : 'database.json';
+const configPath = path.join(__dirname, configFileName);
 let configTemplate;
 
 // Load config synchronously since this is required at module initialization
 // This is acceptable for a one-time config load at startup
 try {
   configTemplate = JSON.parse(fsSync.readFileSync(configPath, 'utf8'));
+  if (configFileName === 'database-node22.json') {
+    logger.info('Using optimized database configuration for Node.js 22');
+  }
 } catch (error) {
   logger.error('Failed to load database configuration:', error);
   throw new Error('Database configuration file not found or invalid');
@@ -125,9 +133,20 @@ const processEnvVars = (obj) => {
 // Get configuration for current environment
 const config = processEnvVars(configTemplate[env]);
 
-// Setup logging based on configuration
+// Setup enhanced logging with query monitoring for Node.js 22
 const loggingConfig = config.logging === true 
-  ? (msg) => logger.debug(msg)
+  ? (msg, timing) => {
+      if (config.benchmark && timing) {
+        // Log slow queries (queries taking more than 1 second)
+        if (timing > 1000) {
+          logger.warn(`Slow query detected (${timing}ms): ${msg}`);
+        } else if (env === 'development') {
+          logger.debug(`Query (${timing}ms): ${msg}`);
+        }
+      } else {
+        logger.debug(msg);
+      }
+    }
   : config.logging;
 
 // Create Sequelize instance
@@ -156,8 +175,32 @@ const initializeDatabase = async () => {
   }
 };
 
+/**
+ * Get connection pool statistics
+ * @returns {Object} Pool statistics
+ */
+const getPoolStats = () => {
+  if (sequelize.connectionManager && sequelize.connectionManager.pool) {
+    const pool = sequelize.connectionManager.pool;
+    return {
+      size: pool.size || 0,
+      available: pool.available || 0,
+      using: pool.using || 0,
+      waiting: pool.pending || 0
+    };
+  }
+  return {
+    size: 0,
+    available: 0,
+    using: 0,
+    waiting: 0
+  };
+};
+
 module.exports = {
   sequelize,
   initializeDatabase,
-  config
+  config,
+  getPoolStats,
+  Op: Sequelize.Op
 };
