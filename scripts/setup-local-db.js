@@ -3,15 +3,12 @@
  * Sets up SQLite database for local development
  */
 
-const fs = require('fs');
+const fs = require('fs').promises;
 const path = require('path');
 const { Sequelize } = require('sequelize');
 
-// Create data directory if it doesn't exist
+// Data directory path
 const dataDir = path.join(__dirname, '../data');
-if (!fs.existsSync(dataDir)) {
-  fs.mkdirSync(dataDir, { recursive: true });
-}
 
 // Initialize SQLite database
 const sequelize = new Sequelize({
@@ -23,6 +20,13 @@ const sequelize = new Sequelize({
 async function setupDatabase() {
   try {
     console.log('🔧 Setting up local development database...');
+    
+    // Create data directory if it doesn't exist
+    try {
+      await fs.access(dataDir);
+    } catch {
+      await fs.mkdir(dataDir, { recursive: true });
+    }
     
     // Test connection
     await sequelize.authenticate();

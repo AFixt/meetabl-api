@@ -66,7 +66,16 @@ if (process.env.DB_CONFIG === 'local') {
 
 // Load database configuration file for MySQL
 const configPath = path.join(__dirname, 'database.json');
-const configTemplate = JSON.parse(fsSync.readFileSync(configPath, 'utf8'));
+let configTemplate;
+
+// Load config synchronously since this is required at module initialization
+// This is acceptable for a one-time config load at startup
+try {
+  configTemplate = JSON.parse(fsSync.readFileSync(configPath, 'utf8'));
+} catch (error) {
+  logger.error('Failed to load database configuration:', error);
+  throw new Error('Database configuration file not found or invalid');
+}
 
 // Process environment variables in the config
 const processEnvVars = (obj) => {

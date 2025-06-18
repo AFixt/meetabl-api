@@ -5,69 +5,78 @@
  */
 
 const { execSync } = require('child_process');
-const fs = require('fs');
+const fs = require('fs').promises;
 const path = require('path');
 
-// Create badges directory if it doesn't exist
+// Badges directory path
 const badgesDir = path.join(__dirname, '../docs/badges');
-if (!fs.existsSync(badgesDir)) {
-  fs.mkdirSync(badgesDir, { recursive: true });
-}
 
-// Run Jest with coverage
-console.log('Running tests with coverage...');
-try {
-  execSync('npx jest --coverage --coverageReporters=json-summary --coverageReporters=html --coverageReporters=text', {
-    stdio: 'inherit'
-  });
-} catch (error) {
-  console.error('Tests failed but continuing with coverage generation');
-}
+// Main async function
+async function generateCoverage() {
+  try {
+    // Create badges directory if it doesn't exist
+    try {
+      await fs.access(badgesDir);
+    } catch {
+      await fs.mkdir(badgesDir, { recursive: true });
+    }
 
-// Generate badges
-console.log('Generating coverage badges...');
-try {
-  execSync('npx jest-coverage-badges --input coverage/coverage-summary.json --output docs/badges', {
-    stdio: 'inherit'
-  });
-} catch (error) {
-  console.error('Failed to generate coverage badges:', error.message);
-  process.exit(1);
-}
+    // Run Jest with coverage
+    console.log('Running tests with coverage...');
+    try {
+      execSync('npx jest --coverage --coverageReporters=json-summary --coverageReporters=html --coverageReporters=text', {
+        stdio: 'inherit'
+      });
+    } catch (error) {
+      console.error('Tests failed but continuing with coverage generation');
+    }
 
-// Read coverage summary to update documentation
-console.log('Updating coverage documentation...');
-try {
-  const coverageSummary = JSON.parse(fs.readFileSync(path.join(__dirname, '../coverage/coverage-summary.json'), 'utf8'));
-  const { total } = coverageSummary;
+    // Generate badges
+    console.log('Generating coverage badges...');
+    try {
+      execSync('npx jest-coverage-badges --input coverage/coverage-summary.json --output docs/badges', {
+        stdio: 'inherit'
+      });
+    } catch (error) {
+      console.error('Failed to generate coverage badges:', error.message);
+      process.exit(1);
+    }
 
-  const coverageDoc = path.join(__dirname, '../docs/TEST_COVERAGE.md');
-  let docContent = fs.readFileSync(coverageDoc, 'utf8');
+    // Read coverage summary to update documentation
+    console.log('Updating coverage documentation...');
+    try {
+      const coverageSummaryPath = path.join(__dirname, '../coverage/coverage-summary.json');
+      const coverageSummaryContent = await fs.readFile(coverageSummaryPath, 'utf8');
+      const coverageSummary = JSON.parse(coverageSummaryContent);
+      const { total } = coverageSummary;
 
-  // Update coverage metrics in table
-  docContent = docContent.replace(
-    /\| Branches\s+\|\s+[\d.]+%\+?\s+\|/,
-    `| Branches  | ${total.branches.pct.toFixed(2)}% |`
-  );
+      const coverageDoc = path.join(__dirname, '../docs/TEST_COVERAGE.md');
+      let docContent = await fs.readFile(coverageDoc, 'utf8');
 
-  docContent = docContent.replace(
-    /\| Functions\s+\|\s+[\d.]+%\+?\s+\|/,
-    `| Functions | ${total.functions.pct.toFixed(2)}% |`
-  );
+      // Update coverage metrics in table
+      docContent = docContent.replace(
+        /\| Branches\s+\|\s+[\d.]+%\+?\s+\|/,
+        `| Branches  | ${total.branches.pct.toFixed(2)}% |`
+      );
 
-  docContent = docContent.replace(
-    /\| Lines\s+\|\s+[\d.]+%\+?\s+\|/,
-    `| Lines     | ${total.lines.pct.toFixed(2)}% |`
-  );
+      docContent = docContent.replace(
+        /\| Functions\s+\|\s+[\d.]+%\+?\s+\|/,
+        `| Functions | ${total.functions.pct.toFixed(2)}% |`
+      );
 
-  docContent = docContent.replace(
-    /\| Statements\s+\|\s+[\d.]+%\+?\s+\|/,
-    `| Statements | ${total.statements.pct.toFixed(2)}% |`
-  );
+      docContent = docContent.replace(
+        /\| Lines\s+\|\s+[\d.]+%\+?\s+\|/,
+        `| Lines     | ${total.lines.pct.toFixed(2)}% |`
+      );
 
-  // Add badge embedding
-  if (!docContent.includes('## Coverage Badges')) {
-    docContent += `
+      docContent = docContent.replace(
+        /\| Statements\s+\|\s+[\d.]+%\+?\s+\|/,
+        `| Statements | ${total.statements.pct.toFixed(2)}% |`
+      );
+
+      // Add badge embedding
+      if (!docContent.includes('## Coverage Badges')) {
+        docContent += `
 ## Coverage Badges
 
 ![Statements](badges/badge-statements.svg)
@@ -76,10 +85,18 @@ try {
 ![Lines](badges/badge-lines.svg)
 
 `;
-  }
+      }
 
-  fs.writeFileSync(coverageDoc, docContent);
-  console.log('Documentation updated successfully!');
-} catch (error) {
-  console.error('Failed to update documentation:', error.message);
+      await fs.writeFile(coverageDoc, docContent);
+      console.log('Documentation updated successfully!');
+    } catch (error) {
+      console.error('Failed to update documentation:', error.message);
+    }
+  } catch (error) {
+    console.error('Error in coverage generation:', error);
+    process.exit(1);
+  }
 }
+
+// Run the main function
+generateCoverage();
