@@ -22,7 +22,7 @@ This document provides detailed instructions for deploying the meetabl API to va
 
 Before deploying the meetabl API, ensure you have:
 
-- Node.js (v16 or later recommended)
+- Node.js 22+ (LTS recommended)
 - MySQL or MariaDB (v8.0 or later recommended)
 - Git
 - NPM or Yarn
@@ -133,14 +133,14 @@ npm start
    - Ubuntu/Debian:
 
      ```bash
-     curl -fsSL https://deb.nodesource.com/setup_16.x | sudo -E bash -
+     curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
      sudo apt-get install -y nodejs
      ```
 
    - CentOS/RHEL:
 
      ```bash
-     curl -fsSL https://rpm.nodesource.com/setup_16.x | sudo bash -
+     curl -fsSL https://rpm.nodesource.com/setup_22.x | sudo bash -
      sudo yum install -y nodejs
      ```
 
@@ -177,7 +177,7 @@ npm start
 1. **Create a Dockerfile** in the project root:
 
    ```dockerfile
-   FROM node:16-alpine
+   FROM node:22-alpine
 
    WORKDIR /app
 

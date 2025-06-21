@@ -23,7 +23,7 @@ A WCAG 2.2 AA/AAA compliant booking API for the meetabl platform. meetabl is a r
 
 ### Prerequisites
 
-- Node.js (LTS version)
+- Node.js 22+ (LTS recommended)
 - MySQL/MariaDB
 - npm
 
