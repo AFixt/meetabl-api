@@ -1,0 +1,11 @@
+email,password,firstName,lastName,username
+demo@example.com,demoPassword123!,Demo,User,demouser
+loadtest1@example.com,LoadTest123!,Load,Test1,loadtest1
+loadtest2@example.com,LoadTest123!,Load,Test2,loadtest2
+loadtest3@example.com,LoadTest123!,Load,Test3,loadtest3
+loadtest4@example.com,LoadTest123!,Load,Test4,loadtest4
+loadtest5@example.com,LoadTest123!,Load,Test5,loadtest5
+performance1@example.com,PerfTest123!,Performance,Test1,perftest1
+performance2@example.com,PerfTest123!,Performance,Test2,perftest2
+performance3@example.com,PerfTest123!,Performance,Test3,perftest3
+stress1@example.com,StressTest123!,Stress,Test1,stresstest1
