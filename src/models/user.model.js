@@ -41,7 +41,24 @@ const User = sequelize.define('User', {
   },
   password: {
     type: DataTypes.STRING(255),
-    allowNull: false
+    allowNull: true // Made optional for Outseta integration
+  },
+  outseta_uid: {
+    type: DataTypes.STRING(255),
+    allowNull: true,
+    unique: true
+  },
+  subscription_plan: {
+    type: DataTypes.STRING(100),
+    allowNull: true
+  },
+  subscription_status: {
+    type: DataTypes.STRING(50),
+    allowNull: true
+  },
+  subscription_end_date: {
+    type: DataTypes.DATE,
+    allowNull: true
   },
   role: {
     type: DataTypes.STRING(50),
@@ -104,6 +121,10 @@ const User = sequelize.define('User', {
  * @returns {Promise<boolean>} Whether password is valid
  */
 User.prototype.validatePassword = async function (password) {
+  // For Outseta users, password validation is handled externally
+  if (this.outseta_uid && !this.password) {
+    return false;
+  }
   return bcrypt.compare(password, this.password);
 };
 
@@ -111,7 +132,8 @@ User.prototype.validatePassword = async function (password) {
  * Set up hooks for password hashing
  */
 const hashPassword = async (user) => {
-  if (user.changed && user.changed('password')) {
+  // Only hash password if it's provided and changed
+  if (user.password && user.changed && user.changed('password')) {
     const salt = await bcrypt.genSalt(10);
     user.password = await bcrypt.hash(user.password, salt);
   }
