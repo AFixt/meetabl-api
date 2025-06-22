@@ -12,10 +12,10 @@ const cors = require('cors');
 const bodyParser = require('body-parser');
 const rateLimit = require('express-rate-limit');
 const cookieParser = require('cookie-parser');
-const session = require('express-session');
 const logger = require('./config/logger');
 const { processNotifications } = require('./jobs/notification-processor');
 const { initializeCsrf, protectCsrf, provideCsrfToken } = require('./middlewares/csrf');
+const { initializeSession, sessionCleanup, sessionSecurity } = require('./config/session');
 const dbMonitor = require('./utils/db-monitor');
 const { errorHandler, notFoundError } = require('./utils/error-response');
 
@@ -23,6 +23,7 @@ const { errorHandler, notFoundError } = require('./utils/error-response');
 function validateEnvironment() {
   const requiredEnvVars = {
     JWT_SECRET: process.env.JWT_SECRET,
+    SESSION_SECRET: process.env.SESSION_SECRET,
     NODE_ENV: process.env.NODE_ENV
   };
 
@@ -43,6 +44,14 @@ function validateEnvironment() {
     }
     if (!/[A-Z]/.test(jwtSecret) || !/[a-z]/.test(jwtSecret) || !/[0-9]/.test(jwtSecret)) {
       invalid.push('JWT_SECRET should contain uppercase, lowercase, and numeric characters');
+    }
+  }
+
+  // Validate SESSION_SECRET strength
+  if (process.env.SESSION_SECRET) {
+    const sessionSecret = process.env.SESSION_SECRET;
+    if (sessionSecret.length < 32) {
+      invalid.push('SESSION_SECRET must be at least 32 characters long');
     }
   }
 
@@ -149,17 +158,11 @@ app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(cookieParser());
 
-// Session configuration for CSRF protection
-app.use(session({
-  secret: process.env.SESSION_SECRET || 'fallback-session-secret-change-in-production',
-  resave: false,
-  saveUninitialized: false,
-  cookie: {
-    secure: process.env.NODE_ENV === 'production', // HTTPS only in production
-    httpOnly: true,
-    maxAge: 24 * 60 * 60 * 1000 // 24 hours
-  }
-}));
+// Redis-based session configuration
+const sessionMiddleware = await initializeSession();
+app.use(sessionMiddleware);
+app.use(sessionCleanup);
+app.use(sessionSecurity);
 
 // Initialize CSRF protection
 app.use(initializeCsrf);
