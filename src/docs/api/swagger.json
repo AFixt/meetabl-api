@@ -2,16 +2,21 @@
   "openapi": "3.0.0",
   "info": {
     "title": "meetabl API",
-    "description": "WCAG 2.2 AA/AAA compliant booking API for the meetabl platform",
     "version": "1.0.0",
+    "description": "WCAG 2.2 AA/AAA compliant booking API for the meetabl platform",
     "contact": {
       "name": "meetabl Team",
-      "email": "support@meetabl.com"
+      "email": "support@meetabl.com",
+      "url": "https://meetabl.com"
+    },
+    "license": {
+      "name": "MIT",
+      "url": "https://opensource.org/licenses/MIT"
     }
   },
   "servers": [
     {
-      "url": "http://localhost:3000/api",
+      "url": "http://localhost:3001/api",
       "description": "Development server"
     },
     {
@@ -19,833 +24,334 @@
       "description": "Production server"
     }
   ],
-  "paths": {
-    "/auth/register": {
-      "post": {
-        "tags": ["Authentication"],
-        "summary": "Register a new user",
-        "description": "Creates a new user account",
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/RegisterRequest"
-              }
-            }
-          }
-        },
-        "responses": {
-          "201": {
-            "description": "User successfully registered",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/UserResponse"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Invalid input",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "User already exists",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/auth/login": {
-      "post": {
-        "tags": ["Authentication"],
-        "summary": "Login a user",
-        "description": "Authenticates a user and returns a JWT token",
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/LoginRequest"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Successfully authenticated",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/AuthResponse"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Invalid credentials",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/auth/logout": {
-      "post": {
-        "tags": ["Authentication"],
-        "summary": "Logout a user",
-        "description": "Invalidates the current JWT token",
-        "security": [{ "bearerAuth": [] }],
-        "responses": {
-          "204": {
-            "description": "Successfully logged out"
-          },
-          "401": {
-            "description": "Unauthorized",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/user": {
-      "get": {
-        "tags": ["Users"],
-        "summary": "Get current user profile",
-        "description": "Returns the profile for the authenticated user",
-        "security": [{ "bearerAuth": [] }],
-        "responses": {
-          "200": {
-            "description": "User profile",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/UserResponse"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Unauthorized",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          }
-        }
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT",
+        "description": "JWT token for authentication"
       },
-      "put": {
-        "tags": ["Users"],
-        "summary": "Update user profile",
-        "description": "Updates the profile for the authenticated user",
-        "security": [{ "bearerAuth": [] }],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/UpdateUserRequest"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Updated user profile",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/UserResponse"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Invalid input",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Unauthorized",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          }
-        }
+      "cookieAuth": {
+        "type": "apiKey",
+        "in": "cookie",
+        "name": "meetabl.sid",
+        "description": "Session cookie for CSRF protection"
       }
     },
-    "/user/settings": {
-      "get": {
-        "tags": ["Users"],
-        "summary": "Get user settings",
-        "description": "Returns the settings for the authenticated user",
-        "security": [{ "bearerAuth": [] }],
-        "responses": {
-          "200": {
-            "description": "User settings",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/UserSettingsResponse"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Unauthorized",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          }
-        }
-      },
-      "put": {
-        "tags": ["Users"],
-        "summary": "Update user settings",
-        "description": "Updates the settings for the authenticated user",
-        "security": [{ "bearerAuth": [] }],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/UpdateUserSettingsRequest"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Updated user settings",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/UserSettingsResponse"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Invalid input",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Unauthorized",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/availability": {
-      "get": {
-        "tags": ["Availability"],
-        "summary": "Get all availability rules",
-        "description": "Returns all availability rules for the authenticated user",
-        "security": [{ "bearerAuth": [] }],
-        "responses": {
-          "200": {
-            "description": "List of availability rules",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/AvailabilityRuleResponse"
-                  }
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Unauthorized",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          }
-        }
-      },
-      "post": {
-        "tags": ["Availability"],
-        "summary": "Create availability rule",
-        "description": "Creates a new availability rule for the authenticated user",
-        "security": [{ "bearerAuth": [] }],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/CreateAvailabilityRuleRequest"
-              }
-            }
-          }
-        },
-        "responses": {
-          "201": {
-            "description": "Created availability rule",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/AvailabilityRuleResponse"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Invalid input",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Unauthorized",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/availability/{id}": {
-      "get": {
-        "tags": ["Availability"],
-        "summary": "Get availability rule by ID",
-        "description": "Returns a specific availability rule by ID",
-        "security": [{ "bearerAuth": [] }],
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
-          }
+    "schemas": {
+      "Error": {
+        "type": "object",
+        "required": [
+          "error"
         ],
-        "responses": {
-          "200": {
-            "description": "Availability rule",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/AvailabilityRuleResponse"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Unauthorized",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Availability rule not found",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          }
-        }
-      },
-      "put": {
-        "tags": ["Availability"],
-        "summary": "Update availability rule",
-        "description": "Updates an existing availability rule",
-        "security": [{ "bearerAuth": [] }],
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/UpdateAvailabilityRuleRequest"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Updated availability rule",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/AvailabilityRuleResponse"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Invalid input",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Unauthorized",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Availability rule not found",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          }
-        }
-      },
-      "delete": {
-        "tags": ["Availability"],
-        "summary": "Delete availability rule",
-        "description": "Deletes an availability rule",
-        "security": [{ "bearerAuth": [] }],
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
-          }
-        ],
-        "responses": {
-          "204": {
-            "description": "Availability rule deleted"
-          },
-          "401": {
-            "description": "Unauthorized",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Availability rule not found",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/booking": {
-      "get": {
-        "tags": ["Bookings"],
-        "summary": "Get all bookings",
-        "description": "Returns all bookings for the authenticated user",
-        "security": [{ "bearerAuth": [] }],
-        "responses": {
-          "200": {
-            "description": "List of bookings",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/BookingResponse"
-                  }
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Unauthorized",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          }
-        }
-      },
-      "post": {
-        "tags": ["Bookings"],
-        "summary": "Create booking",
-        "description": "Creates a new booking",
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/CreateBookingRequest"
-              }
-            }
-          }
-        },
-        "responses": {
-          "201": {
-            "description": "Created booking",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/BookingResponse"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Invalid input",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/booking/{id}": {
-      "get": {
-        "tags": ["Bookings"],
-        "summary": "Get booking by ID",
-        "description": "Returns a specific booking by ID",
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Booking details",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/BookingResponse"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Booking not found",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          }
-        }
-      },
-      "put": {
-        "tags": ["Bookings"],
-        "summary": "Update booking",
-        "description": "Updates an existing booking",
-        "security": [{ "bearerAuth": [] }],
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/UpdateBookingRequest"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Updated booking",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/BookingResponse"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Invalid input",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Unauthorized",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Booking not found",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          }
-        }
-      },
-      "delete": {
-        "tags": ["Bookings"],
-        "summary": "Cancel booking",
-        "description": "Cancels an existing booking",
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
-          }
-        ],
-        "responses": {
-          "204": {
-            "description": "Booking cancelled"
-          },
-          "404": {
-            "description": "Booking not found",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/calendar/google/auth": {
-      "get": {
-        "tags": ["Calendar Integration"],
-        "summary": "Get Google Auth URL",
-        "description": "Returns the Google OAuth authorization URL",
-        "security": [{ "bearerAuth": [] }],
-        "responses": {
-          "200": {
-            "description": "Google Auth URL",
-            "content": {
-              "application/json": {
-                "schema": {
+        "properties": {
+          "error": {
+            "type": "object",
+            "required": [
+              "code",
+              "message"
+            ],
+            "properties": {
+              "code": {
+                "type": "string",
+                "description": "Error code identifier"
+              },
+              "message": {
+                "type": "string",
+                "description": "Human-readable error message"
+              },
+              "details": {
+                "type": "array",
+                "items": {
                   "type": "object",
                   "properties": {
-                    "authUrl": {
+                    "field": {
                       "type": "string",
-                      "format": "uri"
+                      "description": "Field that caused the error"
+                    },
+                    "message": {
+                      "type": "string",
+                      "description": "Field-specific error message"
                     }
                   }
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Unauthorized",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
+                },
+                "description": "Detailed error information"
+              },
+              "timestamp": {
+                "type": "string",
+                "format": "date-time",
+                "description": "Error timestamp"
               }
             }
           }
         }
-      }
-    },
-    "/calendar/google/callback": {
-      "get": {
-        "tags": ["Calendar Integration"],
-        "summary": "Google OAuth callback",
-        "description": "Handles the Google OAuth callback and stores tokens",
-        "parameters": [
-          {
-            "name": "code",
-            "in": "query",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "state",
-            "in": "query",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
+      },
+      "Success": {
+        "type": "object",
+        "required": [
+          "success",
+          "data"
         ],
-        "responses": {
-          "302": {
-            "description": "Redirect to success page"
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "example": true,
+            "description": "Operation success indicator"
           },
-          "400": {
-            "description": "Invalid request",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
+          "data": {
+            "type": "object",
+            "description": "Response data"
+          },
+          "message": {
+            "type": "string",
+            "description": "Success message"
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Response timestamp"
+          }
+        }
+      },
+      "PaginatedResponse": {
+        "type": "object",
+        "required": [
+          "success",
+          "data",
+          "pagination"
+        ],
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "example": true
+          },
+          "data": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            },
+            "description": "Array of results"
+          },
+          "pagination": {
+            "type": "object",
+            "required": [
+              "total",
+              "limit",
+              "offset"
+            ],
+            "properties": {
+              "total": {
+                "type": "integer",
+                "description": "Total number of items"
+              },
+              "limit": {
+                "type": "integer",
+                "description": "Items per page"
+              },
+              "offset": {
+                "type": "integer",
+                "description": "Current offset"
+              },
+              "hasMore": {
+                "type": "boolean",
+                "description": "Whether more items are available"
               }
             }
           }
         }
+      },
+      "User": {
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "email"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "User unique identifier"
+          },
+          "name": {
+            "type": "string",
+            "description": "User full name",
+            "example": "John Doe"
+          },
+          "email": {
+            "type": "string",
+            "format": "email",
+            "description": "User email address",
+            "example": "john@example.com"
+          },
+          "timezone": {
+            "type": "string",
+            "description": "User timezone",
+            "example": "America/New_York"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "User creation timestamp"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "User last update timestamp"
+          }
+        }
+      },
+      "Booking": {
+        "type": "object",
+        "required": [
+          "id",
+          "user_id",
+          "customer_name",
+          "customer_email",
+          "start_time",
+          "end_time"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Booking unique identifier"
+          },
+          "user_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Host user ID"
+          },
+          "customer_name": {
+            "type": "string",
+            "description": "Customer name",
+            "example": "Jane Smith"
+          },
+          "customer_email": {
+            "type": "string",
+            "format": "email",
+            "description": "Customer email",
+            "example": "jane@example.com"
+          },
+          "start_time": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Booking start time"
+          },
+          "end_time": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Booking end time"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "confirmed",
+              "cancelled",
+              "completed"
+            ],
+            "description": "Booking status"
+          },
+          "notes": {
+            "type": "string",
+            "description": "Additional booking notes"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Booking creation timestamp"
+          }
+        }
       }
     },
-    "/calendar/microsoft/auth": {
-      "get": {
-        "tags": ["Calendar Integration"],
-        "summary": "Get Microsoft Auth URL",
-        "description": "Returns the Microsoft OAuth authorization URL",
-        "security": [{ "bearerAuth": [] }],
-        "responses": {
-          "200": {
-            "description": "Microsoft Auth URL",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "authUrl": {
-                      "type": "string",
-                      "format": "uri"
-                    }
+    "responses": {
+      "ValidationError": {
+        "description": "Validation error",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            },
+            "example": {
+              "error": {
+                "code": "validation_error",
+                "message": "Validation failed",
+                "details": [
+                  {
+                    "field": "email",
+                    "message": "Email is required"
                   }
-                }
+                ],
+                "timestamp": "2024-01-01T00:00:00.000Z"
               }
             }
-          },
-          "401": {
-            "description": "Unauthorized",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
+          }
+        }
+      },
+      "UnauthorizedError": {
+        "description": "Authentication required",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            },
+            "example": {
+              "error": {
+                "code": "authentication_error",
+                "message": "Authentication required",
+                "timestamp": "2024-01-01T00:00:00.000Z"
+              }
+            }
+          }
+        }
+      },
+      "ForbiddenError": {
+        "description": "Insufficient permissions",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            },
+            "example": {
+              "error": {
+                "code": "authorization_error",
+                "message": "Insufficient permissions",
+                "timestamp": "2024-01-01T00:00:00.000Z"
+              }
+            }
+          }
+        }
+      },
+      "NotFoundError": {
+        "description": "Resource not found",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            },
+            "example": {
+              "error": {
+                "code": "not_found",
+                "message": "Resource not found",
+                "timestamp": "2024-01-01T00:00:00.000Z"
+              }
+            }
+          }
+        }
+      },
+      "InternalServerError": {
+        "description": "Internal server error",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            },
+            "example": {
+              "error": {
+                "code": "internal_error",
+                "message": "An internal server error occurred",
+                "timestamp": "2024-01-01T00:00:00.000Z"
               }
             }
           }
@@ -853,402 +359,285 @@
       }
     }
   },
-  "components": {
-    "securitySchemes": {
-      "bearerAuth": {
-        "type": "http",
-        "scheme": "bearer",
-        "bearerFormat": "JWT"
-      }
+  "security": [
+    {
+      "bearerAuth": []
     },
-    "schemas": {
-      "ErrorResponse": {
-        "type": "object",
-        "properties": {
-          "error": {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string",
-                "enum": [
-                  "bad_request",
-                  "unauthorized",
-                  "payment_required",
-                  "not_found",
-                  "method_not_allowed",
-                  "duplicate",
-                  "too_many_requests",
-                  "internal_server_error"
-                ]
-              },
-              "message": {
-                "type": "string"
-              },
-              "params": {
-                "type": "array",
-                "items": {
-                  "type": "object",
-                  "properties": {
-                    "param": {
-                      "type": "string"
-                    },
-                    "message": {
-                      "type": "string"
-                    }
+    {
+      "cookieAuth": []
+    }
+  ],
+  "tags": [
+    {
+      "name": "Authentication",
+      "description": "User authentication and authorization"
+    },
+    {
+      "name": "Users",
+      "description": "User management operations"
+    },
+    {
+      "name": "Bookings",
+      "description": "Booking management operations"
+    },
+    {
+      "name": "Availability",
+      "description": "Availability rules and time slots"
+    },
+    {
+      "name": "Calendar",
+      "description": "Calendar integration operations"
+    },
+    {
+      "name": "Notifications",
+      "description": "Notification management"
+    },
+    {
+      "name": "Teams",
+      "description": "Team and collaboration features"
+    },
+    {
+      "name": "Payments",
+      "description": "Payment processing operations"
+    },
+    {
+      "name": "Analytics",
+      "description": "Usage analytics and reporting"
+    }
+  ],
+  "paths": {
+    "/auth/register": {
+      "post": {
+        "tags": [
+          "Authentication"
+        ],
+        "summary": "Register a new user",
+        "description": "Creates a new user account with email verification",
+        "security": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "name",
+                  "email",
+                  "password"
+                ],
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "description": "User's full name",
+                    "example": "John Doe"
+                  },
+                  "email": {
+                    "type": "string",
+                    "format": "email",
+                    "description": "User's email address",
+                    "example": "john@example.com"
+                  },
+                  "password": {
+                    "type": "string",
+                    "minLength": 8,
+                    "description": "User's password (min 8 characters)",
+                    "example": "SecurePass123!"
+                  },
+                  "timezone": {
+                    "type": "string",
+                    "description": "User's timezone",
+                    "example": "America/New_York"
                   }
                 }
               }
-            },
-            "required": ["code", "message"]
+            }
           }
         },
-        "required": ["error"]
-      },
-      "RegisterRequest": {
-        "type": "object",
-        "properties": {
-          "email": {
-            "type": "string",
-            "format": "email"
+        "responses": {
+          "201": {
+            "description": "User registered successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Success"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "data": {
+                          "type": "object",
+                          "properties": {
+                            "user": {
+                              "$ref": "#/components/schemas/User"
+                            },
+                            "token": {
+                              "type": "string",
+                              "description": "JWT access token"
+                            },
+                            "refreshToken": {
+                              "type": "string",
+                              "description": "JWT refresh token"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
           },
-          "password": {
-            "type": "string",
-            "minLength": 8
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
           },
-          "firstName": {
-            "type": "string"
+          "409": {
+            "description": "Email already exists",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           },
-          "lastName": {
-            "type": "string"
-          },
-          "timezone": {
-            "type": "string"
-          }
-        },
-        "required": ["email", "password", "firstName", "lastName"]
-      },
-      "LoginRequest": {
-        "type": "object",
-        "properties": {
-          "email": {
-            "type": "string",
-            "format": "email"
-          },
-          "password": {
-            "type": "string"
-          }
-        },
-        "required": ["email", "password"]
-      },
-      "AuthResponse": {
-        "type": "object",
-        "properties": {
-          "token": {
-            "type": "string"
-          },
-          "user": {
-            "$ref": "#/components/schemas/UserResponse"
-          }
-        },
-        "required": ["token", "user"]
-      },
-      "UserResponse": {
-        "type": "object",
-        "properties": {
-          "userId": {
-            "type": "string",
-            "format": "uuid"
-          },
-          "email": {
-            "type": "string",
-            "format": "email"
-          },
-          "firstName": {
-            "type": "string"
-          },
-          "lastName": {
-            "type": "string"
-          },
-          "timezone": {
-            "type": "string"
-          },
-          "created": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "updated": {
-            "type": "string",
-            "format": "date-time"
-          }
-        },
-        "required": ["userId", "email", "firstName", "lastName", "created", "updated"]
-      },
-      "UpdateUserRequest": {
-        "type": "object",
-        "properties": {
-          "firstName": {
-            "type": "string"
-          },
-          "lastName": {
-            "type": "string"
-          },
-          "timezone": {
-            "type": "string"
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
           }
         }
-      },
-      "UserSettingsResponse": {
-        "type": "object",
-        "properties": {
-          "userId": {
-            "type": "string",
-            "format": "uuid"
-          },
-          "settingsId": {
-            "type": "string",
-            "format": "uuid"
-          },
-          "theme": {
-            "type": "string",
-            "enum": ["light", "dark", "system"]
-          },
-          "notifyEmail": {
-            "type": "boolean"
-          },
-          "notifySMS": {
-            "type": "boolean"
-          },
-          "phoneNumber": {
-            "type": "string"
-          },
-          "reminderTime": {
-            "type": "integer",
-            "description": "Minutes before appointment to send reminder"
-          },
-          "language": {
-            "type": "string"
-          },
-          "created": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "updated": {
-            "type": "string",
-            "format": "date-time"
+      }
+    },
+    "/auth/login": {
+      "post": {
+        "tags": [
+          "Authentication"
+        ],
+        "summary": "User login",
+        "description": "Authenticate user with email and password",
+        "security": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "email",
+                  "password"
+                ],
+                "properties": {
+                  "email": {
+                    "type": "string",
+                    "format": "email",
+                    "description": "User's email address",
+                    "example": "john@example.com"
+                  },
+                  "password": {
+                    "type": "string",
+                    "description": "User's password",
+                    "example": "SecurePass123!"
+                  }
+                }
+              }
+            }
           }
         },
-        "required": ["userId", "settingsId", "created", "updated"]
-      },
-      "UpdateUserSettingsRequest": {
-        "type": "object",
-        "properties": {
-          "theme": {
-            "type": "string",
-            "enum": ["light", "dark", "system"]
+        "responses": {
+          "200": {
+            "description": "Login successful",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Success"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "data": {
+                          "type": "object",
+                          "properties": {
+                            "user": {
+                              "$ref": "#/components/schemas/User"
+                            },
+                            "token": {
+                              "type": "string",
+                              "description": "JWT access token"
+                            },
+                            "refreshToken": {
+                              "type": "string",
+                              "description": "JWT refresh token"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
           },
-          "notifyEmail": {
-            "type": "boolean"
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
           },
-          "notifySMS": {
-            "type": "boolean"
+          "401": {
+            "description": "Invalid credentials",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           },
-          "phoneNumber": {
-            "type": "string"
-          },
-          "reminderTime": {
-            "type": "integer",
-            "description": "Minutes before appointment to send reminder"
-          },
-          "language": {
-            "type": "string"
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
           }
         }
-      },
-      "AvailabilityRuleResponse": {
-        "type": "object",
-        "properties": {
-          "ruleId": {
-            "type": "string",
-            "format": "uuid"
-          },
-          "userId": {
-            "type": "string",
-            "format": "uuid"
-          },
-          "dayOfWeek": {
-            "type": "integer",
-            "minimum": 0,
-            "maximum": 6,
-            "description": "0 = Sunday, 6 = Saturday"
-          },
-          "startTime": {
-            "type": "string",
-            "pattern": "^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$",
-            "example": "09:00"
-          },
-          "endTime": {
-            "type": "string",
-            "pattern": "^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$",
-            "example": "17:00"
-          },
-          "created": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "updated": {
-            "type": "string",
-            "format": "date-time"
-          }
-        },
-        "required": ["ruleId", "userId", "dayOfWeek", "startTime", "endTime", "created", "updated"]
-      },
-      "CreateAvailabilityRuleRequest": {
-        "type": "object",
-        "properties": {
-          "dayOfWeek": {
-            "type": "integer",
-            "minimum": 0,
-            "maximum": 6,
-            "description": "0 = Sunday, 6 = Saturday"
-          },
-          "startTime": {
-            "type": "string",
-            "pattern": "^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$",
-            "example": "09:00"
-          },
-          "endTime": {
-            "type": "string",
-            "pattern": "^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$",
-            "example": "17:00"
-          }
-        },
-        "required": ["dayOfWeek", "startTime", "endTime"]
-      },
-      "UpdateAvailabilityRuleRequest": {
-        "type": "object",
-        "properties": {
-          "startTime": {
-            "type": "string",
-            "pattern": "^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$",
-            "example": "09:00"
-          },
-          "endTime": {
-            "type": "string",
-            "pattern": "^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$",
-            "example": "17:00"
+      }
+    },
+    "/docs": {
+      "get": {
+        "tags": [
+          "Documentation"
+        ],
+        "summary": "API Documentation",
+        "description": "Interactive API documentation using Swagger UI",
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "API documentation page",
+            "content": {
+              "text/html": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
           }
         }
-      },
-      "BookingResponse": {
-        "type": "object",
-        "properties": {
-          "bookingId": {
-            "type": "string",
-            "format": "uuid"
-          },
-          "userId": {
-            "type": "string",
-            "format": "uuid"
-          },
-          "startTime": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "endTime": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "title": {
-            "type": "string"
-          },
-          "description": {
-            "type": "string"
-          },
-          "guestEmail": {
-            "type": "string",
-            "format": "email"
-          },
-          "guestName": {
-            "type": "string"
-          },
-          "location": {
-            "type": "string"
-          },
-          "status": {
-            "type": "string",
-            "enum": ["confirmed", "cancelled", "rescheduled"]
-          },
-          "calendarEventId": {
-            "type": "string"
-          },
-          "created": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "updated": {
-            "type": "string",
-            "format": "date-time"
-          }
-        },
-        "required": ["bookingId", "userId", "startTime", "endTime", "guestEmail", "guestName", "status", "created", "updated"]
-      },
-      "CreateBookingRequest": {
-        "type": "object",
-        "properties": {
-          "userId": {
-            "type": "string",
-            "format": "uuid"
-          },
-          "startTime": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "endTime": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "title": {
-            "type": "string"
-          },
-          "description": {
-            "type": "string"
-          },
-          "guestEmail": {
-            "type": "string",
-            "format": "email"
-          },
-          "guestName": {
-            "type": "string"
-          },
-          "location": {
-            "type": "string"
-          }
-        },
-        "required": ["userId", "startTime", "endTime", "guestEmail", "guestName"]
-      },
-      "UpdateBookingRequest": {
-        "type": "object",
-        "properties": {
-          "startTime": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "endTime": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "title": {
-            "type": "string"
-          },
-          "description": {
-            "type": "string"
-          },
-          "location": {
-            "type": "string"
-          },
-          "status": {
-            "type": "string",
-            "enum": ["confirmed", "cancelled", "rescheduled"]
+      }
+    },
+    "/docs/json": {
+      "get": {
+        "tags": [
+          "Documentation"
+        ],
+        "summary": "OpenAPI JSON Specification",
+        "description": "Raw OpenAPI 3.0 specification in JSON format",
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "OpenAPI specification",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
           }
         }
       }

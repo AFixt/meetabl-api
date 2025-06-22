@@ -236,6 +236,7 @@ const notificationRoutes = require('./routes/notification.routes');
 const analyticsRoutes = require('./routes/analytics.routes');
 const teamRoutes = require('./routes/team.routes');
 const paymentRoutes = require('./routes/payment.routes');
+const docsRoutes = require('./routes/docs.routes');
 
 // Database monitoring endpoint (only in development/staging)
 if (process.env.NODE_ENV !== 'production') {
@@ -266,6 +267,9 @@ app.use('/api/notifications', notificationRoutes);
 app.use('/api/analytics', analyticsRoutes);
 app.use('/api/teams', teamRoutes);
 app.use('/api/payments', paymentRoutes);
+
+// Documentation routes (no rate limiting for docs)
+app.use('/api/docs', docsRoutes);
 
 // Default route
 app.get('/', (req, res) => {

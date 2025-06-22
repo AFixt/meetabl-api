@@ -43,7 +43,9 @@
     "db:migrate:test": "NODE_ENV=test npm run db:migrate",
     "db:migrate:prod": "NODE_ENV=production npm run db:migrate",
     "db:seed": "node src/db/seed.js",
+    "docs:generate": "node scripts/generate-docs.js",
     "docs:swagger": "swagger-ui-express serve ./src/docs/api/swagger.json",
+    "docs:serve": "npm run docs:generate && npm start",
     "security:check": "npm audit && snyk test",
     "benchmark": "./scripts/benchmark-runner.sh both",
     "benchmark:api": "./scripts/benchmark-runner.sh api",
@@ -115,6 +117,7 @@
     "sequelize-cli": "^6.6.2",
     "serverless-http": "^3.2.0",
     "stripe": "^18.2.1",
+    "swagger-jsdoc": "^6.2.8",
     "swagger-ui-express": "^5.0.0",
     "twilio": "^5.7.0",
     "uuid": "^11.1.0"
