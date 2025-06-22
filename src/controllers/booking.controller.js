@@ -21,8 +21,7 @@ const {
   getDay,
   getHours,
   getMinutes,
-  differenceInMinutes,
-  format
+  differenceInMinutes
 } = require('date-fns');
 const logger = require('../config/logger');
 const {
@@ -31,22 +30,28 @@ const {
 const { sequelize, Op } = require('../config/database');
 const notificationService = require('../services/notification.service');
 const calendarService = require('../services/calendar.service');
+const {
+  asyncHandler,
+  successResponse,
+  paginatedResponse,
+  validationError,
+  notFoundError,
+  conflictError
+} = require('../utils/error-response');
 
 // Helper functions for date-fns
 const isSameOrBefore = (date1, date2) => isEqual(date1, date2) || isBefore(date1, date2);
-const isSameOrAfter = (date1, date2) => isEqual(date1, date2) || isAfter(date1, date2);
 
 /**
  * Get all bookings for current user
  * @param {Object} req - Express request object
  * @param {Object} res - Express response object
  */
-const getUserBookings = async (req, res) => {
-  try {
-    const userId = req.user.id;
-    const {
-      limit = 100, offset = 0, order = 'start_time', dir = 'desc'
-    } = req.query;
+const getUserBookings = asyncHandler(async (req, res) => {
+  const userId = req.user.id;
+  const {
+    limit = 100, offset = 0, order = 'start_time', dir = 'desc'
+  } = req.query;
 
     // Find all bookings for this user with optimized includes to prevent N+1 queries
     const bookings = await Booking.findAndCountAll({
@@ -76,25 +81,19 @@ const getUserBookings = async (req, res) => {
       'X-Current-Page': Math.floor(offset / limit) + 1
     });
 
-    return res.status(200).json(bookings.rows);
-  } catch (error) {
-    logger.error('Error getting user bookings:', error);
-
-    return res.status(500).json({
-      error: {
-        code: 'internal_server_error',
-        message: 'Failed to get bookings'
-      }
-    });
-  }
-};
+    return paginatedResponse(res, bookings.rows, {
+      page: Math.floor(offset / limit) + 1,
+      limit: parseInt(limit),
+      total: bookings.count
+    }, 'Bookings retrieved successfully');
+});
 
 /**
  * Create a new booking
  * @param {Object} req - Express request object
  * @param {Object} res - Express response object
  */
-const createBooking = async (req, res) => {
+const createBooking = asyncHandler(async (req, res) => {
   const transaction = await sequelize.transaction();
 
   try {
@@ -108,40 +107,20 @@ const createBooking = async (req, res) => {
 
     // Validate datetime format
     if (!isValid(parseISO(startTime)) || !isValid(parseISO(endTime))) {
-      return res.status(400).json({
-        error: {
-          code: 'bad_request',
-          message: 'Invalid date format',
-          params: [
-            {
-              param: 'start_time',
-              message: 'Start time must be a valid ISO 8601 date-time'
-            },
-            {
-              param: 'end_time',
-              message: 'End time must be a valid ISO 8601 date-time'
-            }
-          ]
-        }
-      });
+      throw validationError([
+        { field: 'start_time', message: 'Start time must be a valid ISO 8601 date-time' },
+        { field: 'end_time', message: 'End time must be a valid ISO 8601 date-time' }
+      ]);
     }
 
     // Validate time range
     const startDate = parseISO(startTime);
     const endDate = parseISO(endTime);
     if (isAfter(startDate, endDate) || isEqual(startDate, endDate)) {
-      return res.status(400).json({
-        error: {
-          code: 'bad_request',
-          message: 'End time must be after start time',
-          params: [
-            {
-              param: 'end_time',
-              message: 'End time must be after start time'
-            }
-          ]
-        }
-      });
+      throw validationError([{
+        field: 'end_time',
+        message: 'End time must be after start time'
+      }]);
     }
 
     // Check for overlapping bookings
@@ -178,18 +157,7 @@ const createBooking = async (req, res) => {
     });
 
     if (overlappingBookings) {
-      return res.status(400).json({
-        error: {
-          code: 'bad_request',
-          message: 'Time slot is not available',
-          params: [
-            {
-              param: 'start_time',
-              message: 'Time slot overlaps with an existing booking'
-            }
-          ]
-        }
-      });
+      throw conflictError('Time slot is not available');
     }
 
     // Create booking
@@ -242,77 +210,53 @@ const createBooking = async (req, res) => {
       // Non-critical error, don't fail the booking creation
     }
 
-    return res.status(201).json(booking);
+    return successResponse(res, booking, 'Booking created successfully', 201);
   } catch (error) {
     // Rollback transaction
     await transaction.rollback();
-
-    logger.error('Error creating booking:', error);
-
-    return res.status(500).json({
-      error: {
-        code: 'internal_server_error',
-        message: 'Failed to create booking'
-      }
-    });
+    throw error;
   }
-};
+});
 
 /**
  * Get booking by ID
  * @param {Object} req - Express request object
  * @param {Object} res - Express response object
  */
-const getBooking = async (req, res) => {
-  try {
-    const userId = req.user.id;
-    const { id } = req.params;
+const getBooking = asyncHandler(async (req, res) => {
+  const userId = req.user.id;
+  const { id } = req.params;
 
-    // Find booking with optimized includes to prevent N+1 queries
-    const booking = await Booking.findOne({
-      where: { id, user_id: userId },
-      include: [
-        {
-          model: User,
-          attributes: ['id', 'name', 'email', 'timezone'],
-          required: true
-        },
-        {
-          model: Notification,
-          required: false,
-          attributes: ['id', 'type', 'status', 'scheduled_for', 'sent_at']
-        }
-      ]
-    });
-
-    if (!booking) {
-      return res.status(404).json({
-        error: {
-          code: 'not_found',
-          message: 'Booking not found'
-        }
-      });
-    }
-
-    return res.status(200).json(booking);
-  } catch (error) {
-    logger.error('Error getting booking:', error);
-
-    return res.status(500).json({
-      error: {
-        code: 'internal_server_error',
-        message: 'Failed to get booking'
+  // Find booking with optimized includes to prevent N+1 queries
+  const booking = await Booking.findOne({
+    where: { id, user_id: userId },
+    include: [
+      {
+        model: User,
+        attributes: ['id', 'name', 'email', 'timezone'],
+        required: true
+      },
+      {
+        model: Notification,
+        required: false,
+        attributes: ['id', 'type', 'status', 'scheduled_for', 'sent_at']
       }
-    });
+    ]
+  });
+
+  if (!booking) {
+    throw notFoundError('Booking');
   }
-};
+
+  return successResponse(res, booking, 'Booking retrieved successfully');
+});
 
 /**
  * Cancel booking
  * @param {Object} req - Express request object
  * @param {Object} res - Express response object
  */
-const cancelBooking = async (req, res) => {
+const cancelBooking = asyncHandler(async (req, res) => {
   const transaction = await sequelize.transaction();
 
   try {
@@ -325,22 +269,15 @@ const cancelBooking = async (req, res) => {
     });
 
     if (!booking) {
-      return res.status(404).json({
-        error: {
-          code: 'not_found',
-          message: 'Booking not found'
-        }
-      });
+      throw notFoundError('Booking');
     }
 
     // Check if booking is already cancelled
     if (booking.status === 'cancelled') {
-      return res.status(400).json({
-        error: {
-          code: 'bad_request',
-          message: 'Booking is already cancelled'
-        }
-      });
+      throw validationError([{
+        field: 'status',
+        message: 'Booking is already cancelled'
+      }]);
     }
 
     // Update booking status
@@ -385,49 +322,35 @@ const cancelBooking = async (req, res) => {
       // Non-critical error, don't fail the cancellation
     }
 
-    return res.status(200).json(booking);
+    return successResponse(res, booking, 'Booking cancelled successfully');
   } catch (error) {
     // Rollback transaction
     await transaction.rollback();
-
-    logger.error('Error cancelling booking:', error);
-
-    return res.status(500).json({
-      error: {
-        code: 'internal_server_error',
-        message: 'Failed to cancel booking'
-      }
-    });
+    throw error;
   }
-};
+});
 
 /**
  * Get public bookings for a user (by username or ID)
  * @param {Object} req - Express request object
  * @param {Object} res - Express response object
  */
-const getPublicBookings = async (req, res) => {
-  try {
-    const { username } = req.params;
+const getPublicBookings = asyncHandler(async (req, res) => {
+  const { username } = req.params;
 
-    // Find user by username
-    const user = await User.findOne({
-      where: {
-        [Op.or]: [
-          { name: username }, // Check if username matches name
-          { id: username } // Check if username matches ID
-        ]
-      }
-    });
-
-    if (!user) {
-      return res.status(404).json({
-        error: {
-          code: 'not_found',
-          message: 'User not found'
-        }
-      });
+  // Find user by username
+  const user = await User.findOne({
+    where: {
+      [Op.or]: [
+        { name: username }, // Check if username matches name
+        { id: username } // Check if username matches ID
+      ]
     }
+  });
+
+  if (!user) {
+    throw notFoundError('User');
+  }
 
     const userId = user.id;
     const { date, duration = 60 } = req.query;
@@ -435,18 +358,10 @@ const getPublicBookings = async (req, res) => {
     // Validate date
     const parsedDate = date ? parse(date, 'yyyy-MM-dd', new Date()) : null;
     if (!date || !isValid(parsedDate)) {
-      return res.status(400).json({
-        error: {
-          code: 'bad_request',
-          message: 'Valid date is required (YYYY-MM-DD)',
-          params: [
-            {
-              param: 'date',
-              message: 'Valid date is required (YYYY-MM-DD)'
-            }
-          ]
-        }
-      });
+      throw validationError([{
+        field: 'date',
+        message: 'Valid date is required (YYYY-MM-DD)'
+      }]);
     }
 
     // Parse date and get day of week (0 = Sunday, 6 = Saturday)
@@ -456,18 +371,10 @@ const getPublicBookings = async (req, res) => {
     // Validate duration
     const slotDuration = parseInt(duration, 10) || 60; // Default 60 minutes
     if (slotDuration < 15 || slotDuration > 240) {
-      return res.status(400).json({
-        error: {
-          code: 'bad_request',
-          message: 'Duration must be between 15 and 240 minutes',
-          params: [
-            {
-              param: 'duration',
-              message: 'Duration must be between 15 and 240 minutes'
-            }
-          ]
-        }
-      });
+      throw validationError([{
+        field: 'duration',
+        message: 'Duration must be between 15 and 240 minutes'
+      }]);
     }
 
     // Get availability rules for this day of week
@@ -476,14 +383,14 @@ const getPublicBookings = async (req, res) => {
     });
 
     if (rules.length === 0) {
-      return res.status(200).json({
+      return successResponse(res, {
         user: {
           id: user.id,
           name: user.name
         },
         date,
         available_slots: []
-      });
+      }, 'No availability rules found for this day');
     }
 
     // Get bookings for this date
@@ -555,32 +462,22 @@ const getPublicBookings = async (req, res) => {
     // Sort slots by start time
     allSlots.sort((a, b) => differenceInMinutes(new Date(a.start), new Date(b.start)));
 
-    return res.status(200).json({
+    return successResponse(res, {
       user: {
         id: user.id,
         name: user.name
       },
       date,
       available_slots: allSlots
-    });
-  } catch (error) {
-    logger.error('Error getting public bookings:', error);
-
-    return res.status(500).json({
-      error: {
-        code: 'internal_server_error',
-        message: 'Failed to get available booking slots'
-      }
-    });
-  }
-};
+    }, 'Available booking slots retrieved successfully');
+});
 
 /**
  * Create public booking
  * @param {Object} req - Express request object
  * @param {Object} res - Express response object
  */
-const createPublicBooking = async (req, res) => {
+const createPublicBooking = asyncHandler(async (req, res) => {
   const transaction = await sequelize.transaction();
 
   try {
@@ -603,12 +500,7 @@ const createPublicBooking = async (req, res) => {
     });
 
     if (!user) {
-      return res.status(404).json({
-        error: {
-          code: 'not_found',
-          message: 'User not found'
-        }
-      });
+      throw notFoundError('User');
     }
 
     const userId = user.id;
@@ -618,22 +510,16 @@ const createPublicBooking = async (req, res) => {
     const endDate = parseISO(endTime);
     if (!isValid(startDate) || !isValid(endDate)
         || isAfter(startDate, endDate) || isEqual(startDate, endDate)) {
-      return res.status(400).json({
-        error: {
-          code: 'bad_request',
-          message: 'Invalid date/time format or range',
-          params: [
-            {
-              param: 'start_time',
-              message: 'Start time must be a valid ISO 8601 date-time'
-            },
-            {
-              param: 'end_time',
-              message: 'End time must be after start time'
-            }
-          ]
+      throw validationError([
+        {
+          field: 'start_time',
+          message: 'Start time must be a valid ISO 8601 date-time'
+        },
+        {
+          field: 'end_time',
+          message: 'End time must be after start time'
         }
-      });
+      ]);
     }
 
     // Check for overlapping bookings
@@ -667,18 +553,7 @@ const createPublicBooking = async (req, res) => {
     });
 
     if (overlappingBookings) {
-      return res.status(400).json({
-        error: {
-          code: 'bad_request',
-          message: 'Time slot is not available',
-          params: [
-            {
-              param: 'start_time',
-              message: 'Time slot overlaps with an existing booking'
-            }
-          ]
-        }
-      });
+      throw conflictError('Time slot is not available');
     }
 
     // Create booking
@@ -732,34 +607,26 @@ const createPublicBooking = async (req, res) => {
       // Non-critical error, don't fail the booking creation
     }
 
-    return res.status(201).json({
+    return successResponse(res, {
       id: booking.id,
       customer_name: booking.customer_name,
       start_time: booking.start_time,
       end_time: booking.end_time,
       status: booking.status
-    });
+    }, 'Public booking created successfully', 201);
   } catch (error) {
     // Rollback transaction
     await transaction.rollback();
-
-    logger.error('Error creating public booking:', error);
-
-    return res.status(500).json({
-      error: {
-        code: 'internal_server_error',
-        message: 'Failed to create booking'
-      }
-    });
+    throw error;
   }
-};
+});
 
 /**
  * Reschedule booking
  * @param {Object} req - Express request object
  * @param {Object} res - Express response object
  */
-const rescheduleBooking = async (req, res) => {
+const rescheduleBooking = asyncHandler(async (req, res) => {
   const transaction = await sequelize.transaction();
 
   try {
@@ -776,60 +643,39 @@ const rescheduleBooking = async (req, res) => {
     });
 
     if (!booking) {
-      return res.status(404).json({
-        error: {
-          code: 'not_found',
-          message: 'Booking not found'
-        }
-      });
+      throw notFoundError('Booking');
     }
 
     // Check if booking is already cancelled
     if (booking.status === 'cancelled') {
-      return res.status(400).json({
-        error: {
-          code: 'bad_request',
-          message: 'Cannot reschedule a cancelled booking'
-        }
-      });
+      throw validationError([{
+        field: 'status',
+        message: 'Cannot reschedule a cancelled booking'
+      }]);
     }
 
     // Validate datetime format
     if (!isValid(parseISO(startTime)) || !isValid(parseISO(endTime))) {
-      return res.status(400).json({
-        error: {
-          code: 'bad_request',
-          message: 'Invalid date format',
-          params: [
-            {
-              param: 'start_time',
-              message: 'Start time must be a valid ISO 8601 date-time'
-            },
-            {
-              param: 'end_time',
-              message: 'End time must be a valid ISO 8601 date-time'
-            }
-          ]
+      throw validationError([
+        {
+          field: 'start_time',
+          message: 'Start time must be a valid ISO 8601 date-time'
+        },
+        {
+          field: 'end_time',
+          message: 'End time must be a valid ISO 8601 date-time'
         }
-      });
+      ]);
     }
 
     // Validate time range
     const startDateValidation = parseISO(startTime);
     const endDateValidation = parseISO(endTime);
     if (isAfter(startDateValidation, endDateValidation) || isEqual(startDateValidation, endDateValidation)) {
-      return res.status(400).json({
-        error: {
-          code: 'bad_request',
-          message: 'End time must be after start time',
-          params: [
-            {
-              param: 'end_time',
-              message: 'End time must be after start time'
-            }
-          ]
-        }
-      });
+      throw validationError([{
+        field: 'end_time',
+        message: 'End time must be after start time'
+      }]);
     }
 
     // Check for overlapping bookings (excluding current booking)
@@ -864,18 +710,7 @@ const rescheduleBooking = async (req, res) => {
     });
 
     if (overlappingBookings) {
-      return res.status(400).json({
-        error: {
-          code: 'bad_request',
-          message: 'Time slot is not available',
-          params: [
-            {
-              param: 'start_time',
-              message: 'Time slot overlaps with an existing booking'
-            }
-          ]
-        }
-      });
+      throw conflictError('Time slot is not available');
     }
 
     // Store old times for audit log
@@ -926,28 +761,20 @@ const rescheduleBooking = async (req, res) => {
       // Non-critical error, don't fail the reschedule
     }
 
-    return res.status(200).json(booking);
+    return successResponse(res, booking, 'Booking rescheduled successfully');
   } catch (error) {
     // Rollback transaction
     await transaction.rollback();
-
-    logger.error('Error rescheduling booking:', error);
-
-    return res.status(500).json({
-      error: {
-        code: 'internal_server_error',
-        message: 'Failed to reschedule booking'
-      }
-    });
+    throw error;
   }
-};
+});
 
 /**
  * Bulk cancel bookings
  * @param {Object} req - Express request object
  * @param {Object} res - Express response object
  */
-const bulkCancelBookings = async (req, res) => {
+const bulkCancelBookings = asyncHandler(async (req, res) => {
   const transaction = await sequelize.transaction();
 
   try {
@@ -956,34 +783,18 @@ const bulkCancelBookings = async (req, res) => {
 
     // Validate input
     if (!bookingIds || !Array.isArray(bookingIds) || bookingIds.length === 0) {
-      return res.status(400).json({
-        error: {
-          code: 'bad_request',
-          message: 'Booking IDs are required',
-          params: [
-            {
-              param: 'booking_ids',
-              message: 'Must be a non-empty array of booking IDs'
-            }
-          ]
-        }
-      });
+      throw validationError([{
+        field: 'booking_ids',
+        message: 'Must be a non-empty array of booking IDs'
+      }]);
     }
 
     // Limit bulk operations to 100 bookings
     if (bookingIds.length > 100) {
-      return res.status(400).json({
-        error: {
-          code: 'bad_request',
-          message: 'Cannot cancel more than 100 bookings at once',
-          params: [
-            {
-              param: 'booking_ids',
-              message: 'Array must contain 100 or fewer booking IDs'
-            }
-          ]
-        }
-      });
+      throw validationError([{
+        field: 'booking_ids',
+        message: 'Array must contain 100 or fewer booking IDs'
+      }]);
     }
 
     // Find all bookings to cancel
@@ -996,12 +807,7 @@ const bulkCancelBookings = async (req, res) => {
     });
 
     if (bookings.length === 0) {
-      return res.status(404).json({
-        error: {
-          code: 'not_found',
-          message: 'No valid bookings found to cancel'
-        }
-      });
+      throw notFoundError('No valid bookings found to cancel');
     }
 
     // Cancel each booking
@@ -1075,25 +881,16 @@ const bulkCancelBookings = async (req, res) => {
       // Non-critical error, don't fail the cancellation
     }
 
-    return res.status(200).json({
+    return successResponse(res, {
       cancelled_count: cancelledBookings.length,
-      cancelled_booking_ids: cancelledBookings,
-      message: `Successfully cancelled ${cancelledBookings.length} bookings`
-    });
+      cancelled_booking_ids: cancelledBookings
+    }, `Successfully cancelled ${cancelledBookings.length} bookings`);
   } catch (error) {
     // Rollback transaction
     await transaction.rollback();
-
-    logger.error('Error bulk cancelling bookings:', error);
-
-    return res.status(500).json({
-      error: {
-        code: 'internal_server_error',
-        message: 'Failed to cancel bookings'
-      }
-    });
+    throw error;
   }
-};
+});
 
 module.exports = {
   getUserBookings,

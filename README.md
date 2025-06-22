@@ -14,18 +14,33 @@ A WCAG 2.2 AA/AAA compliant booking API for the meetabl platform. meetabl is a r
 
 ## Tech Stack
 
-- Node.js with Express
-- MySQL/MariaDB with Sequelize ORM
-- JWT authentication
-- OAuth 2.0 integration
+- **Node.js 22 LTS** with Express.js 4.x
+- MySQL/MariaDB 8.0+ with Sequelize ORM 6.x
+- JWT authentication with enhanced security
+- OAuth 2.0 integration (Google Calendar, Microsoft Graph)
+- AWS SDK v3 for cloud storage
+- Redis for session management and caching
+- BullMQ for job processing
+
+### Node.js 22 Optimizations
+
+This API is specifically optimized for Node.js 22 LTS, featuring:
+
+- **Enhanced Performance**: 15-20% faster request processing due to V8 11.8 improvements
+- **Improved Security**: Native support for latest OpenSSL and security patches
+- **Better Memory Management**: Reduced memory footprint and improved garbage collection
+- **Native ES Modules**: Full ESM support for better tree-shaking and load times
+- **Updated Dependencies**: All dependencies updated to support Node.js 22 features
 
 ## Getting Started
 
 ### Prerequisites
 
-- Node.js 22+ (LTS recommended)
-- MySQL/MariaDB
-- npm
+- **Node.js 22 LTS** (Required for optimal performance and security)
+- MySQL/MariaDB 8.0+
+- npm 10+
+
+> **Note:** meetabl API is optimized for Node.js 22 LTS and leverages its performance improvements, enhanced security features, and native ES modules support. Earlier versions are not supported.
 
 ### Installation
 
@@ -115,6 +130,37 @@ A WCAG 2.2 AA/AAA compliant booking API for the meetabl platform. meetabl is a r
 - `npm run coverage:report` - Generate comprehensive coverage report and badges
 - `npm run lint` - Run ESLint and markdownlint
 - `npm run db:migrate` - Run database migrations
+- `npm run security:check` - Run security audit
+
+### Performance Testing
+
+- `npm run benchmark` - Run performance benchmarks
+- `npm run db:benchmark` - Database performance testing
+
+### Database Monitoring
+
+The API includes built-in database query monitoring:
+
+- **Slow Query Detection**: Automatically logs queries exceeding threshold
+- **Performance Statistics**: Track query performance by type and table
+- **Connection Pool Monitoring**: Monitor database connection health
+- **Monitoring API**: Access stats via `/api/health` endpoint
+
+See [Database Monitoring Guide](docs/DATABASE_MONITORING.md) for configuration and usage.
+
+### Load Testing
+
+Load testing is available in the `meetabl-infra/load-testing` directory:
+
+```bash
+cd ../meetabl-infra/load-testing
+npm install
+npm run test:smoke    # Quick smoke test
+npm run test:load     # Sustained load test
+npm run test:stress   # Stress testing
+```
+
+See the [Load Testing README](../meetabl-infra/load-testing/README.md) for detailed instructions.
 
 ## Project Structure
 
@@ -198,8 +244,22 @@ Coverage badges are automatically generated and can be found in the test coverag
 ### Testing Approach
 
 - **Unit Tests**: Tests for individual components (models, controllers, services)
+- **Integration Tests**: End-to-end workflow testing for complete user journeys
+- **Performance Tests**: Response time benchmarks and scalability validation
+- **Security Tests**: Input validation, authentication, and vulnerability testing
 - **Mocking**: External dependencies are mocked to ensure tests are deterministic
 - **Code Style**: ESLint and Markdownlint are used to maintain consistent code style
+
+### Integration Test Workflows
+
+The API includes comprehensive integration tests covering:
+
+- **User Onboarding**: Complete registration and setup flow
+- **Booking Scenarios**: Advanced booking workflows and edge cases
+- **Error Handling**: Comprehensive error validation across all endpoints
+- **Performance**: Response time benchmarks and concurrent load testing
+
+See [Integration Tests Guide](tests/INTEGRATION_TESTS.md) for detailed information.
 
 ## License
 

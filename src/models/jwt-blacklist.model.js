@@ -26,7 +26,7 @@ module.exports = (sequelize) => {
       allowNull: false
     },
     userId: {
-      type: DataTypes.STRING(36),
+      type: DataTypes.INTEGER,
       allowNull: false
     },
     reason: {

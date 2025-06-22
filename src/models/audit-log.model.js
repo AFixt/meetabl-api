@@ -8,18 +8,17 @@
  */
 
 const { DataTypes } = require('sequelize');
-const { v4: uuidv4 } = require('uuid');
 const { sequelize } = require('../config/database');
 const User = require('./user.model');
 
 const AuditLog = sequelize.define('AuditLog', {
   id: {
-    type: DataTypes.STRING(36),
+    type: DataTypes.INTEGER,
     primaryKey: true,
-    defaultValue: () => uuidv4()
+    autoIncrement: true
   },
-  user_id: {
-    type: DataTypes.STRING(36),
+  userId: {
+    type: DataTypes.INTEGER,
     allowNull: false,
     references: {
       model: User,
@@ -39,14 +38,14 @@ const AuditLog = sequelize.define('AuditLog', {
     defaultValue: DataTypes.NOW
   }
 }, {
-  tableName: 'audit_logs',
+  tableName: 'AuditLogs',
   timestamps: true,
   createdAt: 'created',
   updatedAt: false
 });
 
 // Define relationships
-User.hasMany(AuditLog, { foreignKey: 'user_id', onDelete: 'CASCADE' });
-AuditLog.belongsTo(User, { foreignKey: 'user_id' });
+User.hasMany(AuditLog, { foreignKey: 'userId', onDelete: 'CASCADE' });
+AuditLog.belongsTo(User, { foreignKey: 'userId' });
 
 module.exports = AuditLog;

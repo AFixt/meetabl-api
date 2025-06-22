@@ -8,18 +8,17 @@
  */
 
 const { DataTypes } = require('sequelize');
-const { v4: uuidv4 } = require('uuid');
 const { sequelize } = require('../config/database');
 const User = require('./user.model');
 
 const Booking = sequelize.define('Booking', {
   id: {
-    type: DataTypes.STRING(36),
+    type: DataTypes.INTEGER,
     primaryKey: true,
-    defaultValue: () => uuidv4()
+    autoIncrement: true
   },
-  user_id: {
-    type: DataTypes.STRING(36),
+  userId: {
+    type: DataTypes.INTEGER,
     allowNull: false,
     references: {
       model: User,
@@ -61,14 +60,14 @@ const Booking = sequelize.define('Booking', {
     defaultValue: DataTypes.NOW
   }
 }, {
-  tableName: 'bookings',
+  tableName: 'Bookings',
   timestamps: true,
   createdAt: 'created',
   updatedAt: false
 });
 
 // Define relationships
-User.hasMany(Booking, { foreignKey: 'user_id', onDelete: 'CASCADE' });
-Booking.belongsTo(User, { foreignKey: 'user_id' });
+User.hasMany(Booking, { foreignKey: 'userId', onDelete: 'CASCADE' });
+Booking.belongsTo(User, { foreignKey: 'userId' });
 
 module.exports = Booking;

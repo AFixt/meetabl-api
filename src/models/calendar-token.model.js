@@ -8,18 +8,17 @@
  */
 
 const { DataTypes } = require('sequelize');
-const { v4: uuidv4 } = require('uuid');
 const { sequelize } = require('../config/database');
 const User = require('./user.model');
 
 const CalendarToken = sequelize.define('CalendarToken', {
   id: {
-    type: DataTypes.STRING(36),
+    type: DataTypes.INTEGER,
     primaryKey: true,
-    defaultValue: () => uuidv4()
+    autoIncrement: true
   },
-  user_id: {
-    type: DataTypes.STRING(36),
+  userId: {
+    type: DataTypes.INTEGER,
     allowNull: false,
     references: {
       model: User,
@@ -30,15 +29,15 @@ const CalendarToken = sequelize.define('CalendarToken', {
     type: DataTypes.ENUM('google', 'microsoft'),
     allowNull: false
   },
-  access_token: {
+  accessToken: {
     type: DataTypes.TEXT,
     allowNull: false
   },
-  refresh_token: {
+  refreshToken: {
     type: DataTypes.TEXT,
     allowNull: false
   },
-  expires_at: {
+  expiresAt: {
     type: DataTypes.DATE,
     allowNull: false
   },
@@ -47,12 +46,12 @@ const CalendarToken = sequelize.define('CalendarToken', {
     allowNull: true
   }
 }, {
-  tableName: 'calendar_tokens',
+  tableName: 'CalendarTokens',
   timestamps: false
 });
 
 // Define relationships
-User.hasMany(CalendarToken, { foreignKey: 'user_id', onDelete: 'CASCADE' });
-CalendarToken.belongsTo(User, { foreignKey: 'user_id' });
+User.hasMany(CalendarToken, { foreignKey: 'userId', onDelete: 'CASCADE' });
+CalendarToken.belongsTo(User, { foreignKey: 'userId' });
 
 module.exports = CalendarToken;

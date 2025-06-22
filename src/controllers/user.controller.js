@@ -11,13 +11,14 @@ const bcrypt = require('bcrypt');
 const logger = require('../config/logger');
 const { User, UserSettings, AuditLog } = require('../models');
 const { sequelize } = require('../config/database');
+const { asyncHandler, successResponse, notFoundError, validationError, unauthorizedError } = require('../utils/error-response');
 
 /**
  * Get current user profile
  * @param {Object} req - Express request object
  * @param {Object} res - Express response object
  */
-const getCurrentUser = async (req, res) => {
+const getCurrentUser = asyncHandler(async (req, res) => {
   try {
     const userId = req.user.id;
 
@@ -29,34 +30,22 @@ const getCurrentUser = async (req, res) => {
     });
 
     if (!user) {
-      return res.status(404).json({
-        error: {
-          code: 'not_found',
-          message: 'User not found'
-        }
-      });
+      throw notFoundError('User');
     }
 
     // Return user data
-    return res.status(200).json(user);
+    return successResponse(res, user, 'User profile retrieved successfully');
   } catch (error) {
-    logger.error('Error getting user profile:', error);
-
-    return res.status(500).json({
-      error: {
-        code: 'internal_server_error',
-        message: 'Failed to get user profile'
-      }
-    });
+    throw error;
   }
-};
+});
 
 /**
  * Update user profile
  * @param {Object} req - Express request object
  * @param {Object} res - Express response object
  */
-const updateUser = async (req, res) => {
+const updateUser = asyncHandler(async (req, res) => {
   try {
     const userId = req.user.id;
     const { name, timezone } = req.body;
@@ -65,12 +54,7 @@ const updateUser = async (req, res) => {
     const user = await User.findOne({ where: { id: userId } });
 
     if (!user) {
-      return res.status(404).json({
-        error: {
-          code: 'not_found',
-          message: 'User not found'
-        }
-      });
+      throw notFoundError('User');
     }
 
     // Update user fields
@@ -93,7 +77,7 @@ const updateUser = async (req, res) => {
     logger.info(`User profile updated: ${userId}`);
 
     // Return updated user
-    return res.status(200).json({
+    return successResponse(res, {
       id: user.id,
       name: user.name,
       email: user.email,
@@ -101,25 +85,18 @@ const updateUser = async (req, res) => {
       calendar_provider: user.calendar_provider,
       created: user.created,
       updated: user.updated
-    });
+    }, 'User profile updated successfully');
   } catch (error) {
-    logger.error('Error updating user profile:', error);
-
-    return res.status(500).json({
-      error: {
-        code: 'internal_server_error',
-        message: 'Failed to update user profile'
-      }
-    });
+    throw error;
   }
-};
+});
 
 /**
  * Get user settings
  * @param {Object} req - Express request object
  * @param {Object} res - Express response object
  */
-const getUserSettings = async (req, res) => {
+const getUserSettings = asyncHandler(async (req, res) => {
   try {
     const userId = req.user.id;
 
@@ -135,25 +112,18 @@ const getUserSettings = async (req, res) => {
     }
 
     // Return settings
-    return res.status(200).json(settings);
+    return successResponse(res, settings, 'User settings retrieved successfully');
   } catch (error) {
-    logger.error('Error getting user settings:', error);
-
-    return res.status(500).json({
-      error: {
-        code: 'internal_server_error',
-        message: 'Failed to get user settings'
-      }
-    });
+    throw error;
   }
-};
+});
 
 /**
  * Update user settings
  * @param {Object} req - Express request object
  * @param {Object} res - Express response object
  */
-const updateUserSettings = async (req, res) => {
+const updateUserSettings = asyncHandler(async (req, res) => {
   try {
     const userId = req.user.id;
     const {
@@ -195,77 +165,46 @@ const updateUserSettings = async (req, res) => {
     logger.info(`User settings updated: ${userId}`);
 
     // Return updated settings
-    return res.status(200).json(settings);
+    return successResponse(res, settings, 'User settings updated successfully');
   } catch (error) {
-    logger.error('Error updating user settings:', error);
-
-    return res.status(500).json({
-      error: {
-        code: 'internal_server_error',
-        message: 'Failed to update user settings'
-      }
-    });
+    throw error;
   }
-};
+});
 
 /**
  * Change user password
  * @param {Object} req - Express request object
  * @param {Object} res - Express response object
  */
-const changePassword = async (req, res) => {
+const changePassword = asyncHandler(async (req, res) => {
   try {
     const userId = req.user.id;
     const { currentPassword, newPassword } = req.body;
 
     // Validate input
     if (!currentPassword || !newPassword) {
-      return res.status(400).json({
-        error: {
-          code: 'bad_request',
-          message: 'Current password and new password are required',
-          params: []
-        }
-      });
+      throw validationError([
+        { field: 'currentPassword', message: 'Current password is required' },
+        { field: 'newPassword', message: 'New password is required' }
+      ]);
     }
 
     // Validate new password length
     if (newPassword.length < 6) {
-      return res.status(400).json({
-        error: {
-          code: 'bad_request',
-          message: 'New password must be at least 6 characters long',
-          params: [
-            {
-              param: 'newPassword',
-              message: 'Password too short'
-            }
-          ]
-        }
-      });
+      throw validationError([{ field: 'newPassword', message: 'New password must be at least 6 characters long' }]);
     }
 
     // Find user
     const user = await User.findOne({ where: { id: userId } });
 
     if (!user) {
-      return res.status(404).json({
-        error: {
-          code: 'not_found',
-          message: 'User not found'
-        }
-      });
+      throw notFoundError('User');
     }
 
     // Validate current password
     const isValidPassword = await user.validatePassword(currentPassword);
     if (!isValidPassword) {
-      return res.status(401).json({
-        error: {
-          code: 'unauthorized',
-          message: 'Current password is incorrect'
-        }
-      });
+      throw unauthorizedError('Current password is incorrect');
     }
 
     // Hash new password
@@ -285,20 +224,11 @@ const changePassword = async (req, res) => {
 
     logger.info(`Password changed for user: ${userId}`);
 
-    return res.status(200).json({
-      message: 'Password changed successfully'
-    });
+    return successResponse(res, null, 'Password changed successfully');
   } catch (error) {
-    logger.error('Error changing password:', error);
-
-    return res.status(500).json({
-      error: {
-        code: 'internal_server_error',
-        message: 'Failed to change password'
-      }
-    });
+    throw error;
   }
-};
+});
 
 /**
  * Delete user account

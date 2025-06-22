@@ -191,47 +191,16 @@ npm start
    CMD ["node", "src/index.js"]
    ```
 
-2. **Create a docker-compose.yml file**:
+2. **Use the docker-compose.yml file from meetabl-infra**:
 
-   ```yaml
-   version: '3'
-
-   services:
-     api:
-       build: .
-       ports:
-         - "4000:4000"
-       environment:
-         - NODE_ENV=production
-         - PORT=4000
-         # Add other environment variables here
-       restart: always
-       depends_on:
-         - db
-     
-     db:
-       image: mysql:8.0
-       ports:
-         - "3306:3306"
-       environment:
-         - MYSQL_ROOT_PASSWORD=root_password
-         - MYSQL_DATABASE=meetabl
-         - MYSQL_USER=meetabl_user
-         - MYSQL_PASSWORD=strong_password_here
-       volumes:
-         - mysql_data:/var/lib/mysql
-         - ./install.sql:/docker-entrypoint-initdb.d/install.sql
-       restart: always
-
-   volumes:
-     mysql_data:
-   ```
-
-3. **Build and run with Docker Compose**:
+   The docker-compose configuration is maintained in the `meetabl-infra` directory. Navigate to the project root and use:
 
    ```bash
+   cd ../meetabl-infra
    docker-compose up -d
    ```
+
+   For more detailed Docker setup instructions, see `meetabl-infra/docs/README-Docker.md`.
 
 #### Cloud Deployment
 

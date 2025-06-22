@@ -14,12 +14,12 @@ const User = require('./user.model');
 
 const AvailabilityRule = sequelize.define('AvailabilityRule', {
   id: {
-    type: DataTypes.STRING(36),
+    type: DataTypes.INTEGER,
     primaryKey: true,
-    defaultValue: () => uuidv4()
+    autoIncrement: true
   },
-  user_id: {
-    type: DataTypes.STRING(36),
+  userId: {
+    type: DataTypes.INTEGER,
     allowNull: false,
     references: {
       model: User,

@@ -12,6 +12,7 @@ const fsSync = require('fs');
 const path = require('path');
 const { Sequelize } = require('sequelize');
 const logger = require('./logger');
+const dbMonitor = require('../utils/db-monitor');
 
 // Load environment variables
 require('dotenv').config();
@@ -26,13 +27,7 @@ if (process.env.DB_CONFIG === 'local') {
   
   // Setup enhanced logging with query monitoring
   const loggingConfig = config.logging === true 
-    ? (msg, timing) => {
-        if (timing && timing > 1000) { // Log slow queries (>1s)
-          logger.warn(`Slow query detected (${timing}ms): ${msg}`);
-        } else if (env === 'development') {
-          logger.debug(`Query (${timing}ms): ${msg}`);
-        }
-      }
+    ? dbMonitor.createSequelizeLogger()
     : config.logging;
 
   // Create Sequelize instance for local development
@@ -135,18 +130,7 @@ const config = processEnvVars(configTemplate[env]);
 
 // Setup enhanced logging with query monitoring for Node.js 22
 const loggingConfig = config.logging === true 
-  ? (msg, timing) => {
-      if (config.benchmark && timing) {
-        // Log slow queries (queries taking more than 1 second)
-        if (timing > 1000) {
-          logger.warn(`Slow query detected (${timing}ms): ${msg}`);
-        } else if (env === 'development') {
-          logger.debug(`Query (${timing}ms): ${msg}`);
-        }
-      } else {
-        logger.debug(msg);
-      }
-    }
+  ? dbMonitor.createSequelizeLogger()
   : config.logging;
 
 // Create Sequelize instance

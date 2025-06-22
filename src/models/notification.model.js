@@ -8,18 +8,17 @@
  */
 
 const { DataTypes } = require('sequelize');
-const { v4: uuidv4 } = require('uuid');
 const { sequelize } = require('../config/database');
 const Booking = require('./booking.model');
 
 const Notification = sequelize.define('Notification', {
   id: {
-    type: DataTypes.STRING(36),
+    type: DataTypes.INTEGER,
     primaryKey: true,
-    defaultValue: () => uuidv4()
+    autoIncrement: true
   },
-  booking_id: {
-    type: DataTypes.STRING(36),
+  bookingId: {
+    type: DataTypes.INTEGER,
     allowNull: false,
     references: {
       model: Booking,
@@ -30,7 +29,7 @@ const Notification = sequelize.define('Notification', {
     type: DataTypes.ENUM('email', 'sms'),
     allowNull: false
   },
-  sent_at: {
+  sentAt: {
     type: DataTypes.DATE,
     allowNull: true
   },
@@ -38,17 +37,17 @@ const Notification = sequelize.define('Notification', {
     type: DataTypes.ENUM('pending', 'sent', 'failed'),
     defaultValue: 'pending'
   },
-  error_message: {
+  errorMessage: {
     type: DataTypes.TEXT,
     allowNull: true
   }
 }, {
-  tableName: 'notifications',
+  tableName: 'Notifications',
   timestamps: false
 });
 
 // Define relationships
-Booking.hasMany(Notification, { foreignKey: 'booking_id', onDelete: 'CASCADE' });
-Notification.belongsTo(Booking, { foreignKey: 'booking_id' });
+Booking.hasMany(Notification, { foreignKey: 'bookingId', onDelete: 'CASCADE' });
+Notification.belongsTo(Booking, { foreignKey: 'bookingId' });
 
 module.exports = Notification;

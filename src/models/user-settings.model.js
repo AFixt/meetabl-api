@@ -8,70 +8,69 @@
  */
 
 const { DataTypes } = require('sequelize');
-const { v4: uuidv4 } = require('uuid');
 const { sequelize } = require('../config/database');
 const User = require('./user.model');
 
 const UserSettings = sequelize.define('UserSettings', {
   id: {
-    type: DataTypes.STRING(36),
+    type: DataTypes.INTEGER,
     primaryKey: true,
-    defaultValue: () => uuidv4()
+    autoIncrement: true
   },
-  user_id: {
-    type: DataTypes.STRING(36),
+  userId: {
+    type: DataTypes.INTEGER,
     allowNull: false,
     references: {
       model: User,
       key: 'id'
     }
   },
-  branding_color: {
+  brandingColor: {
     type: DataTypes.STRING(7),
     defaultValue: '#000000',
     validate: {
       is: /^#[0-9A-F]{6}$/i
     }
   },
-  confirmation_email_copy: {
+  confirmationEmailCopy: {
     type: DataTypes.TEXT,
     allowNull: true
   },
-  accessibility_mode: {
+  accessibilityMode: {
     type: DataTypes.BOOLEAN,
     defaultValue: true
   },
-  alt_text_enabled: {
+  altTextEnabled: {
     type: DataTypes.BOOLEAN,
     defaultValue: true
   },
-  public_name: {
+  publicName: {
     type: DataTypes.STRING(100),
     allowNull: true
   },
-  public_bio: {
+  publicBio: {
     type: DataTypes.TEXT,
     allowNull: true
   },
-  public_avatar_url: {
+  publicAvatarUrl: {
     type: DataTypes.STRING(500),
     allowNull: true
   },
-  booking_page_title: {
+  bookingPageTitle: {
     type: DataTypes.STRING(100),
     allowNull: true
   },
-  booking_page_description: {
+  bookingPageDescription: {
     type: DataTypes.TEXT,
     allowNull: true
   }
 }, {
-  tableName: 'user_settings',
+  tableName: 'UserSettings',
   timestamps: false
 });
 
 // Define relationships
-User.hasOne(UserSettings, { foreignKey: 'user_id', onDelete: 'CASCADE' });
-UserSettings.belongsTo(User, { foreignKey: 'user_id' });
+User.hasOne(UserSettings, { foreignKey: 'userId', onDelete: 'CASCADE' });
+UserSettings.belongsTo(User, { foreignKey: 'userId' });
 
 module.exports = UserSettings;

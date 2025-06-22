@@ -10,22 +10,24 @@ const { validationResult } = require('express-validator');
 const logger = require('../config/logger');
 const paymentService = require('../services/payment.service');
 const { AuditLog } = require('../models');
+const {
+  asyncHandler,
+  successResponse,
+  validationError,
+  createError
+} = require('../utils/error-response');
 
 /**
  * Process payment for a booking
  * @param {Object} req - Express request object
  * @param {Object} res - Express response object
  */
-const processPayment = async (req, res) => {
-  try {
-    // Check for validation errors
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) {
-      return res.status(400).json({
-        error: 'Validation failed',
-        details: errors.array()
-      });
-    }
+const processPayment = asyncHandler(async (req, res) => {
+  // Check for validation errors
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    throw validationError(errors.array());
+  }
 
     const { booking_id } = req.body;
     const userId = req.user.id;
@@ -48,63 +50,38 @@ const processPayment = async (req, res) => {
 
     logger.info(`Payment initiated by user ${userId} for booking ${booking_id}`);
 
-    return res.status(200).json({
-      message: 'Payment intent created successfully',
-      data: paymentIntent
-    });
-  } catch (error) {
-    logger.error('Error processing payment:', error);
-    return res.status(500).json({
-      error: 'Failed to process payment',
-      message: error.message
-    });
-  }
-};
+    return successResponse(res, paymentIntent, 'Payment intent created successfully');
+});
 
 /**
  * Get payment history for the current user
  * @param {Object} req - Express request object
  * @param {Object} res - Express response object
  */
-const getPaymentHistory = async (req, res) => {
-  try {
-    const userId = req.user.id;
-    const { limit = 20, offset = 0 } = req.query;
+const getPaymentHistory = asyncHandler(async (req, res) => {
+  const userId = req.user.id;
+  const { limit = 20, offset = 0 } = req.query;
 
-    // Get payment history
-    const history = await paymentService.getPaymentHistory(userId, {
-      limit: parseInt(limit, 10),
-      offset: parseInt(offset, 10)
-    });
+  // Get payment history
+  const history = await paymentService.getPaymentHistory(userId, {
+    limit: parseInt(limit, 10),
+    offset: parseInt(offset, 10)
+  });
 
-    return res.status(200).json({
-      message: 'Payment history retrieved successfully',
-      data: history
-    });
-  } catch (error) {
-    logger.error('Error getting payment history:', error);
-    return res.status(500).json({
-      error: 'Failed to retrieve payment history',
-      message: error.message
-    });
-  }
-};
+  return successResponse(res, history, 'Payment history retrieved successfully');
+});
 
 /**
  * Process refund for a payment
  * @param {Object} req - Express request object
  * @param {Object} res - Express response object
  */
-const refundPayment = async (req, res) => {
-  try {
-    // Check for validation errors
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) {
-      return res.status(400).json({
-        error: 'Validation failed',
-        details: errors.array()
-      });
-    }
+const refundPayment = asyncHandler(async (req, res) => {
+  // Check for validation errors
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    throw validationError(errors.array());
+  }
 
     const { payment_id, amount, reason } = req.body;
     const userId = req.user.id;
@@ -127,61 +104,43 @@ const refundPayment = async (req, res) => {
 
     logger.info(`Refund processed by user ${userId} for payment ${payment_id}`);
 
-    return res.status(200).json({
-      message: 'Refund processed successfully',
-      data: refund
-    });
-  } catch (error) {
-    logger.error('Error processing refund:', error);
-    return res.status(500).json({
-      error: 'Failed to process refund',
-      message: error.message
-    });
-  }
-};
+    return successResponse(res, refund, 'Refund processed successfully');
+});
 
 /**
  * Handle Stripe webhook
  * @param {Object} req - Express request object
  * @param {Object} res - Express response object
  */
-const handleStripeWebhook = async (req, res) => {
-  try {
-    const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
-    const endpointSecret = process.env.STRIPE_WEBHOOK_SECRET;
+const handleStripeWebhook = asyncHandler(async (req, res) => {
+  const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
+  const endpointSecret = process.env.STRIPE_WEBHOOK_SECRET;
 
-    let event;
+  let event;
 
-    // Verify webhook signature
-    if (endpointSecret) {
-      const signature = req.headers['stripe-signature'];
-      try {
-        event = stripe.webhooks.constructEvent(
-          req.body,
-          signature,
-          endpointSecret
-        );
-      } catch (err) {
-        logger.error('Webhook signature verification failed:', err);
-        return res.status(400).send(`Webhook Error: ${err.message}`);
-      }
-    } else {
-      event = req.body;
+  // Verify webhook signature
+  if (endpointSecret) {
+    const signature = req.headers['stripe-signature'];
+    try {
+      event = stripe.webhooks.constructEvent(
+        req.body,
+        signature,
+        endpointSecret
+      );
+    } catch (err) {
+      logger.error('Webhook signature verification failed:', err);
+      throw createError('VALIDATION_ERROR', `Webhook Error: ${err.message}`);
     }
-
-    // Handle the event
-    await paymentService.handleWebhookEvent(event);
-
-    // Return a response to acknowledge receipt of the event
-    res.status(200).json({ received: true });
-  } catch (error) {
-    logger.error('Error handling Stripe webhook:', error);
-    return res.status(500).json({
-      error: 'Failed to handle webhook',
-      message: error.message
-    });
+  } else {
+    event = req.body;
   }
-};
+
+  // Handle the event
+  await paymentService.handleWebhookEvent(event);
+
+  // Return a response to acknowledge receipt of the event
+  return successResponse(res, { received: true }, 'Webhook processed successfully');
+});
 
 module.exports = {
   processPayment,

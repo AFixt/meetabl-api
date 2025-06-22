@@ -14,13 +14,14 @@ const logger = require('../config/logger');
 const { User, UserSettings, AuditLog, JwtBlacklist } = require('../models');
 const { sequelize } = require('../config/database');
 const { sendPasswordResetEmail, sendEmailVerification } = require('../services/notification.service');
+const { asyncHandler, successResponse, conflictError, unauthorizedError, notFoundError, validationError, createError } = require('../utils/error-response');
 
 /**
  * Register a new user
  * @param {Object} req - Express request object
  * @param {Object} res - Express response object
  */
-const register = async (req, res) => {
+const register = asyncHandler(async (req, res) => {
   const transaction = await sequelize.transaction();
 
   try {
@@ -32,18 +33,7 @@ const register = async (req, res) => {
     const existingUser = await User.findOne({ where: { email } });
 
     if (existingUser) {
-      return res.status(400).json({
-        error: {
-          code: 'bad_request',
-          message: 'Email already in use',
-          params: [
-            {
-              param: 'email',
-              message: 'A user with this email already exists'
-            }
-          ]
-        }
-      });
+      throw conflictError('Email already in use');
     }
 
     // Create user
@@ -117,34 +107,26 @@ const register = async (req, res) => {
     res.cookie('token', token, cookieOptions);
 
     // Return user data without token
-    return res.status(201).json({
+    return successResponse(res, {
       id: user.id,
       name: user.name,
       email: user.email,
       timezone: user.timezone,
       email_verified: user.email_verified
-    });
+    }, 'User registered successfully', 201);
   } catch (error) {
     // Rollback transaction
     await transaction.rollback();
-
-    logger.error('Registration error:', error);
-
-    return res.status(500).json({
-      error: {
-        code: 'internal_server_error',
-        message: 'Failed to register user'
-      }
-    });
+    throw error;
   }
-};
+});
 
 /**
  * Login user
  * @param {Object} req - Express request object
  * @param {Object} res - Express response object
  */
-const login = async (req, res) => {
+const login = asyncHandler(async (req, res) => {
   try {
     const { email, password } = req.body;
 
@@ -152,24 +134,14 @@ const login = async (req, res) => {
     const user = await User.findOne({ where: { email } });
 
     if (!user) {
-      return res.status(401).json({
-        error: {
-          code: 'unauthorized',
-          message: 'Invalid email or password'
-        }
-      });
+      throw unauthorizedError('Invalid email or password');
     }
 
     // Validate password
     const isPasswordValid = await bcrypt.compare(password, user.password_hash);
 
     if (!isPasswordValid) {
-      return res.status(401).json({
-        error: {
-          code: 'unauthorized',
-          message: 'Invalid email or password'
-        }
-      });
+      throw unauthorizedError('Invalid email or password');
     }
 
     // Generate JWT token with unique ID
@@ -220,65 +192,43 @@ const login = async (req, res) => {
     res.cookie('refreshToken', refreshToken, refreshCookieOptions);
 
     // Return user data without tokens
-    return res.status(200).json({
+    return successResponse(res, {
       id: user.id,
       name: user.name,
       email: user.email,
       timezone: user.timezone
-    });
+    }, 'Login successful');
   } catch (error) {
-    logger.error('Login error:', error);
-
-    return res.status(500).json({
-      error: {
-        code: 'internal_server_error',
-        message: 'Failed to log in'
-      }
-    });
+    throw error;
   }
-};
+});
 
 /**
  * Refresh auth token
  * @param {Object} req - Express request object
  * @param {Object} res - Express response object
  */
-const refreshToken = async (req, res) => {
+const refreshToken = asyncHandler(async (req, res) => {
   try {
     // Get refresh token from cookie instead of body
     const tokenFromCookie = req.cookies.refreshToken;
 
     if (!tokenFromCookie) {
-      return res.status(400).json({
-        error: {
-          code: 'bad_request',
-          message: 'Refresh token is required'
-        }
-      });
+      throw validationError([{ field: 'refreshToken', message: 'Refresh token is required' }]);
     }
 
     // Verify refresh token
     const decoded = jwt.verify(tokenFromCookie, process.env.JWT_SECRET);
 
     if (!decoded.userId || decoded.type !== 'refresh') {
-      return res.status(401).json({
-        error: {
-          code: 'unauthorized',
-          message: 'Invalid refresh token'
-        }
-      });
+      throw unauthorizedError('Invalid refresh token');
     }
 
     // Find user
     const user = await User.findOne({ where: { id: decoded.userId } });
 
     if (!user) {
-      return res.status(401).json({
-        error: {
-          code: 'unauthorized',
-          message: 'User not found'
-        }
-      });
+      throw unauthorizedError('User not found');
     }
 
     // Generate new JWT token with unique ID
@@ -327,44 +277,18 @@ const refreshToken = async (req, res) => {
     res.cookie('refreshToken', newRefreshToken, refreshCookieOptions);
 
     // Return success without tokens
-    return res.status(200).json({
-      message: 'Tokens refreshed successfully'
-    });
+    return successResponse(res, null, 'Tokens refreshed successfully');
   } catch (error) {
-    // Handle JWT errors
-    if (error instanceof jwt.TokenExpiredError) {
-      return res.status(401).json({
-        error: {
-          code: 'unauthorized',
-          message: 'Refresh token expired'
-        }
-      });
-    } if (error instanceof jwt.JsonWebTokenError) {
-      return res.status(401).json({
-        error: {
-          code: 'unauthorized',
-          message: 'Invalid refresh token'
-        }
-      });
-    }
-
-    logger.error('Token refresh error:', error);
-
-    return res.status(500).json({
-      error: {
-        code: 'internal_server_error',
-        message: 'Failed to refresh token'
-      }
-    });
+    throw error;
   }
-};
+});
 
 /**
  * Logout user
  * @param {Object} req - Express request object
  * @param {Object} res - Express response object
  */
-const logout = async (req, res) => {
+const logout = asyncHandler(async (req, res) => {
   try {
     // Get token from cookie or Authorization header
     const token = req.cookies.token || 
@@ -373,23 +297,13 @@ const logout = async (req, res) => {
                     : null);
 
     if (!token) {
-      return res.status(400).json({
-        error: {
-          code: 'bad_request',
-          message: 'Authorization token required'
-        }
-      });
+      throw validationError([{ field: 'token', message: 'Authorization token required' }]);
     }
     
     // Decode token to get jti and expiration
     const decoded = jwt.decode(token);
     if (!decoded || !decoded.jti) {
-      return res.status(400).json({
-        error: {
-          code: 'bad_request',
-          message: 'Invalid token format'
-        }
-      });
+      throw validationError([{ field: 'token', message: 'Invalid token format' }]);
     }
 
     // Calculate expiration time
@@ -421,27 +335,18 @@ const logout = async (req, res) => {
     res.clearCookie('token');
     res.clearCookie('refreshToken');
 
-    return res.status(200).json({
-      message: 'Logged out successfully'
-    });
+    return successResponse(res, null, 'Logged out successfully');
   } catch (error) {
-    logger.error('Logout error:', error);
-
-    return res.status(500).json({
-      error: {
-        code: 'internal_server_error',
-        message: 'Failed to logout'
-      }
-    });
+    throw error;
   }
-};
+});
 
 /**
  * Request password reset
  * @param {Object} req - Express request object
  * @param {Object} res - Express response object
  */
-const forgotPassword = async (req, res) => {
+const forgotPassword = asyncHandler(async (req, res) => {
   try {
     const { email } = req.body;
 
@@ -450,9 +355,7 @@ const forgotPassword = async (req, res) => {
 
     if (!user) {
       // Don't reveal if email exists or not for security
-      return res.status(200).json({
-        message: 'If an account exists with this email, a password reset link has been sent.'
-      });
+      return successResponse(res, null, 'If an account exists with this email, a password reset link has been sent.');
     }
 
     // Generate reset token
@@ -484,27 +387,18 @@ const forgotPassword = async (req, res) => {
 
     logger.info(`Password reset requested for: ${email}`);
 
-    return res.status(200).json({
-      message: 'If an account exists with this email, a password reset link has been sent.'
-    });
+    return successResponse(res, null, 'If an account exists with this email, a password reset link has been sent.');
   } catch (error) {
-    logger.error('Forgot password error:', error);
-
-    return res.status(500).json({
-      error: {
-        code: 'internal_server_error',
-        message: 'Failed to process password reset request'
-      }
-    });
+    throw error;
   }
-};
+});
 
 /**
  * Reset password with token
  * @param {Object} req - Express request object
  * @param {Object} res - Express response object
  */
-const resetPassword = async (req, res) => {
+const resetPassword = asyncHandler(async (req, res) => {
   const transaction = await sequelize.transaction();
 
   try {
@@ -522,12 +416,7 @@ const resetPassword = async (req, res) => {
     });
 
     if (!user) {
-      return res.status(400).json({
-        error: {
-          code: 'bad_request',
-          message: 'Invalid or expired reset token'
-        }
-      });
+      throw validationError([{ field: 'token', message: 'Invalid or expired reset token' }]);
     }
 
     // Update password
@@ -552,42 +441,27 @@ const resetPassword = async (req, res) => {
 
     logger.info(`Password reset completed for: ${user.email}`);
 
-    return res.status(200).json({
-      message: 'Password has been reset successfully'
-    });
+    return successResponse(res, null, 'Password has been reset successfully');
   } catch (error) {
     // Rollback transaction
     await transaction.rollback();
-
-    logger.error('Reset password error:', error);
-
-    return res.status(500).json({
-      error: {
-        code: 'internal_server_error',
-        message: 'Failed to reset password'
-      }
-    });
+    throw error;
   }
-};
+});
 
 /**
  * Verify email with token
  * @param {Object} req - Express request object
  * @param {Object} res - Express response object
  */
-const verifyEmail = async (req, res) => {
+const verifyEmail = asyncHandler(async (req, res) => {
   const transaction = await sequelize.transaction();
 
   try {
     const { token } = req.body;
 
     if (!token) {
-      return res.status(400).json({
-        error: {
-          code: 'bad_request',
-          message: 'Verification token is required'
-        }
-      });
+      throw validationError([{ field: 'token', message: 'Verification token is required' }]);
     }
 
     // Hash the token to compare with stored hash
@@ -602,12 +476,7 @@ const verifyEmail = async (req, res) => {
     });
 
     if (!user) {
-      return res.status(400).json({
-        error: {
-          code: 'bad_request',
-          message: 'Invalid or expired verification token'
-        }
-      });
+      throw validationError([{ field: 'token', message: 'Invalid or expired verification token' }]);
     }
 
     // Update user as verified
@@ -631,30 +500,20 @@ const verifyEmail = async (req, res) => {
 
     logger.info(`Email verified for: ${user.email}`);
 
-    return res.status(200).json({
-      message: 'Email verified successfully'
-    });
+    return successResponse(res, null, 'Email verified successfully');
   } catch (error) {
     // Rollback transaction
     await transaction.rollback();
-
-    logger.error('Email verification error:', error);
-
-    return res.status(500).json({
-      error: {
-        code: 'internal_server_error',
-        message: 'Failed to verify email'
-      }
-    });
+    throw error;
   }
-};
+});
 
 /**
  * Resend verification email
  * @param {Object} req - Express request object
  * @param {Object} res - Express response object
  */
-const resendVerificationEmail = async (req, res) => {
+const resendVerificationEmail = asyncHandler(async (req, res) => {
   try {
     const userId = req.user.id;
 
@@ -662,22 +521,12 @@ const resendVerificationEmail = async (req, res) => {
     const user = await User.findOne({ where: { id: userId } });
 
     if (!user) {
-      return res.status(404).json({
-        error: {
-          code: 'not_found',
-          message: 'User not found'
-        }
-      });
+      throw notFoundError('User');
     }
 
     // Check if already verified
     if (user.email_verified) {
-      return res.status(400).json({
-        error: {
-          code: 'bad_request',
-          message: 'Email is already verified'
-        }
-      });
+      throw validationError([{ field: 'email', message: 'Email is already verified' }]);
     }
 
     // Generate new verification token
@@ -694,12 +543,7 @@ const resendVerificationEmail = async (req, res) => {
       await sendEmailVerification(user, verificationToken);
     } catch (emailError) {
       logger.error('Error sending verification email:', emailError);
-      return res.status(500).json({
-        error: {
-          code: 'internal_server_error',
-          message: 'Failed to send verification email'
-        }
-      });
+      throw createError('EXTERNAL_SERVICE_ERROR', 'Failed to send verification email');
     }
 
     // Create audit log
@@ -714,20 +558,11 @@ const resendVerificationEmail = async (req, res) => {
 
     logger.info(`Verification email resent to: ${user.email}`);
 
-    return res.status(200).json({
-      message: 'Verification email has been sent'
-    });
+    return successResponse(res, null, 'Verification email has been sent');
   } catch (error) {
-    logger.error('Resend verification error:', error);
-
-    return res.status(500).json({
-      error: {
-        code: 'internal_server_error',
-        message: 'Failed to resend verification email'
-      }
-    });
+    throw error;
   }
-};
+});
 
 module.exports = {
   register,

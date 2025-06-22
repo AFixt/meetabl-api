@@ -13,12 +13,19 @@ const { sequelize } = require('../config/database');
 
 const User = sequelize.define('User', {
   id: {
-    type: DataTypes.STRING(36),
+    type: DataTypes.INTEGER,
     primaryKey: true,
-    defaultValue: () => uuidv4()
+    autoIncrement: true
   },
-  name: {
-    type: DataTypes.STRING(100),
+  firstName: {
+    type: DataTypes.STRING(50),
+    allowNull: false,
+    validate: {
+      notEmpty: true
+    }
+  },
+  lastName: {
+    type: DataTypes.STRING(50),
     allowNull: false,
     validate: {
       notEmpty: true
@@ -32,9 +39,19 @@ const User = sequelize.define('User', {
       isEmail: true
     }
   },
-  password_hash: {
-    type: DataTypes.TEXT,
+  password: {
+    type: DataTypes.STRING(255),
     allowNull: false
+  },
+  role: {
+    type: DataTypes.STRING(50),
+    allowNull: false,
+    defaultValue: 'user'
+  },
+  status: {
+    type: DataTypes.STRING(20),
+    allowNull: false,
+    defaultValue: 'active'
   },
   timezone: {
     type: DataTypes.STRING(100),
@@ -75,7 +92,7 @@ const User = sequelize.define('User', {
     defaultValue: DataTypes.NOW
   }
 }, {
-  tableName: 'users',
+  tableName: 'Users',
   timestamps: true,
   createdAt: 'created',
   updatedAt: 'updated'
@@ -87,16 +104,16 @@ const User = sequelize.define('User', {
  * @returns {Promise<boolean>} Whether password is valid
  */
 User.prototype.validatePassword = async function (password) {
-  return bcrypt.compare(password, this.password_hash);
+  return bcrypt.compare(password, this.password);
 };
 
 /**
  * Set up hooks for password hashing
  */
 const hashPassword = async (user) => {
-  if (user.changed && user.changed('password_hash')) {
+  if (user.changed && user.changed('password')) {
     const salt = await bcrypt.genSalt(10);
-    user.password_hash = await bcrypt.hash(user.password_hash, salt);
+    user.password = await bcrypt.hash(user.password, salt);
   }
 };
 

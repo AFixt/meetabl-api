@@ -76,15 +76,14 @@ const resetDatabase = async () => {
  */
 const createTestUser = async (userData = {}) => {
   const defaultData = {
-    id: uuidv4(),
     firstName: 'Test',
     lastName: 'User',
     email: `test${Date.now()}@example.com`,
-    username: `testuser${Date.now()}`,
     password: await bcrypt.hash('password123', 10),
     timezone: 'America/New_York',
-    isEmailVerified: true,
-    phoneNumber: '+1234567890'
+    email_verified: true,
+    role: 'user',
+    status: 'active'
   };
 
   const user = await User.create({ ...defaultData, ...userData });
@@ -97,7 +96,7 @@ const createTestUser = async (userData = {}) => {
       dayOfWeek: day,
       startTime: '09:00',
       endTime: '17:00',
-      isActive: true
+      isAvailable: true
     });
   }
 
@@ -138,18 +137,17 @@ const generateAuthTokens = (user) => {
  */
 const createTestBooking = async (userId, bookingData = {}) => {
   const defaultData = {
-    id: uuidv4(),
     userId,
     title: 'Test Meeting',
     description: 'Test meeting description',
     startTime: new Date(Date.now() + 24 * 60 * 60 * 1000), // Tomorrow
     endTime: new Date(Date.now() + 24 * 60 * 60 * 1000 + 60 * 60 * 1000), // 1 hour later
     status: 'confirmed',
-    attendeeName: 'Test Attendee',
-    attendeeEmail: 'attendee@example.com',
-    attendeePhoneNumber: '+1234567890',
+    customer_name: 'Test Attendee',
+    customer_email: 'attendee@example.com',
+    customer_phone: '+1234567890',
     location: 'Virtual',
-    meetingLink: 'https://meet.example.com/test',
+    meeting_url: 'https://meet.example.com/test',
     notes: 'Test notes'
   };
 
@@ -161,7 +159,6 @@ const createTestBooking = async (userId, bookingData = {}) => {
  */
 const createTestTeam = async (ownerId, members = []) => {
   const team = await Team.create({
-    id: uuidv4(),
     name: 'Test Team',
     description: 'Test team description',
     ownerId

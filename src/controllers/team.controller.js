@@ -8,428 +8,231 @@
 
 const logger = require('../config/logger');
 const teamService = require('../services/team.service');
+const {
+  asyncHandler,
+  successResponse,
+  notFoundError,
+  forbiddenError,
+  validationError,
+  conflictError
+} = require('../utils/error-response');
 
 /**
  * Create a new team
  * @param {Object} req - Express request object
  * @param {Object} res - Express response object
  */
-const createTeam = async (req, res) => {
-  try {
-    const userId = req.user.id;
-    const teamData = req.body;
+const createTeam = asyncHandler(async (req, res) => {
+  const userId = req.user.id;
+  const teamData = req.body;
 
-    const team = await teamService.createTeam(userId, teamData);
+  const team = await teamService.createTeam(userId, teamData);
 
-    logger.info(`Team created successfully: ${team.id}`);
-    return res.status(201).json({
-      message: 'Team created successfully',
-      team
-    });
-  } catch (error) {
-    logger.error('Error creating team:', error);
-
-    if (error.name === 'SequelizeValidationError') {
-      return res.status(400).json({
-        error: {
-          code: 'validation_error',
-          message: 'Validation failed',
-          details: error.errors.map((e) => ({
-            field: e.path,
-            message: e.message
-          }))
-        }
-      });
-    }
-
-    return res.status(500).json({
-      error: {
-        code: 'internal_server_error',
-        message: 'Failed to create team'
-      }
-    });
-  }
-};
+  logger.info(`Team created successfully: ${team.id}`);
+  return successResponse(res, { team }, 'Team created successfully', 201);
+});
 
 /**
  * Get user's teams
  * @param {Object} req - Express request object
  * @param {Object} res - Express response object
  */
-const getUserTeams = async (req, res) => {
-  try {
-    const userId = req.user.id;
-    const options = {
-      limit: req.query.limit,
-      offset: req.query.offset,
-      order: req.query.order,
-      dir: req.query.dir
-    };
+const getUserTeams = asyncHandler(async (req, res) => {
+  const userId = req.user.id;
+  const options = {
+    limit: req.query.limit,
+    offset: req.query.offset,
+    order: req.query.order,
+    dir: req.query.dir
+  };
 
-    const result = await teamService.getUserTeams(userId, options);
+  const result = await teamService.getUserTeams(userId, options);
 
-    return res.json({
-      message: 'Teams retrieved successfully',
-      ...result
-    });
-  } catch (error) {
-    logger.error('Error getting user teams:', error);
-    return res.status(500).json({
-      error: {
-        code: 'internal_server_error',
-        message: 'Failed to retrieve teams'
-      }
-    });
-  }
-};
+  return successResponse(res, result, 'Teams retrieved successfully');
+});
 
 /**
  * Get team by ID
  * @param {Object} req - Express request object
  * @param {Object} res - Express response object
  */
-const getTeam = async (req, res) => {
+const getTeam = asyncHandler(async (req, res) => {
+  const teamId = req.params.id;
+  const userId = req.user.id;
+
   try {
-    const teamId = req.params.id;
-    const userId = req.user.id;
-
     const team = await teamService.getTeamById(teamId, userId);
-
-    return res.json({
-      message: 'Team retrieved successfully',
-      team
-    });
+    return successResponse(res, { team }, 'Team retrieved successfully');
   } catch (error) {
-    logger.error('Error getting team:', error);
-
     if (error.statusCode === 404) {
-      return res.status(404).json({
-        error: {
-          code: 'not_found',
-          message: 'Team not found'
-        }
-      });
+      throw notFoundError('Team');
     }
-
     if (error.statusCode === 403) {
-      return res.status(403).json({
-        error: {
-          code: 'access_denied',
-          message: 'Access denied'
-        }
-      });
+      throw forbiddenError('Access denied');
     }
-
-    return res.status(500).json({
-      error: {
-        code: 'internal_server_error',
-        message: 'Failed to retrieve team'
-      }
-    });
+    throw error;
   }
-};
+});
 
 /**
  * Update team
  * @param {Object} req - Express request object
  * @param {Object} res - Express response object
  */
-const updateTeam = async (req, res) => {
+const updateTeam = asyncHandler(async (req, res) => {
+  const teamId = req.params.id;
+  const userId = req.user.id;
+  const updateData = req.body;
+
   try {
-    const teamId = req.params.id;
-    const userId = req.user.id;
-    const updateData = req.body;
-
     const team = await teamService.updateTeam(teamId, userId, updateData);
-
+    
     logger.info(`Team updated successfully: ${teamId}`);
-    return res.json({
-      message: 'Team updated successfully',
-      team
-    });
+    return successResponse(res, { team }, 'Team updated successfully');
   } catch (error) {
-    logger.error('Error updating team:', error);
-
     if (error.statusCode === 404) {
-      return res.status(404).json({
-        error: {
-          code: 'not_found',
-          message: 'Team not found'
-        }
-      });
+      throw notFoundError('Team');
     }
-
     if (error.statusCode === 403) {
-      return res.status(403).json({
-        error: {
-          code: 'access_denied',
-          message: 'Access denied'
-        }
-      });
+      throw forbiddenError('Access denied');
     }
-
     if (error.name === 'SequelizeValidationError') {
-      return res.status(400).json({
-        error: {
-          code: 'validation_error',
-          message: 'Validation failed',
-          details: error.errors.map((e) => ({
-            field: e.path,
-            message: e.message
-          }))
-        }
-      });
+      throw validationError(error.errors.map((e) => ({
+        field: e.path,
+        message: e.message
+      })));
     }
-
-    return res.status(500).json({
-      error: {
-        code: 'internal_server_error',
-        message: 'Failed to update team'
-      }
-    });
+    throw error;
   }
-};
+});
 
 /**
  * Delete team
  * @param {Object} req - Express request object
  * @param {Object} res - Express response object
  */
-const deleteTeam = async (req, res) => {
+const deleteTeam = asyncHandler(async (req, res) => {
+  const teamId = req.params.id;
+  const userId = req.user.id;
+
   try {
-    const teamId = req.params.id;
-    const userId = req.user.id;
-
     await teamService.deleteTeam(teamId, userId);
-
+    
     logger.info(`Team deleted successfully: ${teamId}`);
-    return res.json({
-      message: 'Team deleted successfully'
-    });
+    return successResponse(res, null, 'Team deleted successfully');
   } catch (error) {
-    logger.error('Error deleting team:', error);
-
     if (error.statusCode === 404) {
-      return res.status(404).json({
-        error: {
-          code: 'not_found',
-          message: 'Team not found'
-        }
-      });
+      throw notFoundError('Team');
     }
-
     if (error.statusCode === 403) {
-      return res.status(403).json({
-        error: {
-          code: 'access_denied',
-          message: 'Access denied'
-        }
-      });
+      throw forbiddenError('Access denied');
     }
-
-    return res.status(500).json({
-      error: {
-        code: 'internal_server_error',
-        message: 'Failed to delete team'
-      }
-    });
+    throw error;
   }
-};
+});
 
 /**
  * Get team members
  * @param {Object} req - Express request object
  * @param {Object} res - Express response object
  */
-const getTeamMembers = async (req, res) => {
+const getTeamMembers = asyncHandler(async (req, res) => {
+  const teamId = req.params.id;
+  const userId = req.user.id;
+  const options = {
+    limit: req.query.limit,
+    offset: req.query.offset
+  };
+
   try {
-    const teamId = req.params.id;
-    const userId = req.user.id;
-    const options = {
-      limit: req.query.limit,
-      offset: req.query.offset
-    };
-
     const result = await teamService.getTeamMembers(teamId, userId, options);
-
-    return res.json({
-      message: 'Team members retrieved successfully',
-      ...result
-    });
+    return successResponse(res, result, 'Team members retrieved successfully');
   } catch (error) {
-    logger.error('Error getting team members:', error);
-
     if (error.statusCode === 403) {
-      return res.status(403).json({
-        error: {
-          code: 'access_denied',
-          message: 'Access denied'
-        }
-      });
+      throw forbiddenError('Access denied');
     }
-
-    return res.status(500).json({
-      error: {
-        code: 'internal_server_error',
-        message: 'Failed to retrieve team members'
-      }
-    });
+    throw error;
   }
-};
+});
 
 /**
  * Add team member
  * @param {Object} req - Express request object
  * @param {Object} res - Express response object
  */
-const addTeamMember = async (req, res) => {
+const addTeamMember = asyncHandler(async (req, res) => {
+  const teamId = req.params.id;
+  const userId = req.user.id;
+  const memberData = req.body;
+
   try {
-    const teamId = req.params.id;
-    const userId = req.user.id;
-    const memberData = req.body;
-
     const member = await teamService.addTeamMember(teamId, userId, memberData);
-
+    
     logger.info(`Team member added successfully: ${memberData.user_id} to team ${teamId}`);
-    return res.status(201).json({
-      message: 'Team member added successfully',
-      member
-    });
+    return successResponse(res, { member }, 'Team member added successfully', 201);
   } catch (error) {
-    logger.error('Error adding team member:', error);
-
     if (error.statusCode === 404) {
-      return res.status(404).json({
-        error: {
-          code: 'not_found',
-          message: error.message
-        }
-      });
+      throw notFoundError(error.message);
     }
-
     if (error.statusCode === 403) {
-      return res.status(403).json({
-        error: {
-          code: 'access_denied',
-          message: 'Access denied'
-        }
-      });
+      throw forbiddenError('Access denied');
     }
-
     if (error.statusCode === 409) {
-      return res.status(409).json({
-        error: {
-          code: 'conflict',
-          message: error.message
-        }
-      });
+      throw conflictError(error.message);
     }
-
     if (error.name === 'SequelizeValidationError') {
-      return res.status(400).json({
-        error: {
-          code: 'validation_error',
-          message: 'Validation failed',
-          details: error.errors.map((e) => ({
-            field: e.path,
-            message: e.message
-          }))
-        }
-      });
+      throw validationError(error.errors.map((e) => ({
+        field: e.path,
+        message: e.message
+      })));
     }
-
-    return res.status(500).json({
-      error: {
-        code: 'internal_server_error',
-        message: 'Failed to add team member'
-      }
-    });
+    throw error;
   }
-};
+});
 
 /**
  * Remove team member
  * @param {Object} req - Express request object
  * @param {Object} res - Express response object
  */
-const removeTeamMember = async (req, res) => {
+const removeTeamMember = asyncHandler(async (req, res) => {
+  const teamId = req.params.id;
+  const userId = req.user.id;
+  const memberUserId = req.params.userId;
+
   try {
-    const teamId = req.params.id;
-    const userId = req.user.id;
-    const memberUserId = req.params.userId;
-
     await teamService.removeTeamMember(teamId, userId, memberUserId);
-
+    
     logger.info(`Team member removed successfully: ${memberUserId} from team ${teamId}`);
-    return res.json({
-      message: 'Team member removed successfully'
-    });
+    return successResponse(res, null, 'Team member removed successfully');
   } catch (error) {
-    logger.error('Error removing team member:', error);
-
     if (error.statusCode === 404) {
-      return res.status(404).json({
-        error: {
-          code: 'not_found',
-          message: error.message
-        }
-      });
+      throw notFoundError(error.message);
     }
-
     if (error.statusCode === 403) {
-      return res.status(403).json({
-        error: {
-          code: 'access_denied',
-          message: 'Access denied'
-        }
-      });
+      throw forbiddenError('Access denied');
     }
-
     if (error.statusCode === 400) {
-      return res.status(400).json({
-        error: {
-          code: 'bad_request',
-          message: error.message
-        }
-      });
+      throw validationError([{ field: 'member', message: error.message }]);
     }
-
-    return res.status(500).json({
-      error: {
-        code: 'internal_server_error',
-        message: 'Failed to remove team member'
-      }
-    });
+    throw error;
   }
-};
+});
 
 /**
  * Create shared calendar for team
  * @param {Object} req - Express request object
  * @param {Object} res - Express response object
  */
-const createSharedCalendar = async (req, res) => {
-  try {
-    // This is a placeholder for future implementation
-    // When calendar integration is enhanced, this would create a shared calendar
-    // for the team using the calendar service
-
-    return res.status(501).json({
-      error: {
-        code: 'not_implemented',
-        message: 'Shared calendar creation not yet implemented'
-      }
-    });
-  } catch (error) {
-    logger.error('Error creating shared calendar:', error);
-    return res.status(500).json({
-      error: {
-        code: 'internal_server_error',
-        message: 'Failed to create shared calendar'
-      }
-    });
-  }
-};
+const createSharedCalendar = asyncHandler(async (req, res) => {
+  // This is a placeholder for future implementation
+  // When calendar integration is enhanced, this would create a shared calendar
+  // for the team using the calendar service
+  
+  const error = new Error('Shared calendar creation not yet implemented');
+  error.statusCode = 501;
+  throw error;
+});
 
 module.exports = {
   createTeam,

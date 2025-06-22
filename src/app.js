@@ -16,6 +16,8 @@ const session = require('express-session');
 const logger = require('./config/logger');
 const { processNotifications } = require('./jobs/notification-processor');
 const { initializeCsrf, protectCsrf, provideCsrfToken } = require('./middlewares/csrf');
+const dbMonitor = require('./utils/db-monitor');
+const { errorHandler, notFoundError } = require('./utils/error-response');
 
 // Validate critical environment variables at startup
 function validateEnvironment() {
@@ -232,6 +234,11 @@ const analyticsRoutes = require('./routes/analytics.routes');
 const teamRoutes = require('./routes/team.routes');
 const paymentRoutes = require('./routes/payment.routes');
 
+// Database monitoring endpoint (only in development/staging)
+if (process.env.NODE_ENV !== 'production') {
+  app.use(dbMonitor.createExpressMiddleware());
+}
+
 // CSRF token endpoint
 app.get('/api/csrf-token', provideCsrfToken);
 
@@ -264,6 +271,43 @@ app.get('/', (req, res) => {
     version: '1.0.0',
     documentation: 'See README.md for API documentation'
   });
+});
+
+// Health check endpoint with monitoring info
+app.get('/api/health', async (req, res) => {
+  try {
+    const { sequelize, getPoolStats } = require('./config/database');
+    const dbStatus = await sequelize.authenticate().then(() => 'connected').catch(() => 'disconnected');
+    
+    const response = {
+      status: 'healthy',
+      timestamp: new Date().toISOString(),
+      environment: process.env.NODE_ENV,
+      database: {
+        status: dbStatus,
+        pool: getPoolStats()
+      },
+      monitoring: {
+        enabled: dbMonitor.enabled,
+        slowQueryThreshold: dbMonitor.slowQueryThreshold
+      }
+    };
+
+    // Include detailed stats in non-production environments
+    if (process.env.NODE_ENV !== 'production') {
+      response.monitoring.stats = dbMonitor.getStats();
+      response.monitoring.slowQueries = dbMonitor.getSlowQueries(5);
+    }
+
+    res.status(200).json(response);
+  } catch (error) {
+    logger.error('Health check failed:', error);
+    res.status(503).json({
+      status: 'unhealthy',
+      timestamp: new Date().toISOString(),
+      error: 'Failed to perform health check'
+    });
+  }
 });
 
 // 404 handler
@@ -304,35 +348,14 @@ const sanitizeForLogging = (data) => {
   return sanitized;
 };
 
-// Error handling middleware
-app.use((err, req, res, next) => {
-  logger.error({
-    err: {
-      message: err.message,
-      stack: process.env.NODE_ENV === 'development' ? err.stack : '[REDACTED]'
-    },
-    request: {
-      method: req.method,
-      url: req.url.replace(/\/\d+/g, '/[ID]'), // Replace numeric IDs with placeholder
-      headers: sanitizeForLogging(req.headers),
-      params: sanitizeForLogging(req.params),
-      query: sanitizeForLogging(req.query),
-      body: sanitizeForLogging(req.body),
-      ip: req.ip // Keep IP for security analysis
-    }
-  }, 'Error processing request');
-
-  // Don't expose error details in production
-  const isProduction = process.env.NODE_ENV === 'production';
-
-  return res.status(err.statusCode || 500).json({
-    error: {
-      code: err.code || 'internal_server_error',
-      message: err.message || 'An unexpected error occurred',
-      params: !isProduction && err.params ? err.params : undefined
-    }
-  });
+// 404 handler
+app.use((req, res, next) => {
+  const error = notFoundError('Route not found');
+  next(error);
 });
+
+// Standardized error handling middleware
+app.use(errorHandler);
 
 /**
  * Initialize the application
