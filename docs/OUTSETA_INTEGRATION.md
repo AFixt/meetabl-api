@@ -52,7 +52,7 @@ npm run db:migrate
 
 ### Webhook Endpoints
 
-**Webhook URL**: `POST /api/outseta/webhook`
+**Primary Webhook URL**: `POST /api/outseta/webhook`
 
 Configure this URL in your Outseta account to receive events:
 - `person.created` - New user registration
@@ -60,6 +60,16 @@ Configure this URL in your Outseta account to receive events:
 - `subscription.created` - New subscription
 - `subscription.updated` - Subscription changes
 - `subscription.cancelled` - Subscription cancellation
+
+**Webhook Management Endpoints**:
+- `GET /api/outseta/webhook/stats?range=24h` - Get webhook processing statistics
+- `POST /api/outseta/webhook/test` - Test webhook processing (development only)
+
+**Webhook Security**:
+- All webhooks are verified using HMAC-SHA256 signatures
+- Configure `OUTSETA_WEBHOOK_SECRET` in your environment
+- Failed webhooks are retried up to 3 times with exponential backoff
+- All webhook events are logged for monitoring and debugging
 
 ## Subscription Plans
 

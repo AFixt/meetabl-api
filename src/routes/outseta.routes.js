@@ -9,6 +9,7 @@
 const router = require('express').Router();
 const { body, validationResult } = require('express-validator');
 const outsetaService = require('../services/outseta.service');
+const webhookService = require('../services/webhook.service');
 const { createLogger } = require('../config/logger');
 
 const logger = createLogger('outseta-routes');
@@ -18,17 +19,19 @@ const logger = createLogger('outseta-routes');
  */
 const verifyWebhookSignature = (req, res, next) => {
   const signature = req.headers['x-outseta-signature'];
-  const webhookSecret = process.env.OUTSETA_WEBHOOK_SECRET;
-
-  if (!webhookSecret) {
-    logger.warn('Outseta webhook secret not configured');
-    return res.status(500).json({ error: 'Webhook configuration error' });
+  
+  if (!signature) {
+    logger.warn('Missing webhook signature');
+    return res.status(401).json({ error: 'Missing signature' });
   }
 
-  // Verify signature (implement based on Outseta's webhook signature method)
-  // For now, we'll do a simple secret check
-  if (signature !== webhookSecret) {
-    logger.warn('Invalid webhook signature');
+  // Get raw body for signature verification
+  const rawBody = req.body;
+  
+  if (!webhookService.verifyOutsetaSignature(JSON.stringify(rawBody), signature)) {
+    logger.warn('Invalid webhook signature', { 
+      signature: signature.substring(0, 10) + '...' 
+    });
     return res.status(401).json({ error: 'Invalid signature' });
   }
 
@@ -49,19 +52,52 @@ router.post('/webhook',
     try {
       const errors = validationResult(req);
       if (!errors.isEmpty()) {
+        webhookService.logWebhookEvent(req.body, 'outseta', false, 'Validation failed');
         return res.status(400).json({ errors: errors.array() });
       }
 
-      const { type, data } = req.body;
+      const event = req.body;
 
-      logger.info('Received Outseta webhook', { type });
+      // Validate event structure
+      const validation = webhookService.validateEventStructure(event);
+      if (!validation.isValid) {
+        webhookService.logWebhookEvent(event, 'outseta', false, validation.errors.join(', '));
+        return res.status(400).json({ 
+          error: 'Invalid event structure',
+          details: validation.errors 
+        });
+      }
 
-      await outsetaService.handleWebhook({ type, data });
+      logger.info('Received Outseta webhook', { type: event.type });
 
-      res.status(200).json({ success: true });
+      // Process webhook with retry logic
+      const success = await webhookService.processEventWithRetry(
+        event,
+        (evt) => outsetaService.handleWebhook(evt),
+        3 // max retries
+      );
+
+      if (success) {
+        webhookService.logWebhookEvent(event, 'outseta', true);
+        res.status(200).json(webhookService.createWebhookResponse(
+          true, 
+          'Webhook processed successfully'
+        ));
+      } else {
+        webhookService.logWebhookEvent(event, 'outseta', false, 'Processing failed after retries');
+        res.status(500).json(webhookService.createWebhookResponse(
+          false, 
+          'Webhook processing failed'
+        ));
+      }
     } catch (error) {
       logger.error('Webhook processing error', { error: error.message });
-      res.status(500).json({ error: 'Webhook processing failed' });
+      webhookService.logWebhookEvent(req.body, 'outseta', false, error.message);
+      res.status(500).json(webhookService.createWebhookResponse(
+        false, 
+        'Webhook processing failed',
+        { error: error.message }
+      ));
     }
   }
 );
@@ -170,5 +206,64 @@ router.post('/callback',
     }
   }
 );
+
+/**
+ * GET /api/outseta/webhook/stats
+ * Get webhook processing statistics
+ */
+router.get('/webhook/stats', async (req, res) => {
+  try {
+    const timeRange = req.query.range || '24h';
+    const stats = await webhookService.getWebhookStats(timeRange);
+    
+    res.json({
+      success: true,
+      stats
+    });
+  } catch (error) {
+    logger.error('Error fetching webhook stats', { error: error.message });
+    res.status(500).json({ error: 'Failed to fetch webhook statistics' });
+  }
+});
+
+/**
+ * POST /api/outseta/webhook/test
+ * Test webhook endpoint (development only)
+ */
+if (process.env.NODE_ENV !== 'production') {
+  router.post('/webhook/test',
+    [
+      body('type').notEmpty().withMessage('Event type is required'),
+      body('data').notEmpty().withMessage('Event data is required')
+    ],
+    async (req, res) => {
+      try {
+        const errors = validationResult(req);
+        if (!errors.isEmpty()) {
+          return res.status(400).json({ errors: errors.array() });
+        }
+
+        const testEvent = req.body;
+        
+        logger.info('Processing test webhook event', { type: testEvent.type });
+
+        const success = await webhookService.processEventWithRetry(
+          testEvent,
+          (evt) => outsetaService.handleWebhook(evt),
+          1 // only one attempt for tests
+        );
+
+        res.json({
+          success,
+          message: success ? 'Test webhook processed successfully' : 'Test webhook processing failed',
+          event: testEvent
+        });
+      } catch (error) {
+        logger.error('Test webhook error', { error: error.message });
+        res.status(500).json({ error: 'Test webhook failed' });
+      }
+    }
+  );
+}
 
 module.exports = router;
