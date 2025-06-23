@@ -10,6 +10,7 @@ const express = require('express');
 const { authenticateJWT } = require('../middlewares/auth');
 const { validateUuid, validateBooking, validateGetRequest } = require('../middlewares/validation');
 const bookingController = require('../controllers/booking.controller');
+const subscriptionService = require('../services/subscription.service');
 
 const router = express.Router();
 
@@ -28,7 +29,25 @@ router.get('/my', validateGetRequest, bookingController.getUserBookings);
  * @desc Create new booking
  * @access Private
  */
-router.post('/my', validateBooking, bookingController.createBooking);
+router.post('/my', 
+  validateBooking,
+  subscriptionService.requireWithinLimit('bookings_per_month', async (req) => {
+    const { Booking } = require('../models');
+    const startOfMonth = new Date();
+    startOfMonth.setDate(1);
+    startOfMonth.setHours(0, 0, 0, 0);
+    
+    return await Booking.count({
+      where: {
+        hostId: req.user.id,
+        startTime: {
+          $gte: startOfMonth
+        }
+      }
+    });
+  }),
+  bookingController.createBooking
+);
 
 /**
  * @route GET /api/bookings/my/:id

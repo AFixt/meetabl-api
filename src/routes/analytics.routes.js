@@ -9,11 +9,15 @@
 const express = require('express');
 const { authenticateJWT } = require('../middlewares/auth');
 const analyticsController = require('../controllers/analytics.controller');
+const subscriptionService = require('../services/subscription.service');
 
 const router = express.Router();
 
 // Apply authentication middleware to all routes
 router.use(authenticateJWT);
+
+// Analytics requires professional or enterprise plan
+router.use(subscriptionService.requireFeature('analytics'));
 
 /**
  * @route GET /api/analytics/bookings/stats

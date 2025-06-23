@@ -16,11 +16,13 @@ const {
   validateUserIdParam
 } = require('../middlewares/validation');
 const teamController = require('../controllers/team.controller');
+const subscriptionService = require('../services/subscription.service');
 
 const router = express.Router();
 
-// All team routes require authentication
+// All team routes require authentication and teams feature
 router.use(authenticateJWT);
+router.use(subscriptionService.requireFeature('teams'));
 
 /**
  * @route POST /api/teams
@@ -69,7 +71,15 @@ router.get('/:id/members', validateUuid, validateGetRequest, teamController.getT
  * @desc Add team member
  * @access Private
  */
-router.post('/:id/members', validateUuid, validateTeamMember, teamController.addTeamMember);
+router.post('/:id/members', 
+  validateUuid, 
+  validateTeamMember,
+  subscriptionService.requireWithinLimit('team_members', async (req) => {
+    const { TeamMember } = require('../models');
+    return await TeamMember.count({ where: { teamId: req.params.id } });
+  }),
+  teamController.addTeamMember
+);
 
 /**
  * @route DELETE /api/teams/:id/members/:userId
