@@ -336,7 +336,74 @@ app.get('/', (req, res) => {
   });
 });
 
-// Health check endpoint with monitoring info
+// Import health check service for root endpoints
+const healthCheckService = require('./services/health-check.service');
+
+// Root health check endpoints (commonly used by load balancers)
+app.get('/health', async (req, res) => {
+  try {
+    const result = await healthCheckService.getBasicHealth();
+    const statusCode = result.status === 'healthy' ? 200 : 503;
+    res.status(statusCode).json(result);
+  } catch (error) {
+    res.status(503).json({
+      status: 'unhealthy',
+      timestamp: new Date().toISOString()
+    });
+  }
+});
+
+app.get('/healthz', async (req, res) => {
+  try {
+    const result = await healthCheckService.getBasicHealth();
+    const statusCode = result.status === 'healthy' ? 200 : 503;
+    res.status(statusCode).json(result);
+  } catch (error) {
+    res.status(503).json({
+      status: 'unhealthy',
+      timestamp: new Date().toISOString()
+    });
+  }
+});
+
+app.get('/ping', (req, res) => {
+  res.status(200).json({
+    status: 'pong',
+    timestamp: new Date().toISOString(),
+    uptime: process.uptime()
+  });
+});
+
+app.get('/ready', async (req, res) => {
+  try {
+    const isReady = await healthCheckService.isReady();
+    
+    if (isReady) {
+      res.status(200).json({
+        status: 'ready',
+        timestamp: new Date().toISOString()
+      });
+    } else {
+      res.status(503).json({
+        status: 'not-ready',
+        timestamp: new Date().toISOString()
+      });
+    }
+  } catch (error) {
+    res.status(503).json({
+      status: 'not-ready',
+      timestamp: new Date().toISOString()
+    });
+  }
+});
+
+app.get('/alive', (req, res) => {
+  const result = healthCheckService.isAlive();
+  const statusCode = result.status === 'healthy' ? 200 : 503;
+  res.status(statusCode).json(result);
+});
+
+// Legacy /api/health endpoint with detailed monitoring info
 app.get('/api/health', async (req, res) => {
   try {
     const { sequelize, getPoolStats } = require('./config/database');

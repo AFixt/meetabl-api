@@ -9,6 +9,7 @@
 const router = require('express').Router();
 const metricsService = require('../services/metrics.service');
 const logManagementService = require('../services/log-management.service');
+const healthCheckService = require('../services/health-check.service');
 const { authenticateJWT } = require('../middlewares/auth');
 const { createLogger } = require('../config/logger');
 
@@ -16,38 +17,112 @@ const logger = createLogger('monitoring-routes');
 
 /**
  * GET /api/monitoring/health
- * Basic health check endpoint
+ * Comprehensive health check endpoint
  */
 router.get('/health', async (req, res) => {
   try {
-    const { sequelize } = require('../config/database');
+    const healthResult = await healthCheckService.runAllChecks();
     
-    // Test database connection
-    await sequelize.authenticate();
+    // Add environment and version info
+    healthResult.environment = process.env.NODE_ENV;
+    healthResult.version = process.env.npm_package_version || '1.0.0';
+    healthResult.uptime = process.uptime();
     
-    const health = {
-      status: 'healthy',
-      timestamp: new Date().toISOString(),
-      environment: process.env.NODE_ENV,
-      version: process.env.npm_package_version || '1.0.0',
-      uptime: process.uptime(),
-      database: 'connected',
-      memory: process.memoryUsage()
-    };
-
-    res.status(200).json(health);
+    const statusCode = healthResult.status === 'healthy' ? 200 : 503;
+    res.status(statusCode).json(healthResult);
   } catch (error) {
     logger.error('Health check failed', { error: error.message });
     
-    const health = {
+    res.status(503).json({
       status: 'unhealthy',
       timestamp: new Date().toISOString(),
       environment: process.env.NODE_ENV,
       error: error.message,
-      database: 'disconnected'
-    };
+      checks: {}
+    });
+  }
+});
 
-    res.status(503).json(health);
+/**
+ * GET /api/monitoring/health/live
+ * Kubernetes liveness probe endpoint
+ */
+router.get('/health/live', (req, res) => {
+  const result = healthCheckService.isAlive();
+  const statusCode = result.status === 'healthy' ? 200 : 503;
+  res.status(statusCode).json(result);
+});
+
+/**
+ * GET /api/monitoring/health/ready
+ * Kubernetes readiness probe endpoint
+ */
+router.get('/health/ready', async (req, res) => {
+  try {
+    const isReady = await healthCheckService.isReady();
+    
+    if (isReady) {
+      res.status(200).json({
+        status: 'ready',
+        timestamp: new Date().toISOString()
+      });
+    } else {
+      res.status(503).json({
+        status: 'not-ready',
+        timestamp: new Date().toISOString()
+      });
+    }
+  } catch (error) {
+    logger.error('Readiness check failed', { error: error.message });
+    res.status(503).json({
+      status: 'not-ready',
+      timestamp: new Date().toISOString(),
+      error: error.message
+    });
+  }
+});
+
+/**
+ * GET /api/monitoring/health/basic
+ * Load balancer health check endpoint (fast, minimal)
+ */
+router.get('/health/basic', async (req, res) => {
+  try {
+    const result = await healthCheckService.getBasicHealth();
+    const statusCode = result.status === 'healthy' ? 200 : 503;
+    res.status(statusCode).json(result);
+  } catch (error) {
+    res.status(503).json({
+      status: 'unhealthy',
+      timestamp: new Date().toISOString()
+    });
+  }
+});
+
+/**
+ * GET /api/monitoring/health/:check
+ * Individual health check endpoint
+ */
+router.get('/health/:check', async (req, res) => {
+  try {
+    const checkName = req.params.check;
+    const result = await healthCheckService.runCheck(checkName);
+    
+    const statusCode = result.status === 'healthy' ? 200 : 
+                      result.status === 'warning' ? 200 : 503;
+                      
+    res.status(statusCode).json(result);
+  } catch (error) {
+    logger.error('Individual health check failed', { 
+      check: req.params.check, 
+      error: error.message 
+    });
+    
+    res.status(404).json({
+      status: 'error',
+      message: error.message,
+      timestamp: new Date().toISOString()
+    });
   }
 });
 
