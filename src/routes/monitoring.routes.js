@@ -8,6 +8,7 @@
 
 const router = require('express').Router();
 const metricsService = require('../services/metrics.service');
+const logManagementService = require('../services/log-management.service');
 const { authenticateJWT } = require('../middlewares/auth');
 const { createLogger } = require('../config/logger');
 
@@ -217,5 +218,65 @@ if (process.env.NODE_ENV !== 'production') {
     }
   });
 }
+
+/**
+ * GET /api/monitoring/logs/stats
+ * Get log statistics and disk usage
+ */
+router.get('/logs/stats', authenticateJWT, async (req, res) => {
+  try {
+    const stats = await logManagementService.getLogStatistics();
+    res.json({
+      success: true,
+      logStats: stats
+    });
+  } catch (error) {
+    logger.error('Error fetching log statistics', { error: error.message });
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch log statistics'
+    });
+  }
+});
+
+/**
+ * POST /api/monitoring/logs/cleanup
+ * Manually trigger log cleanup
+ */
+router.post('/logs/cleanup', authenticateJWT, async (req, res) => {
+  try {
+    await logManagementService.cleanupOldLogs();
+    res.json({
+      success: true,
+      message: 'Log cleanup completed'
+    });
+  } catch (error) {
+    logger.error('Error during manual log cleanup', { error: error.message });
+    res.status(500).json({
+      success: false,
+      error: 'Log cleanup failed'
+    });
+  }
+});
+
+/**
+ * POST /api/monitoring/logs/compress
+ * Manually trigger log compression
+ */
+router.post('/logs/compress', authenticateJWT, async (req, res) => {
+  try {
+    await logManagementService.compressOldLogs();
+    res.json({
+      success: true,
+      message: 'Log compression completed'
+    });
+  } catch (error) {
+    logger.error('Error during manual log compression', { error: error.message });
+    res.status(500).json({
+      success: false,
+      error: 'Log compression failed'
+    });
+  }
+});
 
 module.exports = router;

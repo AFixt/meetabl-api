@@ -19,6 +19,8 @@ const { initializeSession, sessionCleanup, sessionSecurity } = require('./config
 const dbMonitor = require('./utils/db-monitor');
 const { errorHandler, notFoundError } = require('./utils/error-response');
 const { requestPerformanceMiddleware, initializePerformanceMonitoring } = require('./middlewares/performance');
+const { requestLoggingMiddleware, errorLoggingMiddleware } = require('./middlewares/logging');
+const logManagementService = require('./services/log-management.service');
 const statusMonitor = require('express-status-monitor');
 
 // Validate critical environment variables at startup
@@ -85,6 +87,11 @@ const app = express();
 
 // Initialize performance monitoring
 initializePerformanceMonitoring();
+
+// Initialize log management
+logManagementService.initialize().catch(error => {
+  logger.error('Failed to initialize log management service', { error: error.message });
+});
 
 // Status monitor configuration
 const statusMonitorConfig = {
@@ -240,7 +247,8 @@ const passwordResetLimiter = createRateLimiter(
 // Apply general rate limiting to all routes
 app.use(generalLimiter);
 
-// Add performance monitoring middleware
+// Add logging and performance monitoring middleware
+app.use(requestLoggingMiddleware);
 app.use(requestPerformanceMiddleware);
 
 // Apply strict rate limiting to authentication endpoints
@@ -360,48 +368,13 @@ app.get('/api/health', async (req, res) => {
 });
 
 // 404 handler
-app.use((req, res) => {
-  logger.info(`Not found: ${req.method} ${req.url}`);
-  res.status(404).json({
-    error: {
-      code: 'not_found',
-      message: 'The requested resource was not found.'
-    }
-  });
-});
-
-// Utility function to sanitize sensitive data from logs
-const sanitizeForLogging = (data) => {
-  if (!data || typeof data !== 'object') return data;
-  
-  const sensitiveFields = [
-    'password', 'token', 'secret', 'authorization', 'cookie',
-    'email', 'phone', 'ssn', 'credit_card', 'customer_email',
-    'customer_phone', 'customer_name', 'name'
-  ];
-  
-  const sanitized = Array.isArray(data) ? [] : {};
-  
-  for (const [key, value] of Object.entries(data)) {
-    const lowerKey = key.toLowerCase();
-    
-    if (sensitiveFields.some(field => lowerKey.includes(field))) {
-      sanitized[key] = '[REDACTED]';
-    } else if (value && typeof value === 'object') {
-      sanitized[key] = sanitizeForLogging(value);
-    } else {
-      sanitized[key] = value;
-    }
-  }
-  
-  return sanitized;
-};
-
-// 404 handler
 app.use((req, res, next) => {
   const error = notFoundError('Route not found');
   next(error);
 });
+
+// Error logging middleware (before global error handler)
+app.use(errorLoggingMiddleware);
 
 // Standardized error handling middleware
 app.use(errorHandler);
