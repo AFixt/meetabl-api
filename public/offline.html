@@ -1,0 +1,358 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#1f2937">
+  <title>meetabl API - Offline</title>
+  <link rel="manifest" href="/manifest.json">
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: #ffffff;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+    
+    .container {
+      text-align: center;
+      max-width: 500px;
+      background: rgba(255, 255, 255, 0.1);
+      padding: 40px;
+      border-radius: 20px;
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+    }
+    
+    .icon {
+      font-size: 80px;
+      margin-bottom: 24px;
+      animation: pulse 2s infinite;
+    }
+    
+    @keyframes pulse {
+      0%, 100% { transform: scale(1); }
+      50% { transform: scale(1.1); }
+    }
+    
+    h1 {
+      font-size: 2.5rem;
+      margin-bottom: 16px;
+      font-weight: 700;
+    }
+    
+    .subtitle {
+      font-size: 1.2rem;
+      margin-bottom: 24px;
+      opacity: 0.9;
+      font-weight: 400;
+    }
+    
+    .description {
+      font-size: 1rem;
+      line-height: 1.6;
+      margin-bottom: 32px;
+      opacity: 0.8;
+    }
+    
+    .actions {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      margin-bottom: 32px;
+    }
+    
+    .btn {
+      padding: 14px 28px;
+      border: none;
+      border-radius: 12px;
+      font-size: 1rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      text-decoration: none;
+      display: inline-block;
+    }
+    
+    .btn-primary {
+      background: #3b82f6;
+      color: white;
+    }
+    
+    .btn-primary:hover {
+      background: #2563eb;
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(59, 130, 246, 0.4);
+    }
+    
+    .btn-secondary {
+      background: rgba(255, 255, 255, 0.2);
+      color: white;
+      border: 1px solid rgba(255, 255, 255, 0.3);
+    }
+    
+    .btn-secondary:hover {
+      background: rgba(255, 255, 255, 0.3);
+      transform: translateY(-2px);
+    }
+    
+    .status {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+      padding: 16px;
+      background: rgba(0, 0, 0, 0.2);
+      border-radius: 12px;
+      margin-bottom: 24px;
+    }
+    
+    .status-indicator {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      background: #ef4444;
+      animation: blink 1.5s infinite;
+    }
+    
+    @keyframes blink {
+      0%, 50% { opacity: 1; }
+      51%, 100% { opacity: 0.3; }
+    }
+    
+    .features {
+      text-align: left;
+      background: rgba(0, 0, 0, 0.2);
+      padding: 20px;
+      border-radius: 12px;
+      margin-top: 24px;
+    }
+    
+    .features h3 {
+      margin-bottom: 16px;
+      color: #ffffff;
+    }
+    
+    .features ul {
+      list-style: none;
+    }
+    
+    .features li {
+      padding: 8px 0;
+      opacity: 0.9;
+    }
+    
+    .features li::before {
+      content: "✓ ";
+      color: #10b981;
+      font-weight: bold;
+      margin-right: 8px;
+    }
+    
+    .footer {
+      margin-top: 32px;
+      padding-top: 24px;
+      border-top: 1px solid rgba(255, 255, 255, 0.2);
+      opacity: 0.7;
+      font-size: 0.9rem;
+    }
+    
+    @media (max-width: 480px) {
+      .container {
+        padding: 24px;
+        margin: 16px;
+      }
+      
+      h1 {
+        font-size: 2rem;
+      }
+      
+      .subtitle {
+        font-size: 1.1rem;
+      }
+      
+      .actions {
+        flex-direction: column;
+      }
+    }
+    
+    /* Accessibility improvements */
+    @media (prefers-reduced-motion: reduce) {
+      .icon, .status-indicator {
+        animation: none;
+      }
+    }
+    
+    .btn:focus {
+      outline: 3px solid rgba(255, 255, 255, 0.5);
+      outline-offset: 2px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="icon" role="img" aria-label="Offline indicator">📡</div>
+    
+    <h1>You're Offline</h1>
+    <p class="subtitle">Don't worry, we've got you covered!</p>
+    
+    <div class="status" role="status" aria-live="polite">
+      <div class="status-indicator" aria-hidden="true"></div>
+      <span>No internet connection detected</span>
+    </div>
+    
+    <p class="description">
+      meetabl API is currently unavailable, but many features are still accessible offline. 
+      Your data will sync automatically when connection is restored.
+    </p>
+    
+    <div class="actions">
+      <button class="btn btn-primary" onclick="checkConnection()" aria-describedby="retry-description">
+        Try Again
+      </button>
+      <a href="/status" class="btn btn-secondary">
+        View Cached Status
+      </a>
+    </div>
+    
+    <div class="features">
+      <h3>Available Offline:</h3>
+      <ul>
+        <li>View cached API documentation</li>
+        <li>Access health check information</li>
+        <li>Browse monitoring dashboard</li>
+        <li>Review performance metrics</li>
+        <li>View system status</li>
+      </ul>
+    </div>
+    
+    <div class="footer">
+      <p>meetabl API - Progressive Web App</p>
+      <p>Powered by Service Workers</p>
+    </div>
+  </div>
+  
+  <script>
+    // Check connection status
+    function checkConnection() {
+      const button = document.querySelector('.btn-primary');
+      const originalText = button.textContent;
+      
+      button.textContent = 'Checking...';
+      button.disabled = true;
+      
+      // Attempt to fetch a lightweight endpoint
+      fetch('/api/health', { 
+        cache: 'no-cache',
+        signal: AbortSignal.timeout(5000) // 5 second timeout
+      })
+      .then(response => {
+        if (response.ok) {
+          window.location.reload();
+        } else {
+          throw new Error('Health check failed');
+        }
+      })
+      .catch(error => {
+        console.log('Still offline:', error.message);
+        button.textContent = originalText;
+        button.disabled = false;
+        
+        // Update status message
+        updateStatus('Connection check failed. Please try again.');
+      });
+    }
+    
+    // Update connection status
+    function updateStatus(message) {
+      const statusElement = document.querySelector('.status span');
+      if (statusElement) {
+        statusElement.textContent = message;
+      }
+    }
+    
+    // Listen for online/offline events
+    window.addEventListener('online', () => {
+      updateStatus('Connection restored! Redirecting...');
+      setTimeout(() => {
+        window.location.reload();
+      }, 1000);
+    });
+    
+    window.addEventListener('offline', () => {
+      updateStatus('Connection lost');
+    });
+    
+    // Service worker message handler
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.addEventListener('message', (event) => {
+        if (event.data.type === 'CONNECTION_RESTORED') {
+          updateStatus('Connection restored by service worker');
+          setTimeout(() => {
+            window.location.reload();
+          }, 1000);
+        }
+      });
+    }
+    
+    // Keyboard shortcuts for accessibility
+    document.addEventListener('keydown', (event) => {
+      if (event.key === 'r' && (event.ctrlKey || event.metaKey)) {
+        event.preventDefault();
+        checkConnection();
+      }
+    });
+    
+    // Auto-retry connection every 30 seconds
+    let retryInterval = setInterval(() => {
+      if (navigator.onLine) {
+        fetch('/api/health', { 
+          cache: 'no-cache',
+          signal: AbortSignal.timeout(3000)
+        })
+        .then(response => {
+          if (response.ok) {
+            clearInterval(retryInterval);
+            window.location.reload();
+          }
+        })
+        .catch(() => {
+          // Still offline, continue retrying
+        });
+      }
+    }, 30000);
+    
+    // Clean up interval when page is hidden
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden) {
+        clearInterval(retryInterval);
+      } else {
+        // Restart interval when page becomes visible again
+        retryInterval = setInterval(() => {
+          if (navigator.onLine) {
+            fetch('/api/health', { cache: 'no-cache' })
+            .then(response => {
+              if (response.ok) {
+                clearInterval(retryInterval);
+                window.location.reload();
+              }
+            })
+            .catch(() => {});
+          }
+        }, 30000);
+      }
+    });
+  </script>
+</body>
+</html>

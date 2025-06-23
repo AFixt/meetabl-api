@@ -7,6 +7,7 @@
  */
 
 const express = require('express');
+const path = require('path');
 const helmet = require('helmet');
 const cors = require('cors');
 const bodyParser = require('body-parser');
@@ -22,6 +23,7 @@ const { requestPerformanceMiddleware, initializePerformanceMonitoring } = requir
 const { requestLoggingMiddleware, errorLoggingMiddleware } = require('./middlewares/logging');
 const logManagementService = require('./services/log-management.service');
 const statusMonitor = require('express-status-monitor');
+const { initializePWA } = require('./middlewares/pwa');
 
 // Validate critical environment variables at startup
 function validateEnvironment() {
@@ -92,6 +94,12 @@ initializePerformanceMonitoring();
 logManagementService.initialize().catch(error => {
   logger.error('Failed to initialize log management service', { error: error.message });
 });
+
+// Initialize PWA features
+initializePWA(app);
+
+// Serve static files (for PWA assets)
+app.use(express.static(path.join(__dirname, '../public')));
 
 // Status monitor configuration
 const statusMonitorConfig = {
@@ -197,11 +205,7 @@ app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(cookieParser());
 
-// Redis-based session configuration
-const sessionMiddleware = await initializeSession();
-app.use(sessionMiddleware);
-app.use(sessionCleanup);
-app.use(sessionSecurity);
+// Redis-based session configuration will be initialized in initializeApp
 
 // Initialize CSRF protection
 app.use(initializeCsrf);
@@ -283,6 +287,7 @@ const docsRoutes = require('./routes/docs.routes');
 const outsetaRoutes = require('./routes/outseta.routes');
 const subscriptionRoutes = require('./routes/subscription.routes');
 const monitoringRoutes = require('./routes/monitoring.routes');
+const pwaRoutes = require('./routes/pwa.routes');
 
 // Database monitoring endpoint (only in development/staging)
 if (process.env.NODE_ENV !== 'production') {
@@ -317,6 +322,7 @@ app.use('/api/payments', paymentRoutes);
 app.use('/api/outseta', outsetaRoutes);
 app.use('/api/subscriptions', subscriptionRoutes);
 app.use('/api/monitoring', monitoringRoutes);
+app.use('/api/pwa', pwaRoutes);
 
 // Documentation routes (no rate limiting for docs)
 app.use('/api/docs', docsRoutes);
@@ -385,6 +391,12 @@ app.use(errorHandler);
  */
 const initializeApp = async () => {
   try {
+    // Initialize session middleware
+    const sessionMiddleware = await initializeSession();
+    app.use(sessionMiddleware);
+    app.use(sessionCleanup);
+    app.use(sessionSecurity);
+    
     // Initialize database connection
     await initializeDatabase();
 
