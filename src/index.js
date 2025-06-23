@@ -9,6 +9,9 @@
 // Load environment variables
 require('dotenv').config();
 
+// Initialize telemetry first (must be before other imports)
+require('./telemetry');
+
 const logger = require('./config/logger');
 const { initializeApp } = require('./app');
 const { startMonitoringJob } = require('./jobs/db-monitor-job');

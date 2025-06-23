@@ -18,6 +18,8 @@ const { initializeCsrf, protectCsrf, provideCsrfToken } = require('./middlewares
 const { initializeSession, sessionCleanup, sessionSecurity } = require('./config/session');
 const dbMonitor = require('./utils/db-monitor');
 const { errorHandler, notFoundError } = require('./utils/error-response');
+const { requestPerformanceMiddleware, initializePerformanceMonitoring } = require('./middlewares/performance');
+const statusMonitor = require('express-status-monitor');
 
 // Validate critical environment variables at startup
 function validateEnvironment() {
@@ -80,6 +82,36 @@ const { initializeDatabase } = process.env.NODE_ENV === 'test'
 
 // Create Express app
 const app = express();
+
+// Initialize performance monitoring
+initializePerformanceMonitoring();
+
+// Status monitor configuration
+const statusMonitorConfig = {
+  title: 'meetabl API Status',
+  path: '/status',
+  spans: [
+    { interval: 1, retention: 60 },
+    { interval: 5, retention: 60 },
+    { interval: 15, retention: 60 }
+  ],
+  chartVisibility: {
+    cpu: true,
+    mem: true,
+    load: true,
+    responseTime: true,
+    rps: true,
+    statusCodes: true
+  },
+  healthChecks: [{
+    protocol: 'http',
+    host: 'localhost',
+    path: '/api/monitoring/health',
+    port: process.env.PORT || 3000
+  }]
+};
+
+app.use(statusMonitor(statusMonitorConfig));
 
 // Apply security middlewares with comprehensive CSP
 app.use(helmet({
@@ -208,6 +240,9 @@ const passwordResetLimiter = createRateLimiter(
 // Apply general rate limiting to all routes
 app.use(generalLimiter);
 
+// Add performance monitoring middleware
+app.use(requestPerformanceMiddleware);
+
 // Apply strict rate limiting to authentication endpoints
 app.use('/api/auth/login', authLimiter);
 app.use('/api/auth/register', authLimiter);
@@ -239,6 +274,7 @@ const paymentRoutes = require('./routes/payment.routes');
 const docsRoutes = require('./routes/docs.routes');
 const outsetaRoutes = require('./routes/outseta.routes');
 const subscriptionRoutes = require('./routes/subscription.routes');
+const monitoringRoutes = require('./routes/monitoring.routes');
 
 // Database monitoring endpoint (only in development/staging)
 if (process.env.NODE_ENV !== 'production') {
@@ -272,6 +308,7 @@ app.use('/api/teams', teamRoutes);
 app.use('/api/payments', paymentRoutes);
 app.use('/api/outseta', outsetaRoutes);
 app.use('/api/subscriptions', subscriptionRoutes);
+app.use('/api/monitoring', monitoringRoutes);
 
 // Documentation routes (no rate limiting for docs)
 app.use('/api/docs', docsRoutes);
