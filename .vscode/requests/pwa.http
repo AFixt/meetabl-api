@@ -1,0 +1,97 @@
+# Progressive Web App API Requests
+# Use with the REST Client extension in VS Code
+
+@baseUrl = http://localhost:3000
+@contentType = application/json
+@authToken = your-jwt-token-here
+
+### PWA Manifest
+GET {{baseUrl}}/manifest.json
+
+### Service Worker
+GET {{baseUrl}}/service-worker.js
+
+### PWA Status and Capabilities
+GET {{baseUrl}}/api/pwa/status
+
+### Subscribe to Push Notifications (requires authentication)
+POST {{baseUrl}}/api/pwa/subscribe
+Content-Type: {{contentType}}
+Authorization: Bearer {{authToken}}
+
+{
+  "subscription": {
+    "endpoint": "https://fcm.googleapis.com/fcm/send/example-endpoint",
+    "keys": {
+      "p256dh": "example-p256dh-key",
+      "auth": "example-auth-key"
+    }
+  }
+}
+
+### Unsubscribe from Push Notifications (requires authentication)
+DELETE {{baseUrl}}/api/pwa/unsubscribe
+Content-Type: {{contentType}}
+Authorization: Bearer {{authToken}}
+
+{
+  "endpoint": "https://fcm.googleapis.com/fcm/send/example-endpoint"
+}
+
+### Background Sync - Bookings (requires authentication)
+POST {{baseUrl}}/api/pwa/sync
+Content-Type: {{contentType}}
+Authorization: Bearer {{authToken}}
+
+{
+  "syncType": "bookings",
+  "data": [
+    {
+      "id": "offline-booking-1",
+      "title": "Offline Meeting",
+      "start": "2024-01-15T10:00:00Z",
+      "end": "2024-01-15T11:00:00Z",
+      "attendeeEmail": "attendee@example.com"
+    }
+  ]
+}
+
+### Background Sync - Metrics (requires authentication)
+POST {{baseUrl}}/api/pwa/sync
+Content-Type: {{contentType}}
+Authorization: Bearer {{authToken}}
+
+{
+  "syncType": "metrics",
+  "data": [
+    {
+      "event": "page_view",
+      "timestamp": "2024-01-15T10:00:00Z",
+      "data": {
+        "page": "/dashboard",
+        "duration": 5000
+      }
+    }
+  ]
+}
+
+### Get Offline Data (requires authentication)
+GET {{baseUrl}}/api/pwa/offline-data
+Authorization: Bearer {{authToken}}
+
+### Test Push Notification (development only, requires authentication)
+POST {{baseUrl}}/api/pwa/test-notification
+Content-Type: {{contentType}}
+Authorization: Bearer {{authToken}}
+
+{
+  "title": "Test Notification",
+  "body": "This is a test push notification from the meetabl API",
+  "data": {
+    "url": "/dashboard",
+    "action": "view"
+  }
+}
+
+### Offline Fallback Page
+GET {{baseUrl}}/offline.html

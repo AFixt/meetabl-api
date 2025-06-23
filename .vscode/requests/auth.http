@@ -1,0 +1,62 @@
+# Authentication API Requests
+# Use with the REST Client extension in VS Code
+
+@baseUrl = http://localhost:3000
+@contentType = application/json
+
+### Variables (update these for testing)
+@testEmail = test@example.com
+@testPassword = password123
+@testName = Test User
+
+### Register New User
+POST {{baseUrl}}/api/auth/register
+Content-Type: {{contentType}}
+
+{
+  "name": "{{testName}}",
+  "email": "{{testEmail}}",
+  "password": "{{testPassword}}"
+}
+
+### Login User
+# @name login
+POST {{baseUrl}}/api/auth/login
+Content-Type: {{contentType}}
+
+{
+  "email": "{{testEmail}}",
+  "password": "{{testPassword}}"
+}
+
+### Extract token from login response
+@authToken = {{login.response.body.token}}
+
+### Refresh Token
+POST {{baseUrl}}/api/auth/refresh-token
+Content-Type: {{contentType}}
+Authorization: Bearer {{authToken}}
+
+### Forgot Password
+POST {{baseUrl}}/api/auth/forgot-password
+Content-Type: {{contentType}}
+
+{
+  "email": "{{testEmail}}"
+}
+
+### Reset Password (requires reset token from email)
+POST {{baseUrl}}/api/auth/reset-password
+Content-Type: {{contentType}}
+
+{
+  "token": "reset-token-from-email",
+  "password": "newpassword123"
+}
+
+### Verify Email (requires verification token)
+GET {{baseUrl}}/api/auth/verify-email?token=verification-token-from-email
+
+### Logout
+POST {{baseUrl}}/api/auth/logout
+Authorization: Bearer {{authToken}}

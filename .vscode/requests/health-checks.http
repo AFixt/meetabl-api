@@ -1,0 +1,73 @@
+# Health Check API Requests
+# Use with the REST Client extension in VS Code
+
+@baseUrl = http://localhost:3000
+
+### Basic Health Check
+GET {{baseUrl}}/health
+
+### Kubernetes-style Health Check
+GET {{baseUrl}}/healthz
+
+### Ping Test
+GET {{baseUrl}}/ping
+
+### Readiness Probe
+GET {{baseUrl}}/ready
+
+### Liveness Probe
+GET {{baseUrl}}/alive
+
+### Comprehensive Health Check
+GET {{baseUrl}}/api/monitoring/health
+
+### Individual Component Health Checks
+
+# Database Health
+GET {{baseUrl}}/api/monitoring/health/database
+
+# Memory Health
+GET {{baseUrl}}/api/monitoring/health/memory
+
+# Redis Health
+GET {{baseUrl}}/api/monitoring/health/redis
+
+# Filesystem Health
+GET {{baseUrl}}/api/monitoring/health/filesystem
+
+# Dependencies Health
+GET {{baseUrl}}/api/monitoring/health/dependencies
+
+# External APIs Health
+GET {{baseUrl}}/api/monitoring/health/external-apis
+
+### Monitoring Endpoints (Require Authentication)
+
+# Application Metrics
+GET {{baseUrl}}/api/monitoring/metrics
+Authorization: Bearer {{authToken}}
+
+# Application Statistics
+GET {{baseUrl}}/api/monitoring/stats
+Authorization: Bearer {{authToken}}
+
+# Performance Metrics
+GET {{baseUrl}}/api/monitoring/performance
+Authorization: Bearer {{authToken}}
+
+### Log Management (Require Authentication)
+
+# Log Statistics
+GET {{baseUrl}}/api/monitoring/logs/stats
+Authorization: Bearer {{authToken}}
+
+# Manual Log Cleanup
+POST {{baseUrl}}/api/monitoring/logs/cleanup
+Authorization: Bearer {{authToken}}
+
+# Manual Log Compression
+POST {{baseUrl}}/api/monitoring/logs/compress
+Authorization: Bearer {{authToken}}
+
+### Status Monitor Dashboard
+GET {{baseUrl}}/status
