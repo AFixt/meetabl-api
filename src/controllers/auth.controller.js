@@ -14,10 +14,31 @@ const logger = require('../config/logger');
 const { User, UserSettings, AuditLog, JwtBlacklist } = require('../models');
 const { sequelize } = require('../config/database');
 const { sendPasswordResetEmail, sendEmailVerification } = require('../services/notification.service');
+const stripeCustomerService = require('../services/stripe-customer.service');
+const stripeService = require('../services/stripe.service');
+const stripeSubscriptionService = require('../services/stripe-subscription.service');
 const { asyncHandler, successResponse, conflictError, unauthorizedError, notFoundError, validationError, createError } = require('../utils/error-response');
 
 /**
- * Register a new user
+ * Get subscription status for user
+ * @param {Object} user - User object
+ * @returns {Promise<Object>} Subscription status
+ */
+async function getSubscriptionStatus(user) {
+  try {
+    return await stripeSubscriptionService.getSubscriptionStatus(user);
+  } catch (error) {
+    logger.error('Error getting subscription status:', error);
+    return {
+      status: 'unknown',
+      has_access: stripeService.isSuperAdmin(user),
+      error: 'Failed to check subscription status'
+    };
+  }
+}
+
+/**
+ * Register a new user with Stripe customer creation
  * @param {Object} req - Express request object
  * @param {Object} res - Express response object
  */
@@ -26,7 +47,7 @@ const register = asyncHandler(async (req, res) => {
 
   try {
     const {
-      name, email, password, timezone
+      first_name, last_name, email, password, phone, timezone
     } = req.body;
 
     // Check if user already exists
@@ -46,15 +67,22 @@ const register = asyncHandler(async (req, res) => {
     const verificationToken = crypto.randomBytes(32).toString('hex');
     const hashedVerificationToken = crypto.createHash('sha256').update(verificationToken).digest('hex');
 
+    // Set default consent for new users (can be changed later)
     const user = await User.create({
       id: userId,
-      name,
+      first_name,
+      last_name,
       email,
+      phone,
       password_hash: passwordHash,
       timezone: timezone || 'UTC',
       email_verified: false,
       email_verification_token: hashedVerificationToken,
-      email_verification_expires: new Date(Date.now() + 24 * 60 * 60 * 1000) // 24 hours
+      email_verification_expires: new Date(Date.now() + 24 * 60 * 60 * 1000), // 24 hours
+      marketing_consent: false, // User can opt-in later
+      data_processing_consent: true, // Required for service functionality
+      consent_timestamp: new Date(),
+      is_super_admin: false
     }, { transaction });
 
     // Create default user settings
@@ -70,9 +98,41 @@ const register = asyncHandler(async (req, res) => {
       action: 'user.register',
       metadata: {
         email,
-        timezone
+        timezone,
+        consent_given: {
+          marketing: false,
+          data_processing: true
+        }
       }
     }, { transaction });
+
+    // Commit database transaction first
+    await transaction.commit();
+
+    // Create Stripe customer (after successful user creation)
+    let stripeCustomer = null;
+    try {
+      stripeCustomer = await stripeCustomerService.createCustomer(user, {
+        metadata: {
+          source: 'registration',
+          user_timezone: timezone || 'UTC'
+        }
+      });
+      
+      logger.info(`Stripe customer created for user ${userId}: ${stripeCustomer.id}`);
+    } catch (stripeError) {
+      logger.error('Failed to create Stripe customer during registration:', stripeError);
+      // Don't fail registration if Stripe customer creation fails
+      // Customer can be created later when needed
+    }
+
+    // Send verification email
+    try {
+      await sendEmailVerification(user, verificationToken);
+    } catch (emailError) {
+      logger.error('Error sending verification email:', emailError);
+      // Continue anyway - user can request resend
+    }
 
     // Generate JWT token with unique ID
     const jti = uuidv4();
@@ -81,17 +141,6 @@ const register = asyncHandler(async (req, res) => {
       process.env.JWT_SECRET,
       { expiresIn: process.env.JWT_EXPIRES_IN || '7d' }
     );
-
-    // Commit transaction
-    await transaction.commit();
-    
-    // Send verification email
-    try {
-      await sendEmailVerification(user, verificationToken);
-    } catch (emailError) {
-      logger.error('Error sending verification email:', emailError);
-      // Continue anyway - user can request resend
-    }
 
     // Log successful registration
     logger.info(`User registered: ${email}`);
@@ -106,23 +155,31 @@ const register = asyncHandler(async (req, res) => {
 
     res.cookie('token', token, cookieOptions);
 
-    // Return user data without token
+    // Return user data with subscription status
+    const subscriptionStatus = await getSubscriptionStatus(user);
+
     return successResponse(res, {
       id: user.id,
-      name: user.name,
+      first_name: user.first_name,
+      last_name: user.last_name,
       email: user.email,
+      phone: user.phone,
       timezone: user.timezone,
-      email_verified: user.email_verified
-    }, 'User registered successfully', 201);
+      email_verified: user.email_verified,
+      subscription: subscriptionStatus,
+      stripe_customer_created: !!stripeCustomer
+    }, 'User registered successfully. Please check your email to verify your account.', 201);
   } catch (error) {
-    // Rollback transaction
-    await transaction.rollback();
+    // Rollback transaction if still active
+    if (!transaction.finished) {
+      await transaction.rollback();
+    }
     throw error;
   }
 });
 
 /**
- * Login user
+ * Login user with Stripe subscription status
  * @param {Object} req - Express request object
  * @param {Object} res - Express response object
  */
@@ -170,6 +227,9 @@ const login = asyncHandler(async (req, res) => {
       }
     });
 
+    // Get subscription status
+    const subscriptionStatus = await getSubscriptionStatus(user);
+
     // Log successful login
     logger.info(`User logged in: ${email}`);
 
@@ -191,12 +251,17 @@ const login = asyncHandler(async (req, res) => {
     res.cookie('token', token, cookieOptions);
     res.cookie('refreshToken', refreshToken, refreshCookieOptions);
 
-    // Return user data without tokens
+    // Return user data with subscription status
     return successResponse(res, {
       id: user.id,
-      name: user.name,
+      first_name: user.first_name,
+      last_name: user.last_name,
       email: user.email,
-      timezone: user.timezone
+      phone: user.phone,
+      timezone: user.timezone,
+      email_verified: user.email_verified,
+      is_super_admin: user.is_super_admin,
+      subscription: subscriptionStatus
     }, 'Login successful');
   } catch (error) {
     throw error;
