@@ -276,6 +276,7 @@ app.use((req, res, next) => {
 // Note: These will be created in separate files
 const authRoutes = require('./routes/auth.routes');
 const userRoutes = require('./routes/user.routes');
+const accountRoutes = require('./routes/account.routes');
 const availabilityRoutes = require('./routes/availability.routes');
 const bookingRoutes = require('./routes/booking.routes');
 const calendarRoutes = require('./routes/calendar.routes');
@@ -300,6 +301,7 @@ app.get('/api/csrf-token', provideCsrfToken);
 // Apply CSRF protection to state-changing routes
 // Skip authentication routes as they typically don't need CSRF (using JWT)
 app.use('/api/users', protectCsrf);
+app.use('/api/account', protectCsrf);
 app.use('/api/availability', protectCsrf);
 app.use('/api/bookings', protectCsrf);
 app.use('/api/calendar', protectCsrf);
@@ -312,6 +314,7 @@ app.use('/api/subscriptions', protectCsrf);
 // Apply routes
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
+app.use('/api/account', accountRoutes);
 app.use('/api/availability', availabilityRoutes);
 app.use('/api/bookings', bookingRoutes);
 app.use('/api/calendar', calendarRoutes);
