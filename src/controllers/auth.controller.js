@@ -515,11 +515,11 @@ const resetPassword = asyncHandler(async (req, res) => {
 });
 
 /**
- * Verify email with token
+ * Verify/confirm email with token
  * @param {Object} req - Express request object
  * @param {Object} res - Express response object
  */
-const verifyEmail = asyncHandler(async (req, res) => {
+const confirmEmail = asyncHandler(async (req, res) => {
   const transaction = await sequelize.transaction();
 
   try {
@@ -550,28 +550,59 @@ const verifyEmail = asyncHandler(async (req, res) => {
     user.email_verification_expires = null;
     await user.save({ transaction });
 
+    // Ensure Stripe customer exists after email verification
+    let stripeCustomerCreated = false;
+    if (!user.stripe_customer_id) {
+      try {
+        await stripeCustomerService.createCustomer(user, {
+          metadata: {
+            source: 'email_verification',
+            verified_at: new Date().toISOString()
+          }
+        });
+        stripeCustomerCreated = true;
+        logger.info(`Stripe customer created for verified user ${user.id}`);
+      } catch (stripeError) {
+        logger.error('Failed to create Stripe customer after email verification:', stripeError);
+        // Don't fail verification if Stripe customer creation fails
+      }
+    }
+
     // Create audit log
     await AuditLog.create({
       id: uuidv4(),
       user_id: user.id,
       action: 'user.email_verified',
       metadata: {
-        email: user.email
+        email: user.email,
+        stripe_customer_created: stripeCustomerCreated
       }
     }, { transaction });
 
     // Commit transaction
     await transaction.commit();
 
+    // Get updated subscription status
+    const subscriptionStatus = await getSubscriptionStatus(user);
+
     logger.info(`Email verified for: ${user.email}`);
 
-    return successResponse(res, null, 'Email verified successfully');
+    return successResponse(res, {
+      email_verified: true,
+      subscription: subscriptionStatus,
+      stripe_customer_created: stripeCustomerCreated
+    }, 'Email verified successfully! Your account is now active.');
   } catch (error) {
     // Rollback transaction
-    await transaction.rollback();
+    if (!transaction.finished) {
+      await transaction.rollback();
+    }
     throw error;
   }
 });
+
+// Keep the old verifyEmail function for backward compatibility
+const verifyEmail = confirmEmail;
 
 /**
  * Resend verification email
@@ -637,5 +668,6 @@ module.exports = {
   forgotPassword,
   resetPassword,
   verifyEmail,
+  confirmEmail,
   resendVerificationEmail
 };
