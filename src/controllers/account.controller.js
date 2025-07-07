@@ -13,6 +13,8 @@ const stripeService = require('../services/stripe.service');
 const stripeSubscriptionService = require('../services/stripe-subscription.service');
 const stripeCustomerService = require('../services/stripe-customer.service');
 const stripeBillingService = require('../services/stripe-billing.service');
+const { sequelize } = require('../config/database');
+const { QueryTypes } = require('sequelize');
 const { asyncHandler, successResponse, notFoundError, validationError, createError, forbiddenError } = require('../utils/error-response');
 
 /**
@@ -560,6 +562,318 @@ const removePaymentMethod = asyncHandler(async (req, res) => {
 });
 
 /**
+ * Get usage statistics for metered billing
+ * @param {Object} req - Express request object
+ * @param {Object} res - Express response object
+ */
+const getUsage = asyncHandler(async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { period = 'current', metric } = req.query;
+
+    const user = await User.findByPk(userId);
+    if (!user) {
+      throw notFoundError('User not found');
+    }
+
+    // Calculate period dates
+    let startDate, endDate;
+    const now = new Date();
+
+    switch (period) {
+      case 'current':
+        // Current billing period
+        if (user.stripe_current_period_end) {
+          endDate = user.stripe_current_period_end;
+          startDate = new Date(endDate);
+          startDate.setMonth(startDate.getMonth() - 1);
+        } else {
+          // Fallback to current month
+          startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+          endDate = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+        }
+        break;
+      case 'month':
+        startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+        endDate = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+        break;
+      case 'last_month':
+        startDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+        endDate = new Date(now.getFullYear(), now.getMonth(), 0);
+        break;
+      default:
+        startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+        endDate = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+    }
+
+    // Build query
+    let whereClause = 'user_id = :userId AND timestamp BETWEEN :startDate AND :endDate';
+    const replacements = { userId, startDate, endDate };
+
+    if (metric) {
+      whereClause += ' AND metric_name = :metric';
+      replacements.metric = metric;
+    }
+
+    // Get usage summary
+    const usageSummary = await sequelize.query(`
+      SELECT 
+        metric_name,
+        COUNT(*) as usage_count,
+        SUM(quantity) as total_quantity,
+        MIN(timestamp) as first_usage,
+        MAX(timestamp) as last_usage
+      FROM usage_records 
+      WHERE ${whereClause}
+      GROUP BY metric_name
+      ORDER BY metric_name
+    `, {
+      replacements,
+      type: QueryTypes.SELECT
+    });
+
+    // Get daily breakdown for the period
+    const dailyUsage = await sequelize.query(`
+      SELECT 
+        DATE(timestamp) as usage_date,
+        metric_name,
+        SUM(quantity) as daily_total
+      FROM usage_records 
+      WHERE ${whereClause}
+      GROUP BY DATE(timestamp), metric_name
+      ORDER BY usage_date, metric_name
+    `, {
+      replacements,
+      type: QueryTypes.SELECT
+    });
+
+    // Get unreported usage (for debugging)
+    const unreportedUsage = await sequelize.query(`
+      SELECT 
+        metric_name,
+        COUNT(*) as unreported_count,
+        SUM(quantity) as unreported_quantity
+      FROM usage_records 
+      WHERE user_id = :userId AND reported_at IS NULL
+      GROUP BY metric_name
+    `, {
+      replacements: { userId },
+      type: QueryTypes.SELECT
+    });
+
+    // Format response
+    const response = {
+      period: {
+        type: period,
+        start_date: startDate,
+        end_date: endDate
+      },
+      summary: usageSummary.map(item => ({
+        metric: item.metric_name,
+        usage_count: parseInt(item.usage_count),
+        total_quantity: parseInt(item.total_quantity),
+        first_usage: item.first_usage,
+        last_usage: item.last_usage
+      })),
+      daily_breakdown: dailyUsage.map(item => ({
+        date: item.usage_date,
+        metric: item.metric_name,
+        quantity: parseInt(item.daily_total)
+      })),
+      unreported: unreportedUsage.map(item => ({
+        metric: item.metric_name,
+        count: parseInt(item.unreported_count),
+        quantity: parseInt(item.unreported_quantity)
+      }))
+    };
+
+    return successResponse(res, response, 'Usage statistics retrieved successfully');
+  } catch (error) {
+    logger.error('Error getting usage statistics:', error);
+    throw error;
+  }
+});
+
+/**
+ * Record usage for a metric (for internal use)
+ * @param {Object} req - Express request object
+ * @param {Object} res - Express response object
+ */
+const recordUsage = asyncHandler(async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { metric_name, quantity = 1, metadata = {} } = req.body;
+
+    if (!metric_name) {
+      throw validationError([{ field: 'metric_name', message: 'Metric name is required' }]);
+    }
+
+    const user = await User.findByPk(userId);
+    if (!user) {
+      throw notFoundError('User not found');
+    }
+
+    // Create idempotency key
+    const idempotencyKey = `${userId}-${metric_name}-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+
+    // Record usage
+    const usageRecord = await sequelize.query(`
+      INSERT INTO usage_records (
+        user_id, metric_name, quantity, timestamp, idempotency_key, metadata, created, updated
+      ) VALUES (
+        :userId, :metricName, :quantity, NOW(), :idempotencyKey, :metadata, NOW(), NOW()
+      )
+    `, {
+      replacements: {
+        userId,
+        metricName: metric_name,
+        quantity: parseInt(quantity),
+        idempotencyKey,
+        metadata: JSON.stringify(metadata)
+      },
+      type: QueryTypes.INSERT
+    });
+
+    // Log the usage recording
+    await AuditLog.create({
+      id: uuidv4(),
+      user_id: userId,
+      action: 'usage.recorded',
+      metadata: {
+        metric_name,
+        quantity,
+        idempotency_key: idempotencyKey
+      }
+    });
+
+    return successResponse(res, {
+      usage_record_id: usageRecord[0],
+      metric_name,
+      quantity: parseInt(quantity),
+      recorded_at: new Date()
+    }, 'Usage recorded successfully');
+  } catch (error) {
+    logger.error('Error recording usage:', error);
+    throw error;
+  }
+});
+
+/**
+ * Get usage limits and current usage
+ * @param {Object} req - Express request object
+ * @param {Object} res - Express response object
+ */
+const getUsageLimits = asyncHandler(async (req, res) => {
+  try {
+    const userId = req.user.id;
+
+    const user = await User.findByPk(userId);
+    if (!user) {
+      throw notFoundError('User not found');
+    }
+
+    // Define usage limits based on subscription plan
+    const subscriptionStatus = await stripeSubscriptionService.getSubscriptionStatus(user);
+    
+    // Default limits (these would typically come from Stripe product metadata)
+    const planLimits = {
+      basic: {
+        bookings: 50,
+        api_calls: 1000,
+        storage_gb: 1
+      },
+      professional: {
+        bookings: 200,
+        api_calls: 5000,
+        storage_gb: 5
+      },
+      enterprise: {
+        bookings: -1, // unlimited
+        api_calls: -1, // unlimited
+        storage_gb: 50
+      }
+    };
+
+    // Determine current plan
+    let currentPlan = 'basic';
+    if (stripeService.isSuperAdmin(user)) {
+      currentPlan = 'enterprise';
+    } else if (subscriptionStatus.has_access) {
+      // This would need to map Stripe price IDs to plan names
+      currentPlan = 'professional'; // simplified for now
+    }
+
+    const limits = planLimits[currentPlan];
+
+    // Get current period usage
+    const startDate = user.stripe_current_period_end 
+      ? new Date(user.stripe_current_period_end.getTime() - (30 * 24 * 60 * 60 * 1000))
+      : new Date(new Date().getFullYear(), new Date().getMonth(), 1);
+    
+    const endDate = user.stripe_current_period_end || new Date();
+
+    const currentUsage = await sequelize.query(`
+      SELECT 
+        metric_name,
+        SUM(quantity) as total_usage
+      FROM usage_records 
+      WHERE user_id = :userId 
+      AND timestamp BETWEEN :startDate AND :endDate
+      GROUP BY metric_name
+    `, {
+      replacements: { userId, startDate, endDate },
+      type: QueryTypes.SELECT
+    });
+
+    // Format usage data
+    const usageData = {};
+    currentUsage.forEach(item => {
+      usageData[item.metric_name] = parseInt(item.total_usage);
+    });
+
+    // Calculate usage percentages and warnings
+    const usageStatus = {};
+    Object.keys(limits).forEach(metric => {
+      const limit = limits[metric];
+      const used = usageData[metric] || 0;
+      
+      if (limit === -1) {
+        usageStatus[metric] = {
+          limit: 'unlimited',
+          used,
+          percentage: 0,
+          warning: false,
+          exceeded: false
+        };
+      } else {
+        const percentage = Math.round((used / limit) * 100);
+        usageStatus[metric] = {
+          limit,
+          used,
+          percentage,
+          warning: percentage >= 80,
+          exceeded: used >= limit
+        };
+      }
+    });
+
+    return successResponse(res, {
+      plan: currentPlan,
+      period: {
+        start: startDate,
+        end: endDate
+      },
+      limits,
+      usage: usageStatus,
+      is_super_admin: stripeService.isSuperAdmin(user)
+    }, 'Usage limits retrieved successfully');
+  } catch (error) {
+    logger.error('Error getting usage limits:', error);
+    throw error;
+  }
+});
+
+/**
  * Get customer portal URL
  * @param {Object} req - Express request object
  * @param {Object} res - Express response object
@@ -614,5 +928,8 @@ module.exports = {
   createSetupIntent,
   setDefaultPaymentMethod,
   removePaymentMethod,
+  getUsage,
+  recordUsage,
+  getUsageLimits,
   getCustomerPortal
 };

@@ -21,6 +21,9 @@ const {
   createSetupIntent,
   setDefaultPaymentMethod,
   removePaymentMethod,
+  getUsage,
+  recordUsage,
+  getUsageLimits,
   getCustomerPortal
 } = require('../controllers/account.controller');
 
@@ -152,6 +155,52 @@ router.put('/payment-methods/default', [
  * @access Private
  */
 router.delete('/payment-methods/:payment_method_id', removePaymentMethod);
+
+/**
+ * @route GET /api/account/usage
+ * @desc Get usage statistics
+ * @access Private
+ */
+router.get('/usage', [
+  query('period')
+    .optional()
+    .isIn(['current', 'month', 'last_month'])
+    .withMessage('Period must be one of: current, month, last_month'),
+  query('metric')
+    .optional()
+    .isString()
+    .withMessage('Metric must be a string'),
+  validateRequest
+], getUsage);
+
+/**
+ * @route POST /api/account/usage
+ * @desc Record usage for a metric
+ * @access Private
+ */
+router.post('/usage', [
+  body('metric_name')
+    .notEmpty()
+    .withMessage('Metric name is required')
+    .isString()
+    .withMessage('Metric name must be a string'),
+  body('quantity')
+    .optional()
+    .isInt({ min: 1 })
+    .withMessage('Quantity must be a positive integer'),
+  body('metadata')
+    .optional()
+    .isObject()
+    .withMessage('Metadata must be an object'),
+  validateRequest
+], recordUsage);
+
+/**
+ * @route GET /api/account/usage/limits
+ * @desc Get usage limits and current usage
+ * @access Private
+ */
+router.get('/usage/limits', getUsageLimits);
 
 /**
  * @route GET /api/account/customer-portal
