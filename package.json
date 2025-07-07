@@ -130,7 +130,7 @@
     "sequelize": "^6.37.7",
     "sequelize-cli": "^6.6.2",
     "serverless-http": "^3.2.0",
-    "stripe": "^18.2.1",
+    "stripe": "^18.3.0",
     "swagger-jsdoc": "^6.2.8",
     "swagger-ui-express": "^5.0.0",
     "twilio": "^5.7.0",
