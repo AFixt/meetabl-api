@@ -374,6 +374,192 @@ const getBillingHistory = asyncHandler(async (req, res) => {
 });
 
 /**
+ * Get payment methods
+ * @param {Object} req - Express request object
+ * @param {Object} res - Express response object
+ */
+const getPaymentMethods = asyncHandler(async (req, res) => {
+  try {
+    const userId = req.user.id;
+
+    const user = await User.findByPk(userId);
+    if (!user) {
+      throw notFoundError('User not found');
+    }
+
+    if (!user.stripe_customer_id) {
+      return successResponse(res, {
+        payment_methods: [],
+        default_payment_method: null
+      }, 'No payment methods found');
+    }
+
+    // Get payment methods and default payment method
+    const [paymentMethods, defaultPaymentMethod] = await Promise.all([
+      stripeCustomerService.listPaymentMethods(user.stripe_customer_id),
+      stripeCustomerService.getDefaultPaymentMethod(user.stripe_customer_id)
+    ]);
+
+    // Format payment methods for response
+    const formattedPaymentMethods = paymentMethods.map(pm => ({
+      id: pm.id,
+      type: pm.type,
+      card: pm.card ? {
+        brand: pm.card.brand,
+        last4: pm.card.last4,
+        exp_month: pm.card.exp_month,
+        exp_year: pm.card.exp_year,
+        country: pm.card.country
+      } : null,
+      created: new Date(pm.created * 1000),
+      is_default: defaultPaymentMethod?.id === pm.id
+    }));
+
+    return successResponse(res, {
+      payment_methods: formattedPaymentMethods,
+      default_payment_method: defaultPaymentMethod?.id || null
+    }, 'Payment methods retrieved successfully');
+  } catch (error) {
+    logger.error('Error getting payment methods:', error);
+    throw error;
+  }
+});
+
+/**
+ * Create setup intent for adding payment method
+ * @param {Object} req - Express request object
+ * @param {Object} res - Express response object
+ */
+const createSetupIntent = asyncHandler(async (req, res) => {
+  try {
+    const userId = req.user.id;
+
+    const user = await User.findByPk(userId);
+    if (!user) {
+      throw notFoundError('User not found');
+    }
+
+    // Ensure customer exists
+    const customer = await stripeCustomerService.getOrCreateCustomer(user);
+
+    // Create setup intent
+    const setupIntent = await stripeCustomerService.createSetupIntent(customer.id);
+
+    // Log setup intent creation
+    await AuditLog.create({
+      id: uuidv4(),
+      user_id: userId,
+      action: 'payment_method.setup_intent_created',
+      metadata: {
+        setup_intent_id: setupIntent.id,
+        customer_id: customer.id
+      }
+    });
+
+    return successResponse(res, {
+      setup_intent: {
+        id: setupIntent.id,
+        client_secret: setupIntent.client_secret,
+        status: setupIntent.status
+      }
+    }, 'Setup intent created successfully');
+  } catch (error) {
+    logger.error('Error creating setup intent:', error);
+    throw error;
+  }
+});
+
+/**
+ * Set default payment method
+ * @param {Object} req - Express request object
+ * @param {Object} res - Express response object
+ */
+const setDefaultPaymentMethod = asyncHandler(async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { payment_method_id } = req.body;
+
+    if (!payment_method_id) {
+      throw validationError([{ field: 'payment_method_id', message: 'Payment method ID is required' }]);
+    }
+
+    const user = await User.findByPk(userId);
+    if (!user) {
+      throw notFoundError('User not found');
+    }
+
+    if (!user.stripe_customer_id) {
+      throw validationError([{ field: 'customer', message: 'No Stripe customer found' }]);
+    }
+
+    // Set default payment method
+    await stripeBillingService.setDefaultPaymentMethod(user.stripe_customer_id, payment_method_id);
+
+    // Log the change
+    await AuditLog.create({
+      id: uuidv4(),
+      user_id: userId,
+      action: 'payment_method.set_default',
+      metadata: {
+        payment_method_id,
+        customer_id: user.stripe_customer_id
+      }
+    });
+
+    return successResponse(res, {
+      payment_method_id,
+      is_default: true
+    }, 'Default payment method updated successfully');
+  } catch (error) {
+    logger.error('Error setting default payment method:', error);
+    throw error;
+  }
+});
+
+/**
+ * Remove payment method
+ * @param {Object} req - Express request object
+ * @param {Object} res - Express response object
+ */
+const removePaymentMethod = asyncHandler(async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { payment_method_id } = req.params;
+
+    if (!payment_method_id) {
+      throw validationError([{ field: 'payment_method_id', message: 'Payment method ID is required' }]);
+    }
+
+    const user = await User.findByPk(userId);
+    if (!user) {
+      throw notFoundError('User not found');
+    }
+
+    // Detach payment method
+    await stripeBillingService.detachPaymentMethod(payment_method_id);
+
+    // Log the removal
+    await AuditLog.create({
+      id: uuidv4(),
+      user_id: userId,
+      action: 'payment_method.removed',
+      metadata: {
+        payment_method_id,
+        customer_id: user.stripe_customer_id
+      }
+    });
+
+    return successResponse(res, {
+      payment_method_id,
+      removed: true
+    }, 'Payment method removed successfully');
+  } catch (error) {
+    logger.error('Error removing payment method:', error);
+    throw error;
+  }
+});
+
+/**
  * Get customer portal URL
  * @param {Object} req - Express request object
  * @param {Object} res - Express response object
@@ -424,5 +610,9 @@ module.exports = {
   cancelSubscription,
   reactivateSubscription,
   getBillingHistory,
+  getPaymentMethods,
+  createSetupIntent,
+  setDefaultPaymentMethod,
+  removePaymentMethod,
   getCustomerPortal
 };

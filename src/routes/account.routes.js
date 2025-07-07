@@ -17,6 +17,10 @@ const {
   cancelSubscription,
   reactivateSubscription,
   getBillingHistory,
+  getPaymentMethods,
+  createSetupIntent,
+  setDefaultPaymentMethod,
+  removePaymentMethod,
   getCustomerPortal
 } = require('../controllers/account.controller');
 
@@ -113,6 +117,41 @@ router.get('/billing-history', [
     .withMessage('Offset must be 0 or greater'),
   validateRequest
 ], getBillingHistory);
+
+/**
+ * @route GET /api/account/payment-methods
+ * @desc Get user's payment methods
+ * @access Private
+ */
+router.get('/payment-methods', getPaymentMethods);
+
+/**
+ * @route POST /api/account/payment-methods/setup
+ * @desc Create setup intent for adding payment method
+ * @access Private
+ */
+router.post('/payment-methods/setup', createSetupIntent);
+
+/**
+ * @route PUT /api/account/payment-methods/default
+ * @desc Set default payment method
+ * @access Private
+ */
+router.put('/payment-methods/default', [
+  body('payment_method_id')
+    .notEmpty()
+    .withMessage('Payment method ID is required')
+    .isString()
+    .withMessage('Payment method ID must be a string'),
+  validateRequest
+], setDefaultPaymentMethod);
+
+/**
+ * @route DELETE /api/account/payment-methods/:payment_method_id
+ * @desc Remove payment method
+ * @access Private
+ */
+router.delete('/payment-methods/:payment_method_id', removePaymentMethod);
 
 /**
  * @route GET /api/account/customer-portal
