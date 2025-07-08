@@ -289,6 +289,7 @@ const outsetaRoutes = require('./routes/outseta.routes');
 const subscriptionRoutes = require('./routes/subscription.routes');
 const monitoringRoutes = require('./routes/monitoring.routes');
 const pwaRoutes = require('./routes/pwa.routes');
+const gdprRoutes = require('./routes/gdpr.routes');
 
 // Database monitoring endpoint (only in development/staging)
 if (process.env.NODE_ENV !== 'production') {
@@ -310,6 +311,7 @@ app.use('/api/analytics', protectCsrf);
 app.use('/api/teams', protectCsrf);
 app.use('/api/payments', protectCsrf);
 app.use('/api/subscriptions', protectCsrf);
+app.use('/api/gdpr', protectCsrf);
 
 // Apply routes
 app.use('/api/auth', authRoutes);
@@ -326,6 +328,7 @@ app.use('/api/outseta', outsetaRoutes);
 app.use('/api/subscriptions', subscriptionRoutes);
 app.use('/api/monitoring', monitoringRoutes);
 app.use('/api/pwa', pwaRoutes);
+app.use('/api/gdpr', gdprRoutes);
 
 // Documentation routes (no rate limiting for docs)
 app.use('/api/docs', docsRoutes);

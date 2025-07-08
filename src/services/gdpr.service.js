@@ -407,10 +407,30 @@ class GDPRService {
       // Get user data
       const userData = user.toJSON();
       delete userData.password_hash; // Never export password
+      delete userData.email_verification_token; // Remove sensitive tokens
+      delete userData.password_reset_token;
 
-      // Get related data
-      const [bookings, auditLogs, billingHistory] = await Promise.all([
-        // Bookings
+      // Get related data with comprehensive collection
+      const [
+        userSettings,
+        bookings,
+        availabilityRules,
+        calendarTokens,
+        notifications,
+        auditLogs,
+        billingHistory,
+        usageRecords,
+        gdprRequests
+      ] = await Promise.all([
+        // User settings
+        sequelize.query(
+          `SELECT * FROM user_settings WHERE user_id = :userId`,
+          {
+            replacements: { userId: user.id },
+            type: QueryTypes.SELECT
+          }
+        ),
+        // Bookings (as host or attendee)
         sequelize.query(
           `SELECT * FROM bookings WHERE host_id = :userId OR attendee_id = :userId`,
           {
@@ -418,7 +438,32 @@ class GDPRService {
             type: QueryTypes.SELECT
           }
         ),
-        // Audit logs
+        // Availability rules
+        sequelize.query(
+          `SELECT * FROM availability_rules WHERE user_id = :userId`,
+          {
+            replacements: { userId: user.id },
+            type: QueryTypes.SELECT
+          }
+        ),
+        // Calendar tokens (remove sensitive data)
+        sequelize.query(
+          `SELECT provider, email, calendar_id, is_primary, created, updated, expires_at
+           FROM calendar_tokens WHERE user_id = :userId`,
+          {
+            replacements: { userId: user.id },
+            type: QueryTypes.SELECT
+          }
+        ),
+        // Notifications
+        sequelize.query(
+          `SELECT * FROM notifications WHERE user_id = :userId ORDER BY created DESC LIMIT 500`,
+          {
+            replacements: { userId: user.id },
+            type: QueryTypes.SELECT
+          }
+        ),
+        // Audit logs (limited to recent entries)
         sequelize.query(
           `SELECT action, table_name, record_id, metadata, created 
            FROM audit_logs WHERE user_id = :userId ORDER BY created DESC LIMIT 1000`,
@@ -434,18 +479,79 @@ class GDPRService {
             replacements: { userId: user.id },
             type: QueryTypes.SELECT
           }
+        ),
+        // Usage records
+        sequelize.query(
+          `SELECT metric_name, quantity, timestamp, metadata FROM usage_records 
+           WHERE user_id = :userId ORDER BY timestamp DESC LIMIT 1000`,
+          {
+            replacements: { userId: user.id },
+            type: QueryTypes.SELECT
+          }
+        ),
+        // GDPR requests history
+        sequelize.query(
+          `SELECT request_type, status, requested_at, completed_at, metadata 
+           FROM gdpr_requests WHERE user_id = :userId`,
+          {
+            replacements: { userId: user.id },
+            type: QueryTypes.SELECT
+          }
         )
       ]);
 
       return {
-        user: userData,
-        bookings,
-        auditLogs,
-        billingHistory,
-        exportMetadata: {
-          exportDate: new Date(),
-          dataSubject: user.email,
-          exportReason: 'GDPR Article 20 - Right to Data Portability'
+        personal_data: {
+          user_account: userData,
+          user_settings: userSettings[0] || null,
+          consent_history: {
+            marketing_consent: userData.marketing_consent,
+            data_processing_consent: userData.data_processing_consent,
+            consent_timestamp: userData.consent_timestamp
+          }
+        },
+        booking_data: {
+          bookings,
+          availability_rules: availabilityRules
+        },
+        integration_data: {
+          calendar_integrations: calendarTokens
+        },
+        communication_data: {
+          notifications: notifications.map(n => ({
+            ...n,
+            // Remove sensitive data if any
+            email_content: n.email_content ? '[EMAIL_CONTENT_REDACTED]' : null
+          }))
+        },
+        billing_data: {
+          stripe_customer_id: userData.stripe_customer_id,
+          subscription_id: userData.stripe_subscription_id,
+          subscription_status: userData.stripe_subscription_status,
+          billing_history: billingHistory,
+          usage_records: usageRecords
+        },
+        system_data: {
+          audit_logs: auditLogs,
+          gdpr_requests: gdprRequests
+        },
+        export_metadata: {
+          export_date: new Date(),
+          data_subject: user.email,
+          export_reason: 'GDPR Article 20 - Right to Data Portability',
+          data_categories: [
+            'Personal identification data',
+            'Account preferences and settings',
+            'Booking and calendar data',
+            'Communication records',
+            'Billing and subscription data',
+            'System logs and GDPR requests'
+          ],
+          retention_info: {
+            active_account: 'Data retained while account is active',
+            deleted_account: 'Personal data deleted within 30 days',
+            audit_logs: 'System logs retained for 7 years for compliance'
+          }
         }
       };
     } catch (error) {
@@ -503,26 +609,117 @@ class GDPRService {
     const flattened = [];
     
     // Add user data
-    flattened.push({
-      type: 'user',
-      ...data.user
-    });
+    if (data.personal_data?.user_account) {
+      flattened.push({
+        data_type: 'user_account',
+        category: 'personal_data',
+        ...data.personal_data.user_account
+      });
+    }
+
+    // Add user settings
+    if (data.personal_data?.user_settings) {
+      flattened.push({
+        data_type: 'user_settings',
+        category: 'personal_data',
+        ...data.personal_data.user_settings
+      });
+    }
 
     // Add bookings
-    data.bookings.forEach(booking => {
-      flattened.push({
-        type: 'booking',
-        ...booking
+    if (data.booking_data?.bookings) {
+      data.booking_data.bookings.forEach(booking => {
+        flattened.push({
+          data_type: 'booking',
+          category: 'booking_data',
+          ...booking
+        });
       });
-    });
+    }
+
+    // Add availability rules
+    if (data.booking_data?.availability_rules) {
+      data.booking_data.availability_rules.forEach(rule => {
+        flattened.push({
+          data_type: 'availability_rule',
+          category: 'booking_data',
+          ...rule
+        });
+      });
+    }
+
+    // Add calendar integrations
+    if (data.integration_data?.calendar_integrations) {
+      data.integration_data.calendar_integrations.forEach(integration => {
+        flattened.push({
+          data_type: 'calendar_integration',
+          category: 'integration_data',
+          ...integration
+        });
+      });
+    }
+
+    // Add notifications (limited data for CSV)
+    if (data.communication_data?.notifications) {
+      data.communication_data.notifications.forEach(notification => {
+        flattened.push({
+          data_type: 'notification',
+          category: 'communication_data',
+          id: notification.id,
+          type: notification.type,
+          status: notification.status,
+          created: notification.created,
+          sent_at: notification.sent_at
+        });
+      });
+    }
 
     // Add billing history
-    data.billingHistory.forEach(bill => {
-      flattened.push({
-        type: 'billing',
-        ...bill
+    if (data.billing_data?.billing_history) {
+      data.billing_data.billing_history.forEach(bill => {
+        flattened.push({
+          data_type: 'billing_record',
+          category: 'billing_data',
+          ...bill
+        });
       });
-    });
+    }
+
+    // Add usage records
+    if (data.billing_data?.usage_records) {
+      data.billing_data.usage_records.forEach(usage => {
+        flattened.push({
+          data_type: 'usage_record',
+          category: 'billing_data',
+          ...usage
+        });
+      });
+    }
+
+    // Add audit logs (limited for CSV)
+    if (data.system_data?.audit_logs) {
+      data.system_data.audit_logs.forEach(log => {
+        flattened.push({
+          data_type: 'audit_log',
+          category: 'system_data',
+          action: log.action,
+          table_name: log.table_name,
+          record_id: log.record_id,
+          created: log.created
+        });
+      });
+    }
+
+    // Add GDPR requests
+    if (data.system_data?.gdpr_requests) {
+      data.system_data.gdpr_requests.forEach(request => {
+        flattened.push({
+          data_type: 'gdpr_request',
+          category: 'system_data',
+          ...request
+        });
+      });
+    }
 
     return flattened;
   }
@@ -626,6 +823,79 @@ class GDPRService {
     });
 
     logger.info(`Processing restriction applied for user ${user.id}`);
+  }
+
+  /**
+   * Export user data for GDPR compliance
+   * @param {string} userId - User ID
+   * @param {Object} options - Export options
+   * @returns {Promise<Object>} Exported user data
+   */
+  async exportUserData(userId, options = {}) {
+    try {
+      const user = await User.findByPk(userId);
+      if (!user) {
+        throw new AppError('User not found', 404);
+      }
+
+      // Collect all user data
+      const userData = await this.collectUserData(user);
+      
+      // Convert to requested format
+      if (options.format === 'csv') {
+        return this.convertToCSV(userData);
+      }
+      
+      return userData;
+    } catch (error) {
+      logger.error('Failed to export user data:', error);
+      throw new AppError('Failed to export user data', 500);
+    }
+  }
+
+  /**
+   * Delete user data with optional grace period
+   * @param {string} userId - User ID
+   * @param {Object} options - Deletion options
+   * @returns {Promise<Object>} Deletion result
+   */
+  async deleteUserData(userId, options = {}) {
+    try {
+      const user = await User.findByPk(userId);
+      if (!user) {
+        throw new AppError('User not found', 404);
+      }
+
+      // Execute the deletion (anonymization)
+      await this.executeUserDeletion(userId);
+
+      return {
+        user_id: userId,
+        deleted_at: new Date(),
+        deletion_type: 'anonymization',
+        reason: options.reason || 'User requested deletion',
+        gdpr_request_id: options.gdpr_request_id
+      };
+    } catch (error) {
+      logger.error('Failed to delete user data:', error);
+      throw new AppError('Failed to delete user data', 500);
+    }
+  }
+
+  /**
+   * Convert user data to CSV format
+   * @param {Object} userData - User data object
+   * @returns {string} CSV formatted data
+   */
+  convertToCSV(userData) {
+    try {
+      const flatData = this.flattenDataForCSV(userData);
+      const parser = new Parser();
+      return parser.parse(flatData);
+    } catch (error) {
+      logger.error('Failed to convert data to CSV:', error);
+      throw new AppError('Failed to convert data to CSV', 500);
+    }
   }
 
   /**
