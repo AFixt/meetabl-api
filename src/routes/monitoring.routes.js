@@ -10,6 +10,7 @@ const router = require('express').Router();
 const metricsService = require('../services/metrics.service');
 const logManagementService = require('../services/log-management.service');
 const healthCheckService = require('../services/health-check.service');
+const { getRetentionStatus, processSinglePolicy } = require('../jobs/data-retention-processor');
 const { authenticateJWT } = require('../middlewares/auth');
 const { createLogger } = require('../config/logger');
 
@@ -350,6 +351,51 @@ router.post('/logs/compress', authenticateJWT, async (req, res) => {
     res.status(500).json({
       success: false,
       error: 'Log compression failed'
+    });
+  }
+});
+
+/**
+ * GET /api/monitoring/data-retention/status
+ * Get data retention policy status and configuration
+ */
+router.get('/data-retention/status', authenticateJWT, async (req, res) => {
+  try {
+    const status = await getRetentionStatus();
+    res.json({
+      success: true,
+      data_retention: status
+    });
+  } catch (error) {
+    logger.error('Error fetching data retention status', { error: error.message });
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch data retention status'
+    });
+  }
+});
+
+/**
+ * POST /api/monitoring/data-retention/execute/:policy
+ * Manually execute a specific data retention policy
+ */
+router.post('/data-retention/execute/:policy', authenticateJWT, async (req, res) => {
+  try {
+    const policyName = req.params.policy;
+    const result = await processSinglePolicy(policyName);
+    
+    res.json({
+      success: result.success,
+      result
+    });
+  } catch (error) {
+    logger.error('Error executing data retention policy', { 
+      policy: req.params.policy,
+      error: error.message 
+    });
+    res.status(500).json({
+      success: false,
+      error: `Failed to execute retention policy: ${req.params.policy}`
     });
   }
 });

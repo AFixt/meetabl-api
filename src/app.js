@@ -15,6 +15,7 @@ const rateLimit = require('express-rate-limit');
 const cookieParser = require('cookie-parser');
 const logger = require('./config/logger');
 const { processNotifications } = require('./jobs/notification-processor');
+const { processDataRetention } = require('./jobs/data-retention-processor');
 const { initializeCsrf, protectCsrf, provideCsrfToken } = require('./middlewares/csrf');
 const { initializeSession, sessionCleanup, sessionSecurity } = require('./config/session');
 const dbMonitor = require('./utils/db-monitor');
@@ -477,7 +478,7 @@ const initializeApp = async () => {
     // In production, you would use a proper job scheduler
     // like node-cron, Bull, or a dedicated service
     if (process.env.NODE_ENV !== 'test') {
-      // Run once at startup
+      // Run notification processor once at startup
       processNotifications().catch((err) => logger.error('Error in initial notification processing:', err));
 
       // Then every 5 minutes
@@ -485,7 +486,33 @@ const initializeApp = async () => {
         processNotifications().catch((err) => logger.error('Error in scheduled notification processing:', err));
       }, 5 * 60 * 1000);
 
-      logger.info('Notification processor scheduled');
+      // Setup data retention processing job (daily at 2 AM)
+      const scheduleDataRetention = () => {
+        const now = new Date();
+        const nextRun = new Date();
+        nextRun.setHours(2, 0, 0, 0); // 2 AM
+        
+        if (nextRun <= now) {
+          nextRun.setDate(nextRun.getDate() + 1);
+        }
+        
+        const msUntilNextRun = nextRun.getTime() - now.getTime();
+        
+        setTimeout(() => {
+          // Execute data retention
+          processDataRetention().catch((err) => logger.error('Error in data retention processing:', err));
+          
+          // Schedule next run (every 24 hours)
+          setInterval(() => {
+            processDataRetention().catch((err) => logger.error('Error in scheduled data retention processing:', err));
+          }, 24 * 60 * 60 * 1000);
+        }, msUntilNextRun);
+        
+        logger.info(`Data retention processor scheduled for ${nextRun.toISOString()}`);
+      };
+
+      scheduleDataRetention();
+      logger.info('Notification and data retention processors scheduled');
     }
 
     logger.info('Application initialized successfully');
