@@ -199,7 +199,7 @@ app.use(cors({
 }));
 
 // Add raw body parsing for Stripe webhooks
-app.use('/api/payments/webhook', express.raw({ type: 'application/json' }));
+app.use('/api/stripe/webhook', express.raw({ type: 'application/json' }));
 
 // Apply JSON body parsing to all other routes
 app.use(bodyParser.json());
@@ -291,6 +291,7 @@ const subscriptionRoutes = require('./routes/subscription.routes');
 const monitoringRoutes = require('./routes/monitoring.routes');
 const pwaRoutes = require('./routes/pwa.routes');
 const gdprRoutes = require('./routes/gdpr.routes');
+const stripeWebhookRoutes = require('./routes/stripe-webhook.routes');
 
 // Database monitoring endpoint (only in development/staging)
 if (process.env.NODE_ENV !== 'production') {
@@ -330,6 +331,7 @@ app.use('/api/subscriptions', subscriptionRoutes);
 app.use('/api/monitoring', monitoringRoutes);
 app.use('/api/pwa', pwaRoutes);
 app.use('/api/gdpr', gdprRoutes);
+app.use('/api/stripe/webhook', stripeWebhookRoutes);
 
 // Documentation routes (no rate limiting for docs)
 app.use('/api/docs', docsRoutes);
