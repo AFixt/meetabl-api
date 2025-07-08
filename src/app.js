@@ -292,6 +292,7 @@ const monitoringRoutes = require('./routes/monitoring.routes');
 const pwaRoutes = require('./routes/pwa.routes');
 const gdprRoutes = require('./routes/gdpr.routes');
 const stripeWebhookRoutes = require('./routes/stripe-webhook.routes');
+const twoFactorAuthRoutes = require('./routes/two-factor-auth.routes');
 
 // Database monitoring endpoint (only in development/staging)
 if (process.env.NODE_ENV !== 'production') {
@@ -314,6 +315,7 @@ app.use('/api/teams', protectCsrf);
 app.use('/api/payments', protectCsrf);
 app.use('/api/subscriptions', protectCsrf);
 app.use('/api/gdpr', protectCsrf);
+app.use('/api/2fa', protectCsrf);
 
 // Apply routes
 app.use('/api/auth', authRoutes);
@@ -332,6 +334,7 @@ app.use('/api/monitoring', monitoringRoutes);
 app.use('/api/pwa', pwaRoutes);
 app.use('/api/gdpr', gdprRoutes);
 app.use('/api/stripe/webhook', stripeWebhookRoutes);
+app.use('/api/2fa', twoFactorAuthRoutes);
 
 // Documentation routes (no rate limiting for docs)
 app.use('/api/docs', docsRoutes);

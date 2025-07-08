@@ -180,4 +180,11 @@ router.post('/reset-password', authController.resetPassword);
  */
 router.post('/verify-email', authController.verifyEmail);
 
+/**
+ * @route POST /api/auth/verify-2fa
+ * @desc Verify 2FA token during login
+ * @access Public
+ */
+router.post('/verify-2fa', authController.verify2FA);
+
 module.exports = router;

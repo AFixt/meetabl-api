@@ -17,6 +17,7 @@ const { sendPasswordResetEmail, sendEmailVerification } = require('../services/n
 const stripeCustomerService = require('../services/stripe-customer.service');
 const stripeService = require('../services/stripe.service');
 const stripeSubscriptionService = require('../services/stripe-subscription.service');
+const twoFactorAuthService = require('../services/two-factor-auth.service');
 const { asyncHandler, successResponse, conflictError, unauthorizedError, notFoundError, validationError, createError } = require('../utils/error-response');
 
 /**
@@ -199,6 +200,16 @@ const login = asyncHandler(async (req, res) => {
 
     if (!isPasswordValid) {
       throw unauthorizedError('Invalid email or password');
+    }
+
+    // Check if 2FA is enabled for this user
+    if (user.two_factor_enabled) {
+      // Return a special response indicating 2FA is required
+      return successResponse(res, {
+        requires_2fa: true,
+        email: user.email,
+        message: 'Two-factor authentication required. Please provide your 2FA token.'
+      }, 'Two-factor authentication required', 202);
     }
 
     // Generate JWT token with unique ID
@@ -605,6 +616,129 @@ const confirmEmail = asyncHandler(async (req, res) => {
 const verifyEmail = confirmEmail;
 
 /**
+ * Verify 2FA token during login
+ * @param {Object} req - Express request object
+ * @param {Object} res - Express response object
+ */
+const verify2FA = asyncHandler(async (req, res) => {
+  try {
+    const { email, password, two_factor_token } = req.body;
+
+    if (!email || !password || !two_factor_token) {
+      throw validationError([
+        { field: 'email', message: 'Email is required' },
+        { field: 'password', message: 'Password is required' },
+        { field: 'two_factor_token', message: '2FA token is required' }
+      ]);
+    }
+
+    // Find user by email
+    const user = await User.findOne({ where: { email } });
+
+    if (!user) {
+      throw unauthorizedError('Invalid credentials');
+    }
+
+    // Validate password
+    const isPasswordValid = await bcrypt.compare(password, user.password_hash);
+
+    if (!isPasswordValid) {
+      throw unauthorizedError('Invalid credentials');
+    }
+
+    // Verify 2FA token
+    const twoFactorResult = await twoFactorAuthService.verifyLogin2FA(user, two_factor_token);
+
+    if (!twoFactorResult.verified) {
+      // Log failed 2FA attempt
+      await AuditLog.create({
+        id: uuidv4(),
+        user_id: user.id,
+        action: 'user.2fa_login_failed',
+        metadata: {
+          email,
+          method: twoFactorResult.method,
+          ip_address: req.ip
+        }
+      });
+
+      throw unauthorizedError('Invalid 2FA token');
+    }
+
+    // Generate JWT tokens
+    const jti = uuidv4();
+    const token = jwt.sign(
+      { userId: user.id, jti },
+      process.env.JWT_SECRET,
+      { expiresIn: process.env.JWT_EXPIRES_IN || '7d' }
+    );
+
+    const refreshJti = uuidv4();
+    const refreshToken = jwt.sign(
+      { userId: user.id, type: 'refresh', jti: refreshJti },
+      process.env.JWT_SECRET,
+      { expiresIn: process.env.JWT_REFRESH_EXPIRES_IN || '30d' }
+    );
+
+    // Create audit log for successful login
+    await AuditLog.create({
+      id: uuidv4(),
+      user_id: user.id,
+      action: 'user.2fa_login_success',
+      metadata: {
+        email,
+        method: twoFactorResult.method,
+        remaining_backup_codes: twoFactorResult.remaining_codes,
+        ip_address: req.ip
+      }
+    });
+
+    // Get subscription status
+    const subscriptionStatus = await getSubscriptionStatus(user);
+
+    logger.info(`User logged in with 2FA: ${email} (method: ${twoFactorResult.method})`);
+
+    // Set secure httpOnly cookies for tokens
+    const cookieOptions = {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'strict',
+      maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
+    };
+
+    const refreshCookieOptions = {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'strict',
+      maxAge: 30 * 24 * 60 * 60 * 1000 // 30 days
+    };
+
+    res.cookie('token', token, cookieOptions);
+    res.cookie('refreshToken', refreshToken, refreshCookieOptions);
+
+    const responseData = {
+      id: user.id,
+      first_name: user.first_name,
+      last_name: user.last_name,
+      email: user.email,
+      phone: user.phone,
+      timezone: user.timezone,
+      email_verified: user.email_verified,
+      is_super_admin: user.is_super_admin,
+      subscription: subscriptionStatus,
+      two_factor: {
+        method: twoFactorResult.method,
+        remaining_backup_codes: twoFactorResult.remaining_codes
+      }
+    };
+
+    return successResponse(res, responseData, 'Login successful with 2FA verification');
+  } catch (error) {
+    throw error;
+  }
+});
+
+/**
  * Resend verification email
  * @param {Object} req - Express request object
  * @param {Object} res - Express response object
@@ -663,6 +797,7 @@ const resendVerificationEmail = asyncHandler(async (req, res) => {
 module.exports = {
   register,
   login,
+  verify2FA,
   refreshToken,
   logout,
   forgotPassword,
