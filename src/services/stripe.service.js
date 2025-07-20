@@ -8,6 +8,7 @@
 const Stripe = require('stripe');
 const logger = require('../config/logger');
 const { AppError } = require('../utils/errors');
+const stripeConfig = require('../config/stripe-products');
 
 class StripeService {
   constructor() {
@@ -208,11 +209,11 @@ class StripeService {
   }
 
   /**
-   * Calculate trial end date (30 days from now)
+   * Calculate trial end date
    * @returns {Date} Trial end date
    */
   calculateTrialEnd() {
-    const trialDays = 30;
+    const trialDays = stripeConfig.TRIAL.DAYS;
     const trialEnd = new Date();
     trialEnd.setDate(trialEnd.getDate() + trialDays);
     return trialEnd;

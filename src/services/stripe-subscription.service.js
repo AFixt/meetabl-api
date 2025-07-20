@@ -10,6 +10,7 @@ const logger = require('../config/logger');
 const { AppError } = require('../utils/errors');
 const { User } = require('../models');
 const { Op } = require('sequelize');
+const stripeConfig = require('../config/stripe-products');
 
 class StripeSubscriptionService {
   /**
@@ -47,7 +48,7 @@ class StripeSubscriptionService {
         ...options
       };
 
-      // Add trial period for new users (30 days)
+      // Add trial period for new users
       if (!user.stripe_subscription_id && !options.trial_end) {
         subscriptionData.trial_end = Math.floor(stripeService.calculateTrialEnd().getTime() / 1000);
       }
@@ -97,13 +98,15 @@ class StripeSubscriptionService {
         cancel_url: options.cancelUrl || `${process.env.FRONTEND_URL}/billing/cancel`,
         metadata: {
           user_id: user.id.toString()
-        }
+        },
+        // Enable discount codes if specified
+        allow_promotion_codes: options.allow_promotion_codes !== undefined ? options.allow_promotion_codes : true
       };
 
       // Add trial period for new subscriptions
       if (!user.stripe_subscription_id) {
         sessionData.subscription_data = {
-          trial_period_days: 30,
+          trial_period_days: stripeConfig.TRIAL.DAYS,
           metadata: {
             user_id: user.id.toString()
           }
