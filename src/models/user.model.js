@@ -13,13 +13,14 @@ const { sequelize } = require('../config/database');
 
 const User = sequelize.define('User', {
   id: {
-    type: DataTypes.INTEGER,
+    type: DataTypes.STRING(36),
     primaryKey: true,
-    autoIncrement: true
+    defaultValue: () => uuidv4()
   },
   firstName: {
     type: DataTypes.STRING(50),
     allowNull: false,
+    field: 'first_name',
     validate: {
       notEmpty: true
     }
@@ -27,6 +28,7 @@ const User = sequelize.define('User', {
   lastName: {
     type: DataTypes.STRING(50),
     allowNull: false,
+    field: 'last_name',
     validate: {
       notEmpty: true
     }
@@ -39,14 +41,18 @@ const User = sequelize.define('User', {
       isEmail: true
     }
   },
+  username: {
+    type: DataTypes.STRING(100),
+    allowNull: false,
+    unique: true,
+    validate: {
+      notEmpty: true,
+      is: /^[a-z0-9-]+$/i // Allow only alphanumeric and hyphens
+    }
+  },
   password: {
     type: DataTypes.STRING(255),
-    allowNull: true // Made optional for Outseta integration
-  },
-  outseta_uid: {
-    type: DataTypes.STRING(255),
-    allowNull: true,
-    unique: true
+    allowNull: false
   },
   subscription_plan: {
     type: DataTypes.STRING(100),
@@ -100,6 +106,72 @@ const User = sequelize.define('User', {
     type: DataTypes.DATE,
     allowNull: true
   },
+  // Stripe subscription fields
+  stripe_customer_id: {
+    type: DataTypes.STRING(255),
+    allowNull: true,
+    unique: true
+  },
+  stripe_subscription_id: {
+    type: DataTypes.STRING(255),
+    allowNull: true
+  },
+  stripe_price_id: {
+    type: DataTypes.STRING(255),
+    allowNull: true
+  },
+  stripe_subscription_status: {
+    type: DataTypes.STRING(50),
+    allowNull: true
+  },
+  stripe_current_period_end: {
+    type: DataTypes.DATE,
+    allowNull: true
+  },
+  // Plan limit fields
+  plan_type: {
+    type: DataTypes.ENUM('free', 'paid'),
+    allowNull: false,
+    defaultValue: 'free'
+  },
+  max_calendars: {
+    type: DataTypes.INTEGER,
+    allowNull: false,
+    defaultValue: 1
+  },
+  max_event_types: {
+    type: DataTypes.INTEGER,
+    allowNull: false,
+    defaultValue: 1
+  },
+  integrations_enabled: {
+    type: DataTypes.BOOLEAN,
+    allowNull: false,
+    defaultValue: false
+  },
+  billing_period: {
+    type: DataTypes.ENUM('monthly', 'annual'),
+    allowNull: true
+  },
+  applied_discount_code: {
+    type: DataTypes.STRING(50),
+    allowNull: true
+  },
+  // GDPR consent fields
+  marketing_consent: {
+    type: DataTypes.BOOLEAN,
+    allowNull: false,
+    defaultValue: false
+  },
+  data_processing_consent: {
+    type: DataTypes.BOOLEAN,
+    allowNull: false,
+    defaultValue: false
+  },
+  consent_timestamp: {
+    type: DataTypes.DATE,
+    allowNull: true
+  },
   created: {
     type: DataTypes.DATE,
     defaultValue: DataTypes.NOW
@@ -121,11 +193,42 @@ const User = sequelize.define('User', {
  * @returns {Promise<boolean>} Whether password is valid
  */
 User.prototype.validatePassword = async function (password) {
-  // For Outseta users, password validation is handled externally
-  if (this.outseta_uid && !this.password) {
-    return false;
-  }
   return bcrypt.compare(password, this.password);
+};
+
+/**
+ * Checks if user has a paid subscription
+ * @returns {boolean} Whether user has paid subscription
+ */
+User.prototype.hasPaidSubscription = function () {
+  return this.plan_type === 'paid' && 
+         this.stripe_subscription_status === 'active';
+};
+
+/**
+ * Checks if user can add more calendars
+ * @param {number} currentCount - Current number of calendars
+ * @returns {boolean} Whether user can add more calendars
+ */
+User.prototype.canAddCalendars = function (currentCount) {
+  return currentCount < this.max_calendars;
+};
+
+/**
+ * Checks if user can add more event types
+ * @param {number} currentCount - Current number of event types
+ * @returns {boolean} Whether user can add more event types
+ */
+User.prototype.canAddEventTypes = function (currentCount) {
+  return currentCount < this.max_event_types;
+};
+
+/**
+ * Checks if user can use integrations
+ * @returns {boolean} Whether user can use integrations
+ */
+User.prototype.canUseIntegrations = function () {
+  return this.integrations_enabled;
 };
 
 /**

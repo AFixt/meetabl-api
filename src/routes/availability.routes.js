@@ -8,6 +8,7 @@
 
 const express = require('express');
 const { authenticateJWT } = require('../middlewares/auth');
+const { checkEventTypeLimit } = require('../middlewares/subscription');
 const { validateUuid, validateAvailabilityRule, validateGetRequest } = require('../middlewares/validation');
 const availabilityController = require('../controllers/availability.controller');
 
@@ -25,10 +26,10 @@ router.get('/rules', validateGetRequest, availabilityController.getAvailabilityR
 
 /**
  * @route POST /api/availability/rules
- * @desc Create new availability rule
+ * @desc Create new availability rule (limited by subscription plan)
  * @access Private
  */
-router.post('/rules', validateAvailabilityRule, availabilityController.createAvailabilityRule);
+router.post('/rules', checkEventTypeLimit, validateAvailabilityRule, availabilityController.createAvailabilityRule);
 
 /**
  * @route GET /api/availability/rules/:id

@@ -47,16 +47,16 @@ class WebhookService {
   }
 
   /**
-   * Verify Outseta webhook signature
+   * Verify Stripe webhook signature
    * @param {string} payload - Raw request body
-   * @param {string} signature - X-Outseta-Signature header
+   * @param {string} signature - Stripe-Signature header
    * @returns {boolean} Verification result
    */
-  verifyOutsetaSignature(payload, signature) {
-    const secret = process.env.OUTSETA_WEBHOOK_SECRET;
+  verifyStripeSignature(payload, signature) {
+    const secret = process.env.STRIPE_WEBHOOK_SECRET;
     
     if (!secret) {
-      logger.error('OUTSETA_WEBHOOK_SECRET not configured');
+      logger.error('STRIPE_WEBHOOK_SECRET not configured');
       return false;
     }
 
@@ -142,7 +142,7 @@ class WebhookService {
   /**
    * Log webhook event for debugging and monitoring
    * @param {Object} event - Webhook event
-   * @param {string} source - Event source (e.g., 'outseta')
+   * @param {string} source - Event source (e.g., 'stripe')
    * @param {boolean} success - Processing success status
    * @param {string} error - Error message if failed
    */

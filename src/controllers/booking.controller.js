@@ -55,20 +55,20 @@ const getUserBookings = asyncHandler(async (req, res) => {
 
     // Find all bookings for this user with optimized includes to prevent N+1 queries
     const bookings = await Booking.findAndCountAll({
-      where: { user_id: userId },
+      where: { userId: userId },
       limit,
       offset,
       order: [[order, dir]],
       include: [
         {
           model: User,
-          attributes: ['id', 'name', 'email', 'timezone'],
+          attributes: ['id', 'firstName', 'lastName', 'email', 'timezone'],
           required: true
         },
         {
           model: Notification,
           required: false,
-          attributes: ['id', 'type', 'status', 'scheduled_for', 'sent_at']
+          attributes: ['id', 'type', 'status', 'sent_at']
         }
       ]
     });
@@ -126,29 +126,29 @@ const createBooking = asyncHandler(async (req, res) => {
     // Check for overlapping bookings
     const overlappingBookings = await Booking.findOne({
       where: {
-        user_id: userId,
+        userId: userId,
         status: 'confirmed',
         [Op.or]: [
           {
             // Starts during another booking
-            start_time: {
+            startTime: {
               [Op.lt]: endTime,
               [Op.gte]: startTime
             }
           },
           {
             // Ends during another booking
-            end_time: {
+            endTime: {
               [Op.lte]: endTime,
               [Op.gt]: startTime
             }
           },
           {
             // Completely overlaps another booking
-            start_time: {
+            startTime: {
               [Op.lte]: startTime
             },
-            end_time: {
+            endTime: {
               [Op.gte]: endTime
             }
           }
@@ -164,11 +164,11 @@ const createBooking = asyncHandler(async (req, res) => {
     const bookingId = uuidv4();
     const booking = await Booking.create({
       id: bookingId,
-      user_id: userId,
-      customer_name: customerName,
-      customer_email: customerEmail,
-      start_time: startTime,
-      end_time: endTime,
+      userId: userId,
+      customerName: customerName,
+      customerEmail: customerEmail,
+      startTime: startTime,
+      endTime: endTime,
       status: 'confirmed'
     }, { transaction });
 
@@ -183,7 +183,7 @@ const createBooking = asyncHandler(async (req, res) => {
     // Create audit log
     await AuditLog.create({
       id: uuidv4(),
-      user_id: userId,
+      userId: userId,
       action: 'booking.create',
       metadata: {
         bookingId,
@@ -233,7 +233,7 @@ const getBooking = asyncHandler(async (req, res) => {
     include: [
       {
         model: User,
-        attributes: ['id', 'name', 'email', 'timezone'],
+        attributes: ['id', 'firstName', 'lastName', 'email', 'timezone'],
         required: true
       },
       {
@@ -295,7 +295,7 @@ const cancelBooking = asyncHandler(async (req, res) => {
     // Create audit log
     await AuditLog.create({
       id: uuidv4(),
-      user_id: userId,
+      userId: userId,
       action: 'booking.cancel',
       metadata: {
         bookingId: id
@@ -342,7 +342,7 @@ const getPublicBookings = asyncHandler(async (req, res) => {
   const user = await User.findOne({
     where: {
       [Op.or]: [
-        { name: username }, // Check if username matches name
+        { username: username }, // Check if username matches username field
         { id: username } // Check if username matches ID
       ]
     }
@@ -386,7 +386,8 @@ const getPublicBookings = asyncHandler(async (req, res) => {
       return successResponse(res, {
         user: {
           id: user.id,
-          name: user.name
+          firstName: user.firstName,
+          lastName: user.lastName
         },
         date,
         available_slots: []
@@ -399,7 +400,7 @@ const getPublicBookings = asyncHandler(async (req, res) => {
 
     const bookings = await Booking.findAll({
       where: {
-        user_id: userId,
+        userId: userId,
         start_time: { [Op.gte]: dayStart },
         end_time: { [Op.lte]: dayEnd },
         status: 'confirmed'
@@ -465,7 +466,9 @@ const getPublicBookings = asyncHandler(async (req, res) => {
     return successResponse(res, {
       user: {
         id: user.id,
-        name: user.name
+        firstName: user.firstName,
+        lastName: user.lastName,
+        username: user.username
       },
       date,
       available_slots: allSlots
@@ -493,7 +496,7 @@ const createPublicBooking = asyncHandler(async (req, res) => {
     const user = await User.findOne({
       where: {
         [Op.or]: [
-          { name: username }, // Check if username matches name
+          { username: username }, // Check if username matches username field
           { id: username } // Check if username matches ID
         ]
       }
@@ -525,26 +528,26 @@ const createPublicBooking = asyncHandler(async (req, res) => {
     // Check for overlapping bookings
     const overlappingBookings = await Booking.findOne({
       where: {
-        user_id: userId,
+        userId: userId,
         status: 'confirmed',
         [Op.or]: [
           {
-            start_time: {
+            startTime: {
               [Op.lt]: endTime,
               [Op.gte]: startTime
             }
           },
           {
-            end_time: {
+            endTime: {
               [Op.lte]: endTime,
               [Op.gt]: startTime
             }
           },
           {
-            start_time: {
+            startTime: {
               [Op.lte]: startTime
             },
-            end_time: {
+            endTime: {
               [Op.gte]: endTime
             }
           }
@@ -560,11 +563,11 @@ const createPublicBooking = asyncHandler(async (req, res) => {
     const bookingId = uuidv4();
     const booking = await Booking.create({
       id: bookingId,
-      user_id: userId,
-      customer_name: customerName,
-      customer_email: customerEmail,
-      start_time: startTime,
-      end_time: endTime,
+      userId: userId,
+      customerName: customerName,
+      customerEmail: customerEmail,
+      startTime: startTime,
+      endTime: endTime,
       status: 'confirmed'
     }, { transaction });
 
@@ -579,7 +582,7 @@ const createPublicBooking = asyncHandler(async (req, res) => {
     // Create audit log
     await AuditLog.create({
       id: uuidv4(),
-      user_id: userId,
+      userId: userId,
       action: 'booking.public.create',
       metadata: {
         bookingId,
@@ -681,27 +684,27 @@ const rescheduleBooking = asyncHandler(async (req, res) => {
     // Check for overlapping bookings (excluding current booking)
     const overlappingBookings = await Booking.findOne({
       where: {
-        user_id: userId,
+        userId: userId,
         id: { [Op.ne]: id }, // Exclude current booking
         status: 'confirmed',
         [Op.or]: [
           {
-            start_time: {
+            startTime: {
               [Op.lt]: endTime,
               [Op.gte]: startTime
             }
           },
           {
-            end_time: {
+            endTime: {
               [Op.lte]: endTime,
               [Op.gt]: startTime
             }
           },
           {
-            start_time: {
+            startTime: {
               [Op.lte]: startTime
             },
-            end_time: {
+            endTime: {
               [Op.gte]: endTime
             }
           }
@@ -733,7 +736,7 @@ const rescheduleBooking = asyncHandler(async (req, res) => {
     // Create audit log
     await AuditLog.create({
       id: uuidv4(),
-      user_id: userId,
+      userId: userId,
       action: 'booking.reschedule',
       metadata: {
         bookingId: id,
@@ -801,7 +804,7 @@ const bulkCancelBookings = asyncHandler(async (req, res) => {
     const bookings = await Booking.findAll({
       where: {
         id: { [Op.in]: bookingIds },
-        user_id: userId,
+        userId: userId,
         status: { [Op.ne]: 'cancelled' } // Only non-cancelled bookings
       }
     });
@@ -832,7 +835,7 @@ const bulkCancelBookings = asyncHandler(async (req, res) => {
       // Prepare audit log
       auditLogs.push({
         id: uuidv4(),
-        user_id: userId,
+        userId: userId,
         action: 'booking.bulk_cancel',
         metadata: {
           bookingId: booking.id,

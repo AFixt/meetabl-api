@@ -63,7 +63,7 @@ router.get('/usage',
 
 /**
  * @route   POST /api/subscriptions/upgrade
- * @desc    Upgrade subscription (redirects to Outseta)
+ * @desc    Upgrade subscription (creates Stripe checkout session)
  * @access  Private
  */
 router.post('/upgrade',
@@ -78,13 +78,13 @@ router.post('/upgrade',
 
 /**
  * @route   POST /api/subscriptions/cancel
- * @desc    Cancel subscription (redirects to Outseta)
+ * @desc    Cancel subscription (via Stripe)
  * @access  Private
  */
 router.post('/cancel',
   authenticateJWT,
   [
-    body('redirectUrl').optional().isURL()
+    body('reason').optional().isString()
   ],
   validateRequest,
   subscriptionController.cancel

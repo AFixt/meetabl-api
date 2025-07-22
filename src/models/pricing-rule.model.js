@@ -22,7 +22,7 @@ const PricingRule = sequelize.define('PricingRule', {
     type: DataTypes.STRING(36),
     allowNull: false,
     references: {
-      model: 'users',
+      model: User,
       key: 'id'
     }
   },

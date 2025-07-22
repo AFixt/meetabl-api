@@ -8,26 +8,29 @@
  */
 
 const { DataTypes } = require('sequelize');
+const { v4: uuidv4 } = require('uuid');
+const { sequelize } = require('../config/database');
 
-module.exports = (sequelize) => {
-  const JwtBlacklist = sequelize.define('JwtBlacklist', {
-    inc: {
-      type: DataTypes.INTEGER,
+const JwtBlacklist = sequelize.define('JwtBlacklist', {
+    id: {
+      type: DataTypes.STRING(36),
       primaryKey: true,
-      autoIncrement: true
+      defaultValue: () => uuidv4()
     },
     jwtId: {
       type: DataTypes.STRING(36),
       allowNull: false,
-      unique: true
+      unique: true,
+      field: 'jwtId'  // Explicitly map to camelCase column
     },
     token: {
       type: DataTypes.TEXT,
       allowNull: false
     },
     userId: {
-      type: DataTypes.INTEGER,
-      allowNull: false
+      type: DataTypes.STRING(36),
+      allowNull: false,
+      field: 'userId'  // Explicitly map to camelCase column
     },
     reason: {
       type: DataTypes.STRING(50),
@@ -35,7 +38,8 @@ module.exports = (sequelize) => {
     },
     expiresAt: {
       type: DataTypes.DATE,
-      allowNull: false
+      allowNull: false,
+      field: 'expiresAt'  // Explicitly map to camelCase column
     },
     created: {
       type: DataTypes.DATE,
@@ -63,5 +67,4 @@ module.exports = (sequelize) => {
     ]
   });
 
-  return JwtBlacklist;
-};
+module.exports = JwtBlacklist;

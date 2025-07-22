@@ -8,66 +8,90 @@
  */
 
 const { DataTypes } = require('sequelize');
+const { v4: uuidv4 } = require('uuid');
 const { sequelize } = require('../config/database');
-const User = require('./user.model');
 
 const Booking = sequelize.define('Booking', {
   id: {
-    type: DataTypes.INTEGER,
+    type: DataTypes.STRING(36),
     primaryKey: true,
-    autoIncrement: true
+    defaultValue: () => uuidv4()
   },
   userId: {
-    type: DataTypes.INTEGER,
+    type: DataTypes.STRING(36),
     allowNull: false,
-    references: {
-      model: User,
-      key: 'id'
-    }
+    field: 'user_id'
   },
-  customer_name: {
+  customerName: {
     type: DataTypes.STRING(100),
     allowNull: false,
+    field: 'customer_name',
     validate: {
       notEmpty: true
     }
   },
-  customer_email: {
+  customerEmail: {
     type: DataTypes.STRING(255),
     allowNull: false,
+    field: 'customer_email',
     validate: {
       isEmail: true
     }
   },
-  start_time: {
-    type: DataTypes.DATE,
-    allowNull: false
+  customerPhone: {
+    type: DataTypes.STRING(25),
+    allowNull: true,
+    field: 'customer_phone'
   },
-  end_time: {
+  startTime: {
     type: DataTypes.DATE,
-    allowNull: false
+    allowNull: false,
+    field: 'start_time'
   },
-  calendar_event_id: {
+  endTime: {
+    type: DataTypes.DATE,
+    allowNull: false,
+    field: 'end_time'
+  },
+  calendarEventId: {
     type: DataTypes.STRING(255),
+    allowNull: true,
+    field: 'calendar_event_id'
+  },
+  notes: {
+    type: DataTypes.TEXT,
     allowNull: true
+  },
+  meetingUrl: {
+    type: DataTypes.STRING(500),
+    allowNull: true,
+    field: 'meeting_url'
   },
   status: {
     type: DataTypes.ENUM('confirmed', 'cancelled'),
     defaultValue: 'confirmed'
   },
-  created: {
+  createdAt: {
     type: DataTypes.DATE,
-    defaultValue: DataTypes.NOW
+    defaultValue: DataTypes.NOW,
+    field: 'created'
+  },
+  updatedAt: {
+    type: DataTypes.DATE,
+    field: 'updated'
   }
 }, {
-  tableName: 'Bookings',
+  tableName: 'bookings',
   timestamps: true,
-  createdAt: 'created',
-  updatedAt: false
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt'
 });
 
 // Define relationships
-User.hasMany(Booking, { foreignKey: 'userId', onDelete: 'CASCADE' });
-Booking.belongsTo(User, { foreignKey: 'userId' });
+// Import User after model definition to avoid circular dependency
+setTimeout(() => {
+  const User = require('./user.model');
+  Booking.belongsTo(User, { foreignKey: 'userId' });
+}, 0);
 
 module.exports = Booking;

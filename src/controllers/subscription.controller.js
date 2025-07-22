@@ -8,7 +8,9 @@
 
 const { createLogger } = require('../config/logger');
 const subscriptionService = require('../services/subscription.service');
-const outsetaService = require('../services/outseta.service');
+const stripeService = require('../services/stripe.service');
+const stripeSubscriptionService = require('../services/stripe-subscription.service');
+const stripeProducts = require('../config/stripe-products');
 const { asyncHandler, successResponse } = require('../utils/error-response');
 
 const logger = createLogger('subscription-controller');
@@ -126,46 +128,88 @@ const checkLimit = asyncHandler(async (req, res) => {
 });
 
 /**
- * Upgrade subscription - redirects to Outseta
+ * Upgrade subscription - creates Stripe checkout session
  * @param {Object} req - Express request object
  * @param {Object} res - Express response object
  */
 const upgrade = asyncHandler(async (req, res) => {
-  const { planId } = req.body;
-  const redirectUrl = req.body.redirectUrl || process.env.APP_URL || 'http://localhost:3000';
+  const { planId, billingPeriod = 'monthly' } = req.body;
+  const userId = req.user.id;
+  
+  // Determine the correct Stripe price ID based on billing period
+  let priceId;
+  if (billingPeriod === 'annual') {
+    priceId = stripeProducts.PRICES.ANNUAL.id;
+  } else {
+    priceId = stripeProducts.PRICES.MONTHLY.id;
+  }
   
   logger.info('Subscription upgrade requested', { 
-    userId: req.user.id, 
-    planId 
+    userId, 
+    planId,
+    billingPeriod,
+    priceId,
+    productId: stripeProducts.SUBSCRIPTION_PRODUCT_ID
   });
   
-  // Generate Outseta upgrade URL
-  const upgradeUrl = `${process.env.OUTSETA_DOMAIN}/account/billing?redirect_uri=${encodeURIComponent(redirectUrl)}`;
+  // Create Stripe checkout session for upgrade
+  const session = await stripeSubscriptionService.createCheckoutSession(req.user, priceId, {
+    successUrl: `${process.env.APP_URL || process.env.FRONTEND_URL}/subscription/success?session_id={CHECKOUT_SESSION_ID}`,
+    cancelUrl: `${process.env.APP_URL || process.env.FRONTEND_URL}/subscription/plans`,
+    // Enable discount codes
+    allow_promotion_codes: stripeProducts.DISCOUNT_CODES.ENABLED
+  });
+  
+  // Update user plan limits when upgrading
+  await req.user.update({
+    plan_type: 'paid',
+    max_calendars: stripeProducts.PLAN_LIMITS.PAID.maxCalendars,
+    max_event_types: stripeProducts.PLAN_LIMITS.PAID.maxEventTypes,
+    integrations_enabled: stripeProducts.PLAN_LIMITS.PAID.integrationsEnabled,
+    billing_period: billingPeriod
+  });
   
   successResponse(res, {
-    message: 'Redirect to Outseta billing',
-    redirectUrl: upgradeUrl
+    message: 'Stripe checkout session created',
+    checkoutUrl: session.url,
+    sessionId: session.id,
+    productId: stripeProducts.SUBSCRIPTION_PRODUCT_ID
   });
 });
 
 /**
- * Cancel subscription - redirects to Outseta
+ * Cancel subscription - cancels via Stripe
  * @param {Object} req - Express request object
  * @param {Object} res - Express response object
  */
 const cancel = asyncHandler(async (req, res) => {
-  const redirectUrl = req.body.redirectUrl || process.env.APP_URL || 'http://localhost:3000';
+  const { reason } = req.body;
+  const userId = req.user.id;
   
   logger.info('Subscription cancellation requested', { 
-    userId: req.user.id 
+    userId,
+    reason 
   });
   
-  // Generate Outseta billing management URL
-  const billingUrl = `${process.env.OUTSETA_DOMAIN}/account/billing?redirect_uri=${encodeURIComponent(redirectUrl)}`;
+  if (!req.user.stripe_customer_id) {
+    return res.status(400).json({
+      error: 'No active subscription found'
+    });
+  }
+  
+  // Cancel subscription via Stripe
+  const subscription = await stripeService.cancelSubscription(req.user.stripe_customer_id, {
+    reason,
+    userId
+  });
   
   successResponse(res, {
-    message: 'Redirect to Outseta billing',
-    redirectUrl: billingUrl
+    message: 'Subscription cancelled successfully',
+    subscription: {
+      status: subscription.status,
+      canceledAt: subscription.canceled_at,
+      currentPeriodEnd: subscription.current_period_end
+    }
   });
 });
 

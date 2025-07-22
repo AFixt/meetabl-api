@@ -8,18 +8,20 @@
  */
 
 const { DataTypes } = require('sequelize');
+const { v4: uuidv4 } = require('uuid');
 const { sequelize } = require('../config/database');
 const User = require('./user.model');
 
 const AuditLog = sequelize.define('AuditLog', {
   id: {
-    type: DataTypes.INTEGER,
+    type: DataTypes.STRING(36),
     primaryKey: true,
-    autoIncrement: true
+    defaultValue: () => uuidv4()
   },
   userId: {
-    type: DataTypes.INTEGER,
+    type: DataTypes.STRING(36),
     allowNull: false,
+    field: 'user_id',
     references: {
       model: User,
       key: 'id'

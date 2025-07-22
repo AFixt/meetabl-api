@@ -194,8 +194,9 @@ app.use(cors({
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'Accept'],
-  exposedHeaders: ['X-Total-Count']
+  allowedHeaders: ['Content-Type', 'Authorization', 'Accept', 'Cookie'],
+  exposedHeaders: ['X-Total-Count', 'Set-Cookie'],
+  optionsSuccessStatus: 200
 }));
 
 // Add raw body parsing for Stripe webhooks
@@ -207,9 +208,7 @@ app.use(bodyParser.urlencoded({ extended: true }));
 app.use(cookieParser());
 
 // Redis-based session configuration will be initialized in initializeApp
-
-// Initialize CSRF protection
-app.use(initializeCsrf);
+// CSRF will be initialized after session middleware is set up
 
 // Apply rate limiting with different limits for different endpoint types
 const createRateLimiter = (windowMs, max, message) => rateLimit({
@@ -231,36 +230,41 @@ const createRateLimiter = (windowMs, max, message) => rateLimit({
 // General API rate limiting (higher limit)
 const generalLimiter = createRateLimiter(
   15 * 60 * 1000, // 15 minutes
-  200, // Increased from 100 for normal operations
+  process.env.NODE_ENV === 'development' ? 1000 : 200, // Very lenient in development
   'Too many requests, please try again later.'
 );
 
 // Strict rate limiting for authentication endpoints
 const authLimiter = createRateLimiter(
   15 * 60 * 1000, // 15 minutes  
-  5, // Very restrictive for login attempts
+  process.env.NODE_ENV === 'development' ? 100 : 5, // More lenient in development
   'Too many authentication attempts, please try again in 15 minutes.'
 );
 
 // Moderate rate limiting for password reset endpoints
 const passwordResetLimiter = createRateLimiter(
   60 * 60 * 1000, // 1 hour
-  3, // Only 3 password reset attempts per hour
+  process.env.NODE_ENV === 'development' ? 50 : 3, // More lenient in development
   'Too many password reset requests, please try again in 1 hour.'
 );
 
-// Apply general rate limiting to all routes
-app.use(generalLimiter);
+// Apply rate limiting only in non-development environments
+if (process.env.NODE_ENV !== 'development') {
+  // Apply general rate limiting to all routes
+  app.use(generalLimiter);
+}
 
 // Add logging and performance monitoring middleware
 app.use(requestLoggingMiddleware);
 app.use(requestPerformanceMiddleware);
 
-// Apply strict rate limiting to authentication endpoints
-app.use('/api/auth/login', authLimiter);
-app.use('/api/auth/register', authLimiter);
-app.use('/api/auth/forgot-password', passwordResetLimiter);
-app.use('/api/auth/reset-password', passwordResetLimiter);
+// Apply strict rate limiting to authentication endpoints only in non-development
+if (process.env.NODE_ENV !== 'development') {
+  app.use('/api/auth/login', authLimiter);
+  app.use('/api/auth/register', authLimiter);
+  app.use('/api/auth/forgot-password', passwordResetLimiter);
+  app.use('/api/auth/reset-password', passwordResetLimiter);
+}
 
 // Add request logging middleware
 app.use((req, res, next) => {
@@ -286,183 +290,24 @@ const analyticsRoutes = require('./routes/analytics.routes');
 const teamRoutes = require('./routes/team.routes');
 const paymentRoutes = require('./routes/payment.routes');
 const docsRoutes = require('./routes/docs.routes');
-const outsetaRoutes = require('./routes/outseta.routes');
 const subscriptionRoutes = require('./routes/subscription.routes');
 const monitoringRoutes = require('./routes/monitoring.routes');
 const pwaRoutes = require('./routes/pwa.routes');
 const gdprRoutes = require('./routes/gdpr.routes');
 const stripeWebhookRoutes = require('./routes/stripe-webhook.routes');
+const stripeElementsRoutes = require('./routes/stripe-elements.routes');
 const twoFactorAuthRoutes = require('./routes/two-factor-auth.routes');
+const testRoutes = require('./routes/test.routes');
 
 // Database monitoring endpoint (only in development/staging)
 if (process.env.NODE_ENV !== 'production') {
   app.use(dbMonitor.createExpressMiddleware());
 }
 
-// CSRF token endpoint
-app.get('/api/csrf-token', provideCsrfToken);
-
-// Apply CSRF protection to state-changing routes
-// Skip authentication routes as they typically don't need CSRF (using JWT)
-app.use('/api/users', protectCsrf);
-app.use('/api/account', protectCsrf);
-app.use('/api/availability', protectCsrf);
-app.use('/api/bookings', protectCsrf);
-app.use('/api/calendar', protectCsrf);
-app.use('/api/notifications', protectCsrf);
-app.use('/api/analytics', protectCsrf);
-app.use('/api/teams', protectCsrf);
-app.use('/api/payments', protectCsrf);
-app.use('/api/subscriptions', protectCsrf);
-app.use('/api/gdpr', protectCsrf);
-app.use('/api/2fa', protectCsrf);
-
-// Apply routes
-app.use('/api/auth', authRoutes);
-app.use('/api/users', userRoutes);
-app.use('/api/account', accountRoutes);
-app.use('/api/availability', availabilityRoutes);
-app.use('/api/bookings', bookingRoutes);
-app.use('/api/calendar', calendarRoutes);
-app.use('/api/notifications', notificationRoutes);
-app.use('/api/analytics', analyticsRoutes);
-app.use('/api/teams', teamRoutes);
-app.use('/api/payments', paymentRoutes);
-app.use('/api/outseta', outsetaRoutes);
-app.use('/api/subscriptions', subscriptionRoutes);
-app.use('/api/monitoring', monitoringRoutes);
-app.use('/api/pwa', pwaRoutes);
-app.use('/api/gdpr', gdprRoutes);
-app.use('/api/stripe/webhook', stripeWebhookRoutes);
-app.use('/api/2fa', twoFactorAuthRoutes);
-
-// Documentation routes (no rate limiting for docs)
-app.use('/api/docs', docsRoutes);
-
-// Default route
-app.get('/', (req, res) => {
-  res.status(200).json({
-    message: 'meetabl API is running',
-    version: '1.0.0',
-    documentation: 'See README.md for API documentation'
-  });
-});
-
-// Import health check service for root endpoints
+// Import health check service for endpoints
 const healthCheckService = require('./services/health-check.service');
 
-// Root health check endpoints (commonly used by load balancers)
-app.get('/health', async (req, res) => {
-  try {
-    const result = await healthCheckService.getBasicHealth();
-    const statusCode = result.status === 'healthy' ? 200 : 503;
-    res.status(statusCode).json(result);
-  } catch (error) {
-    res.status(503).json({
-      status: 'unhealthy',
-      timestamp: new Date().toISOString()
-    });
-  }
-});
-
-app.get('/healthz', async (req, res) => {
-  try {
-    const result = await healthCheckService.getBasicHealth();
-    const statusCode = result.status === 'healthy' ? 200 : 503;
-    res.status(statusCode).json(result);
-  } catch (error) {
-    res.status(503).json({
-      status: 'unhealthy',
-      timestamp: new Date().toISOString()
-    });
-  }
-});
-
-app.get('/ping', (req, res) => {
-  res.status(200).json({
-    status: 'pong',
-    timestamp: new Date().toISOString(),
-    uptime: process.uptime()
-  });
-});
-
-app.get('/ready', async (req, res) => {
-  try {
-    const isReady = await healthCheckService.isReady();
-    
-    if (isReady) {
-      res.status(200).json({
-        status: 'ready',
-        timestamp: new Date().toISOString()
-      });
-    } else {
-      res.status(503).json({
-        status: 'not-ready',
-        timestamp: new Date().toISOString()
-      });
-    }
-  } catch (error) {
-    res.status(503).json({
-      status: 'not-ready',
-      timestamp: new Date().toISOString()
-    });
-  }
-});
-
-app.get('/alive', (req, res) => {
-  const result = healthCheckService.isAlive();
-  const statusCode = result.status === 'healthy' ? 200 : 503;
-  res.status(statusCode).json(result);
-});
-
-// Legacy /api/health endpoint with detailed monitoring info
-app.get('/api/health', async (req, res) => {
-  try {
-    const { sequelize, getPoolStats } = require('./config/database');
-    const dbStatus = await sequelize.authenticate().then(() => 'connected').catch(() => 'disconnected');
-    
-    const response = {
-      status: 'healthy',
-      timestamp: new Date().toISOString(),
-      environment: process.env.NODE_ENV,
-      database: {
-        status: dbStatus,
-        pool: getPoolStats()
-      },
-      monitoring: {
-        enabled: dbMonitor.enabled,
-        slowQueryThreshold: dbMonitor.slowQueryThreshold
-      }
-    };
-
-    // Include detailed stats in non-production environments
-    if (process.env.NODE_ENV !== 'production') {
-      response.monitoring.stats = dbMonitor.getStats();
-      response.monitoring.slowQueries = dbMonitor.getSlowQueries(5);
-    }
-
-    res.status(200).json(response);
-  } catch (error) {
-    logger.error('Health check failed:', error);
-    res.status(503).json({
-      status: 'unhealthy',
-      timestamp: new Date().toISOString(),
-      error: 'Failed to perform health check'
-    });
-  }
-});
-
-// 404 handler
-app.use((req, res, next) => {
-  const error = notFoundError('Route not found');
-  next(error);
-});
-
-// Error logging middleware (before global error handler)
-app.use(errorLoggingMiddleware);
-
-// Standardized error handling middleware
-app.use(errorHandler);
+// Routes and health check endpoints will be applied after session middleware is initialized
 
 /**
  * Initialize the application
@@ -475,6 +320,161 @@ const initializeApp = async () => {
     app.use(sessionMiddleware);
     app.use(sessionCleanup);
     app.use(sessionSecurity);
+    
+    // Initialize CSRF protection after session is available
+    app.use(initializeCsrf);
+    
+    // CSRF token endpoint
+    app.get('/api/csrf-token', provideCsrfToken);
+    
+    // Apply routes
+    app.use('/api/auth', authRoutes);
+    app.use('/api/users', protectCsrf, userRoutes);
+    app.use('/api/account', protectCsrf, accountRoutes);
+    app.use('/api/availability', protectCsrf, availabilityRoutes);
+    app.use('/api/bookings', protectCsrf, bookingRoutes);
+    app.use('/api/calendar', protectCsrf, calendarRoutes);
+    app.use('/api/notifications', protectCsrf, notificationRoutes);
+    app.use('/api/analytics', protectCsrf, analyticsRoutes);
+    app.use('/api/teams', protectCsrf, teamRoutes);
+    app.use('/api/payments', protectCsrf, paymentRoutes);
+    app.use('/api/subscriptions', protectCsrf, subscriptionRoutes);
+    app.use('/api/monitoring', monitoringRoutes);
+    app.use('/api/pwa', pwaRoutes);
+    app.use('/api/gdpr', protectCsrf, gdprRoutes);
+    app.use('/api/stripe/webhook', stripeWebhookRoutes);
+    app.use('/api/stripe/elements', protectCsrf, stripeElementsRoutes);
+    app.use('/api/2fa', protectCsrf, twoFactorAuthRoutes);
+    
+    // Test routes (only in test/development environments)
+    if (process.env.NODE_ENV === 'test' || process.env.NODE_ENV === 'development') {
+      app.use('/api/test', testRoutes);
+    }
+    
+    // Documentation routes (no rate limiting for docs)
+    app.use('/api/docs', docsRoutes);
+    
+    // Default route
+    app.get('/', (req, res) => {
+      res.status(200).json({
+        message: 'meetabl API is running',
+        version: '1.0.0',
+        documentation: 'See README.md for API documentation'
+      });
+    });
+    
+    // Root health check endpoints (commonly used by load balancers)
+    app.get('/health', async (req, res) => {
+      try {
+        const result = await healthCheckService.getBasicHealth();
+        const statusCode = result.status === 'healthy' ? 200 : 503;
+        res.status(statusCode).json(result);
+      } catch (error) {
+        res.status(503).json({
+          status: 'unhealthy',
+          timestamp: new Date().toISOString()
+        });
+      }
+    });
+    
+    app.get('/healthz', async (req, res) => {
+      try {
+        const result = await healthCheckService.getBasicHealth();
+        const statusCode = result.status === 'healthy' ? 200 : 503;
+        res.status(statusCode).json(result);
+      } catch (error) {
+        res.status(503).json({
+          status: 'unhealthy',
+          timestamp: new Date().toISOString()
+        });
+      }
+    });
+    
+    app.get('/ping', (req, res) => {
+      res.status(200).json({
+        status: 'pong',
+        timestamp: new Date().toISOString(),
+        uptime: process.uptime()
+      });
+    });
+    
+    app.get('/ready', async (req, res) => {
+      try {
+        const isReady = await healthCheckService.isReady();
+        
+        if (isReady) {
+          res.status(200).json({
+            status: 'ready',
+            timestamp: new Date().toISOString()
+          });
+        } else {
+          res.status(503).json({
+            status: 'not-ready',
+            timestamp: new Date().toISOString()
+          });
+        }
+      } catch (error) {
+        res.status(503).json({
+          status: 'not-ready',
+          timestamp: new Date().toISOString()
+        });
+      }
+    });
+    
+    app.get('/alive', (req, res) => {
+      const result = healthCheckService.isAlive();
+      const statusCode = result.status === 'healthy' ? 200 : 503;
+      res.status(statusCode).json(result);
+    });
+    
+    // Legacy /api/health endpoint with detailed monitoring info
+    app.get('/api/health', async (req, res) => {
+      try {
+        const { sequelize, getPoolStats } = require('./config/database');
+        const dbStatus = await sequelize.authenticate().then(() => 'connected').catch(() => 'disconnected');
+        
+        const response = {
+          status: 'healthy',
+          timestamp: new Date().toISOString(),
+          environment: process.env.NODE_ENV,
+          database: {
+            status: dbStatus,
+            pool: getPoolStats()
+          },
+          monitoring: {
+            enabled: dbMonitor.enabled,
+            slowQueryThreshold: dbMonitor.slowQueryThreshold
+          }
+        };
+        
+        // Include detailed stats in non-production environments
+        if (process.env.NODE_ENV !== 'production') {
+          response.monitoring.stats = dbMonitor.getStats();
+          response.monitoring.slowQueries = dbMonitor.getSlowQueries(5);
+        }
+        
+        res.status(200).json(response);
+      } catch (error) {
+        logger.error('Health check failed:', error);
+        res.status(503).json({
+          status: 'unhealthy',
+          timestamp: new Date().toISOString(),
+          error: 'Failed to perform health check'
+        });
+      }
+    });
+    
+    // 404 handler
+    app.use((req, res, next) => {
+      const error = notFoundError('Route not found');
+      next(error);
+    });
+    
+    // Error logging middleware (before global error handler)
+    app.use(errorLoggingMiddleware);
+    
+    // Standardized error handling middleware
+    app.use(errorHandler);
     
     // Initialize database connection
     await initializeDatabase();

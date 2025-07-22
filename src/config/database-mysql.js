@@ -38,6 +38,16 @@ const initializeDatabase = async () => {
   try {
     await sequelize.authenticate();
     logger.info(`MySQL connection established successfully to ${process.env.DB_NAME}`);
+    
+    // Sync database schema (create tables if they don't exist)
+    // Disabled auto-sync due to "Too many keys" error
+    // Run migrations manually instead
+    if (false && process.env.NODE_ENV === 'development') {
+      logger.info('Syncing database schema...');
+      await sequelize.sync({ alter: true });
+      logger.info('Database schema synchronized');
+    }
+    
     return sequelize;
   } catch (error) {
     logger.error('Unable to connect to MySQL database:', error);

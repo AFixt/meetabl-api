@@ -12,7 +12,7 @@ A WCAG 2.2 AA/AAA compliant booking API for the meetabl platform. meetabl is a r
 - **Public booking links** with customizable branding
 - **Team collaboration** with role-based access control
 - **Payment processing** with Stripe integration
-- **User subscription management** with Outseta integration
+- **User subscription management** with Stripe integration
 
 ### Enterprise Features
 - **Progressive Web App (PWA)** with offline capabilities
@@ -51,7 +51,7 @@ A WCAG 2.2 AA/AAA compliant booking API for the meetabl platform. meetabl is a r
 ### Integrations & APIs
 - **AWS SDK v3** for cloud storage (S3)
 - **Stripe API** for payment processing
-- **Outseta API** for subscription management
+- **Stripe API** for subscription and payment management
 - **Twilio API** for SMS notifications
 - **Nodemailer** for email notifications
 - **Google Calendar API** and **Microsoft Graph API**
@@ -343,7 +343,8 @@ GOOGLE_CLIENT_SECRET=your-google-client-secret
 MICROSOFT_CLIENT_ID=your-microsoft-client-id
 MICROSOFT_CLIENT_SECRET=your-microsoft-client-secret
 STRIPE_SECRET_KEY=your-stripe-secret-key
-OUTSETA_API_KEY=your-outseta-api-key
+STRIPE_SECRET_KEY=your-stripe-secret-key
+STRIPE_WEBHOOK_SECRET=your-stripe-webhook-secret
 TWILIO_ACCOUNT_SID=your-twilio-sid
 TWILIO_AUTH_TOKEN=your-twilio-token
 
@@ -543,7 +544,7 @@ meetabl-api/
 │   │   ├── migrate.js      # Database migration
 │   │   └── seed.js         # Database seeding
 │   ├── middlewares/        # Express middlewares
-│   │   ├── auth.js         # JWT and Outseta authentication
+│   │   ├── auth.js         # JWT authentication
 │   │   ├── validation.js   # Express-validator middleware
 │   │   ├── csrf.js         # CSRF protection
 │   │   ├── logging.js      # Request/response logging
@@ -571,7 +572,7 @@ meetabl-api/
 │   │   ├── analytics.routes.js
 │   │   ├── notification.routes.js
 │   │   ├── monitoring.routes.js
-│   │   ├── outseta.routes.js
+│   │   ├── stripe-webhook.routes.js
 │   │   ├── subscription.routes.js
 │   │   ├── pwa.routes.js
 │   │   └── docs.routes.js
@@ -584,7 +585,7 @@ meetabl-api/
 │   │   ├── metrics.service.js
 │   │   ├── health-check.service.js
 │   │   ├── log-management.service.js
-│   │   ├── outseta.service.js
+│   │   ├── stripe.service.js
 │   │   └── webhook.service.js
 │   ├── utils/              # Utility functions
 │   │   ├── error-response.js

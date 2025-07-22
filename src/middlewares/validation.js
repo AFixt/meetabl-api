@@ -85,11 +85,17 @@ const validateUuid = [
  * Validate user registration
  */
 const validateUserRegistration = [
-  body('name')
+  body('firstName')
     .notEmpty()
-    .withMessage('Name is required')
-    .isLength({ max: 100 })
-    .withMessage('Name must be at most 100 characters'),
+    .withMessage('First name is required')
+    .isLength({ max: 50 })
+    .withMessage('First name must be at most 50 characters'),
+    
+  body('lastName')
+    .notEmpty()
+    .withMessage('Last name is required')
+    .isLength({ max: 50 })
+    .withMessage('Last name must be at most 50 characters'),
 
   body('email')
     .notEmpty()
@@ -111,8 +117,9 @@ const validateUserRegistration = [
     .withMessage('Password must contain at least one number'),
 
   body('timezone')
-    .notEmpty()
-    .withMessage('Timezone is required'),
+    .optional()
+    .isString()
+    .withMessage('Timezone must be a string'),
 
   validateRequest
 ];

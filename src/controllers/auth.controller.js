@@ -48,7 +48,7 @@ const register = asyncHandler(async (req, res) => {
 
   try {
     const {
-      first_name, last_name, email, password, phone, timezone
+      firstName, lastName, email, password, phone, timezone, username
     } = req.body;
 
     // Check if user already exists
@@ -58,9 +58,7 @@ const register = asyncHandler(async (req, res) => {
       throw conflictError('Email already in use');
     }
 
-    // Create user
-    const salt = await bcrypt.genSalt(10);
-    const passwordHash = await bcrypt.hash(password, salt);
+    // Create user (password will be hashed by User model hook)
 
     const userId = uuidv4();
     
@@ -71,39 +69,31 @@ const register = asyncHandler(async (req, res) => {
     // Set default consent for new users (can be changed later)
     const user = await User.create({
       id: userId,
-      first_name,
-      last_name,
+      firstName,
+      lastName,
       email,
-      phone,
-      password_hash: passwordHash,
+      username: username || email.split('@')[0], // Default username from email prefix if not provided
+      password: password,
       timezone: timezone || 'UTC',
       email_verified: false,
       email_verification_token: hashedVerificationToken,
-      email_verification_expires: new Date(Date.now() + 24 * 60 * 60 * 1000), // 24 hours
-      marketing_consent: false, // User can opt-in later
-      data_processing_consent: true, // Required for service functionality
-      consent_timestamp: new Date(),
-      is_super_admin: false
+      email_verification_expires: new Date(Date.now() + 24 * 60 * 60 * 1000) // 24 hours
     }, { transaction });
 
     // Create default user settings
     await UserSettings.create({
       id: uuidv4(),
-      user_id: userId
+      userId: userId
     }, { transaction });
 
     // Create audit log
     await AuditLog.create({
       id: uuidv4(),
-      user_id: userId,
+      userId: userId,
       action: 'user.register',
       metadata: {
         email,
-        timezone,
-        consent_given: {
-          marketing: false,
-          data_processing: true
-        }
+        timezone
       }
     }, { transaction });
 
@@ -150,7 +140,7 @@ const register = asyncHandler(async (req, res) => {
     const cookieOptions = {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
-      sameSite: 'strict',
+      sameSite: process.env.NODE_ENV === 'production' ? 'strict' : 'lax',
       maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
     };
 
@@ -161,8 +151,8 @@ const register = asyncHandler(async (req, res) => {
 
     return successResponse(res, {
       id: user.id,
-      first_name: user.first_name,
-      last_name: user.last_name,
+      first_name: user.firstName,
+      last_name: user.lastName,
       email: user.email,
       phone: user.phone,
       timezone: user.timezone,
@@ -196,7 +186,7 @@ const login = asyncHandler(async (req, res) => {
     }
 
     // Validate password
-    const isPasswordValid = await bcrypt.compare(password, user.password_hash);
+    const isPasswordValid = await bcrypt.compare(password, user.password);
 
     if (!isPasswordValid) {
       throw unauthorizedError('Invalid email or password');
@@ -231,7 +221,7 @@ const login = asyncHandler(async (req, res) => {
     // Create audit log
     await AuditLog.create({
       id: uuidv4(),
-      user_id: user.id,
+      userId: user.id,
       action: 'user.login',
       metadata: {
         email
@@ -248,14 +238,14 @@ const login = asyncHandler(async (req, res) => {
     const cookieOptions = {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
-      sameSite: 'strict',
+      sameSite: process.env.NODE_ENV === 'production' ? 'strict' : 'lax',
       maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
     };
 
     const refreshCookieOptions = {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
-      sameSite: 'strict',
+      sameSite: process.env.NODE_ENV === 'production' ? 'strict' : 'lax',
       maxAge: 30 * 24 * 60 * 60 * 1000 // 30 days
     };
 
@@ -265,14 +255,15 @@ const login = asyncHandler(async (req, res) => {
     // Return user data with subscription status
     return successResponse(res, {
       id: user.id,
-      first_name: user.first_name,
-      last_name: user.last_name,
+      first_name: user.firstName,
+      last_name: user.lastName,
       email: user.email,
-      phone: user.phone,
       timezone: user.timezone,
       email_verified: user.email_verified,
-      is_super_admin: user.is_super_admin,
-      subscription: subscriptionStatus
+      subscription: subscriptionStatus,
+      access_token: token,
+      refresh_token: refreshToken,
+      expires_in: process.env.JWT_EXPIRES_IN || '7d'
     }, 'Login successful');
   } catch (error) {
     throw error;
@@ -326,7 +317,7 @@ const refreshToken = asyncHandler(async (req, res) => {
     // Create audit log
     await AuditLog.create({
       id: uuidv4(),
-      user_id: user.id,
+      userId: user.id,
       action: 'user.token_refresh',
       metadata: {}
     });
@@ -338,14 +329,14 @@ const refreshToken = asyncHandler(async (req, res) => {
     const cookieOptions = {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
-      sameSite: 'strict',
+      sameSite: process.env.NODE_ENV === 'production' ? 'strict' : 'lax',
       maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
     };
 
     const refreshCookieOptions = {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
-      sameSite: 'strict',
+      sameSite: process.env.NODE_ENV === 'production' ? 'strict' : 'lax',
       maxAge: 30 * 24 * 60 * 60 * 1000 // 30 days
     };
 
@@ -454,7 +445,7 @@ const forgotPassword = asyncHandler(async (req, res) => {
     // Create audit log
     await AuditLog.create({
       id: uuidv4(),
-      user_id: user.id,
+      userId: user.id,
       action: 'user.password_reset_requested',
       metadata: {
         email
@@ -505,7 +496,7 @@ const resetPassword = asyncHandler(async (req, res) => {
     // Create audit log
     await AuditLog.create({
       id: uuidv4(),
-      user_id: user.id,
+      userId: user.id,
       action: 'user.password_reset_completed',
       metadata: {
         email: user.email
@@ -582,7 +573,7 @@ const confirmEmail = asyncHandler(async (req, res) => {
     // Create audit log
     await AuditLog.create({
       id: uuidv4(),
-      user_id: user.id,
+      userId: user.id,
       action: 'user.email_verified',
       metadata: {
         email: user.email,
@@ -640,7 +631,7 @@ const verify2FA = asyncHandler(async (req, res) => {
     }
 
     // Validate password
-    const isPasswordValid = await bcrypt.compare(password, user.password_hash);
+    const isPasswordValid = await bcrypt.compare(password, user.password);
 
     if (!isPasswordValid) {
       throw unauthorizedError('Invalid credentials');
@@ -653,7 +644,7 @@ const verify2FA = asyncHandler(async (req, res) => {
       // Log failed 2FA attempt
       await AuditLog.create({
         id: uuidv4(),
-        user_id: user.id,
+        userId: user.id,
         action: 'user.2fa_login_failed',
         metadata: {
           email,
@@ -683,7 +674,7 @@ const verify2FA = asyncHandler(async (req, res) => {
     // Create audit log for successful login
     await AuditLog.create({
       id: uuidv4(),
-      user_id: user.id,
+      userId: user.id,
       action: 'user.2fa_login_success',
       metadata: {
         email,
@@ -702,14 +693,14 @@ const verify2FA = asyncHandler(async (req, res) => {
     const cookieOptions = {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
-      sameSite: 'strict',
+      sameSite: process.env.NODE_ENV === 'production' ? 'strict' : 'lax',
       maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
     };
 
     const refreshCookieOptions = {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
-      sameSite: 'strict',
+      sameSite: process.env.NODE_ENV === 'production' ? 'strict' : 'lax',
       maxAge: 30 * 24 * 60 * 60 * 1000 // 30 days
     };
 
@@ -718,8 +709,8 @@ const verify2FA = asyncHandler(async (req, res) => {
 
     const responseData = {
       id: user.id,
-      first_name: user.first_name,
-      last_name: user.last_name,
+      first_name: user.firstName,
+      last_name: user.lastName,
       email: user.email,
       phone: user.phone,
       timezone: user.timezone,
@@ -779,7 +770,7 @@ const resendVerificationEmail = asyncHandler(async (req, res) => {
     // Create audit log
     await AuditLog.create({
       id: uuidv4(),
-      user_id: user.id,
+      userId: user.id,
       action: 'user.verification_email_resent',
       metadata: {
         email: user.email

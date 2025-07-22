@@ -23,7 +23,7 @@ const Invoice = sequelize.define('Invoice', {
     allowNull: false,
     unique: true,
     references: {
-      model: 'payments',
+      model: Payment,
       key: 'id'
     }
   },

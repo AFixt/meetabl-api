@@ -23,7 +23,7 @@ const Payment = sequelize.define('Payment', {
     type: DataTypes.STRING(36),
     allowNull: false,
     references: {
-      model: 'users',
+      model: User,
       key: 'id'
     }
   },
@@ -31,7 +31,7 @@ const Payment = sequelize.define('Payment', {
     type: DataTypes.STRING(36),
     allowNull: false,
     references: {
-      model: 'bookings',
+      model: Booking,
       key: 'id'
     }
   },

@@ -8,18 +8,20 @@
  */
 
 const { DataTypes } = require('sequelize');
+const { v4: uuidv4 } = require('uuid');
 const { sequelize } = require('../config/database');
 const User = require('./user.model');
 
 const UserSettings = sequelize.define('UserSettings', {
   id: {
-    type: DataTypes.INTEGER,
+    type: DataTypes.STRING(36),
     primaryKey: true,
-    autoIncrement: true
+    defaultValue: () => uuidv4()
   },
   userId: {
-    type: DataTypes.INTEGER,
+    type: DataTypes.STRING(36),
     allowNull: false,
+    field: 'user_id',
     references: {
       model: User,
       key: 'id'
@@ -28,41 +30,50 @@ const UserSettings = sequelize.define('UserSettings', {
   brandingColor: {
     type: DataTypes.STRING(7),
     defaultValue: '#000000',
+    field: 'branding_color',
     validate: {
       is: /^#[0-9A-F]{6}$/i
     }
   },
   confirmationEmailCopy: {
     type: DataTypes.TEXT,
-    allowNull: true
+    allowNull: true,
+    field: 'confirmation_email_copy'
   },
   accessibilityMode: {
     type: DataTypes.BOOLEAN,
-    defaultValue: true
+    defaultValue: true,
+    field: 'accessibility_mode'
   },
   altTextEnabled: {
     type: DataTypes.BOOLEAN,
-    defaultValue: true
+    defaultValue: true,
+    field: 'alt_text_enabled'
   },
   publicName: {
     type: DataTypes.STRING(100),
-    allowNull: true
+    allowNull: true,
+    field: 'public_name'
   },
   publicBio: {
     type: DataTypes.TEXT,
-    allowNull: true
+    allowNull: true,
+    field: 'public_bio'
   },
   publicAvatarUrl: {
     type: DataTypes.STRING(500),
-    allowNull: true
+    allowNull: true,
+    field: 'public_avatar_url'
   },
   bookingPageTitle: {
     type: DataTypes.STRING(100),
-    allowNull: true
+    allowNull: true,
+    field: 'booking_page_title'
   },
   bookingPageDescription: {
     type: DataTypes.TEXT,
-    allowNull: true
+    allowNull: true,
+    field: 'booking_page_description'
   }
 }, {
   tableName: 'UserSettings',

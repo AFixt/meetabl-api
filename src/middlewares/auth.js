@@ -9,7 +9,6 @@
 const jwt = require('jsonwebtoken');
 const logger = require('../config/logger');
 const { User, JwtBlacklist } = require('../models');
-const outsetaService = require('../services/outseta.service');
 
 /**
  * Verify JWT token and attach user to request
@@ -19,9 +18,15 @@ const outsetaService = require('../services/outseta.service');
  */
 const authenticateJWT = async (req, res, next) => {
   try {
+    // Debug logging
+    logger.debug('Auth middleware - cookies:', Object.keys(req.cookies || {}));
+    logger.debug('Auth middleware - cookie values:', {
+      jwt: req.cookies?.jwt ? 'present' : 'missing',
+      token: req.cookies?.token ? 'present' : 'missing'
+    });
+    
     // Try to get token from cookie first, then Authorization header
     let token = req.cookies.jwt || req.cookies.token;
-    let isOutsetaToken = false;
     
     if (!token) {
       const authHeader = req.headers.authorization;
@@ -32,6 +37,7 @@ const authenticateJWT = async (req, res, next) => {
     }
 
     if (!token) {
+      logger.debug('Auth middleware - no token found in cookies or headers');
       return res.status(401).json({
         error: {
           code: 'unauthorized',
@@ -40,64 +46,19 @@ const authenticateJWT = async (req, res, next) => {
       });
     }
 
+    // Verify JWT token
     let decoded;
-    let user;
-
-    // Check if this is an Outseta token (they have a different format)
-    if (token.includes('.') && token.split('.').length === 3) {
-      // Try to decode as JWT first
-      try {
-        decoded = jwt.verify(token, process.env.JWT_SECRET);
-      } catch (jwtError) {
-        // If JWT verification fails, try Outseta validation
-        try {
-          const outsetaData = await outsetaService.validateToken(token);
-          isOutsetaToken = true;
-          
-          // Find user by Outseta UID
-          user = await User.findOne({ where: { outseta_uid: outsetaData.uid } });
-          
-          if (!user) {
-            // Create user from Outseta data if not exists
-            user = await User.create({
-              outseta_uid: outsetaData.uid,
-              email: outsetaData.email,
-              firstName: outsetaData.firstName,
-              lastName: outsetaData.lastName,
-              timezone: outsetaData.timezone || 'UTC',
-              role: 'user',
-              status: 'active',
-              emailVerified: true,
-              emailVerifiedAt: new Date()
-            });
+    try {
+      decoded = jwt.verify(token, process.env.JWT_SECRET);
+    } catch (error) {
+      if (error instanceof jwt.TokenExpiredError) {
+        return res.status(401).json({
+          error: {
+            code: 'unauthorized',
+            message: 'Token expired'
           }
-        } catch (outsetaError) {
-          logger.error('Token validation failed', { error: outsetaError.message });
-          return res.status(401).json({
-            error: {
-              code: 'unauthorized',
-              message: 'Invalid token'
-            }
-          });
-        }
-      }
-    } else {
-      // Assume it's an Outseta token if it doesn't look like a JWT
-      try {
-        const outsetaData = await outsetaService.validateToken(token);
-        isOutsetaToken = true;
-        
-        user = await User.findOne({ where: { outseta_uid: outsetaData.uid } });
-        
-        if (!user) {
-          return res.status(401).json({
-            error: {
-              code: 'unauthorized',
-              message: 'User not found'
-            }
-          });
-        }
-      } catch (error) {
+        });
+      } else if (error instanceof jwt.JsonWebTokenError) {
         return res.status(401).json({
           error: {
             code: 'unauthorized',
@@ -105,37 +66,45 @@ const authenticateJWT = async (req, res, next) => {
           }
         });
       }
+      throw error;
     }
 
-    // If it's a JWT token and we haven't found the user yet
-    if (!isOutsetaToken && decoded) {
-      // Check if token is blacklisted
-      if (decoded.jti) {
-        const blacklistedToken = await JwtBlacklist.findOne({
-          where: { jwtId: decoded.jti }
-        });
+    // Check if token is blacklisted
+    if (decoded.jti) {
+      const blacklistedToken = await JwtBlacklist.findOne({
+        where: { jwtId: decoded.jti }
+      });
 
-        if (blacklistedToken) {
-          return res.status(401).json({
-            error: {
-              code: 'unauthorized',
-              message: 'Token has been revoked'
-            }
-          });
-        }
-      }
-
-      // Get user from database
-      user = await User.findOne({ where: { id: decoded.userId } });
-
-      if (!user) {
+      if (blacklistedToken) {
         return res.status(401).json({
           error: {
             code: 'unauthorized',
-            message: 'User not found'
+            message: 'Token has been revoked'
           }
         });
       }
+    }
+
+    // Get user from database
+    const user = await User.findOne({ where: { id: decoded.userId } });
+
+    if (!user) {
+      return res.status(401).json({
+        error: {
+          code: 'unauthorized',
+          message: 'User not found'
+        }
+      });
+    }
+
+    // Check if user is active
+    if (user.status !== 'active') {
+      return res.status(401).json({
+        error: {
+          code: 'unauthorized',
+          message: 'Account is not active'
+        }
+      });
     }
 
     // Attach user to request
@@ -146,23 +115,6 @@ const authenticateJWT = async (req, res, next) => {
 
     next();
   } catch (error) {
-    // Handle different JWT errors
-    if (error instanceof jwt.TokenExpiredError) {
-      return res.status(401).json({
-        error: {
-          code: 'unauthorized',
-          message: 'Token expired'
-        }
-      });
-    } if (error instanceof jwt.JsonWebTokenError) {
-      return res.status(401).json({
-        error: {
-          code: 'unauthorized',
-          message: 'Invalid token'
-        }
-      });
-    }
-
     logger.error('Authentication error:', error);
 
     return res.status(401).json({
@@ -174,6 +126,36 @@ const authenticateJWT = async (req, res, next) => {
   }
 };
 
+/**
+ * Middleware to require email verification
+ * @param {Object} req - Express request object
+ * @param {Object} res - Express response object
+ * @param {Function} next - Express next function
+ */
+const requireEmailVerification = (req, res, next) => {
+  if (!req.user) {
+    return res.status(401).json({
+      error: {
+        code: 'unauthorized',
+        message: 'Authentication required'
+      }
+    });
+  }
+
+  if (!req.user.email_verified) {
+    return res.status(403).json({
+      error: {
+        code: 'email_not_verified',
+        message: 'Please verify your email address to continue'
+      }
+    });
+  }
+
+  next();
+};
+
 module.exports = {
-  authenticateJWT
+  authenticate: authenticateJWT,
+  authenticateJWT,
+  requireEmailVerification
 };

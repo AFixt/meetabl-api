@@ -23,12 +23,12 @@ const createTransporter = () => {
   }
 
   return nodemailer.createTransporter({
-    host: process.env.SMTP_HOST || 'smtp.gmail.com',
-    port: process.env.SMTP_PORT || 587,
+    host: process.env.EMAIL_HOST || process.env.SMTP_HOST || 'smtp.gmail.com',
+    port: process.env.EMAIL_PORT || process.env.SMTP_PORT || 587,
     secure: false, // true for 465, false for other ports
     auth: {
-      user: process.env.SMTP_USER,
-      pass: process.env.SMTP_PASS
+      user: process.env.EMAIL_USER || process.env.SMTP_USER,
+      pass: process.env.EMAIL_PASS || process.env.SMTP_PASS
     }
   });
 };
@@ -152,7 +152,7 @@ const sendEmailNotification = async (notification) => {
 
     // Send email
     const info = await transporter.sendMail({
-      from: process.env.SMTP_FROM || 'noreply@meetabl.com',
+      from: `"${process.env.EMAIL_FROM_NAME || 'Meetabl'}" <${process.env.EMAIL_FROM || process.env.SMTP_FROM || 'noreply@meetabl.com'}>`,
       to: booking.customer_email,
       subject,
       html: emailTemplate
@@ -215,6 +215,16 @@ const queueNotification = async (bookingId, type = 'email') => {
  */
 const sendPasswordResetEmail = async (user, resetToken) => {
   try {
+    logger.info(`Attempting to send password reset email to ${user.email}`);
+    
+    // Log configuration being used
+    logger.info('Email config:', {
+      host: process.env.EMAIL_HOST || process.env.SMTP_HOST || 'smtp.gmail.com',
+      port: process.env.EMAIL_PORT || process.env.SMTP_PORT || 587,
+      user: process.env.EMAIL_USER || process.env.SMTP_USER || 'NOT SET',
+      from: process.env.EMAIL_FROM || process.env.SMTP_FROM || 'noreply@meetabl.com'
+    });
+    
     const transporter = createTransporter();
     const resetUrl = `${process.env.FRONTEND_URL || 'http://localhost:3001'}/reset-password?token=${resetToken}`;
 
@@ -228,16 +238,30 @@ const sendPasswordResetEmail = async (user, resetToken) => {
       .replace(/{{resetUrl}}/g, resetUrl);
 
     // Send email
-    const info = await transporter.sendMail({
-      from: process.env.SMTP_FROM || 'noreply@meetabl.com',
+    const mailOptions = {
+      from: `"${process.env.EMAIL_FROM_NAME || 'Meetabl'}" <${process.env.EMAIL_FROM || process.env.SMTP_FROM || 'noreply@meetabl.com'}>`,
       to: user.email,
       subject: 'Password Reset Request - Meetabl',
       html: emailTemplate
+    };
+    
+    logger.info('Sending email with options:', {
+      from: mailOptions.from,
+      to: mailOptions.to,
+      subject: mailOptions.subject
     });
-
-    logger.info(`Password reset email sent to ${user.email}: ${info.messageId}`);
+    
+    const info = await transporter.sendMail(mailOptions);
+    logger.info(`Password reset email sent successfully to ${user.email}: ${info.messageId}`);
+    
+    return info;
   } catch (error) {
-    logger.error('Error sending password reset email:', error);
+    logger.error('Error sending password reset email:', {
+      error: error.message,
+      stack: error.stack,
+      code: error.code,
+      command: error.command
+    });
     throw error;
   }
 };
@@ -264,7 +288,7 @@ const sendEmailVerification = async (user, verificationToken) => {
 
     // Send email
     const info = await transporter.sendMail({
-      from: process.env.SMTP_FROM || 'noreply@meetabl.com',
+      from: `"${process.env.EMAIL_FROM_NAME || 'Meetabl'}" <${process.env.EMAIL_FROM || process.env.SMTP_FROM || 'noreply@meetabl.com'}>`,
       to: user.email,
       subject: 'Verify Your Email - Meetabl',
       html: emailTemplate

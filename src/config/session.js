@@ -63,7 +63,7 @@ const createRedisClient = async () => {
  */
 const getSessionConfig = async () => {
   const isProduction = process.env.NODE_ENV === 'production';
-  const useRedis = process.env.USE_REDIS !== 'false';
+  const useRedis = process.env.USE_REDIS === 'true';
   const redisClient = useRedis ? await createRedisClient() : null;
   
   const config = {

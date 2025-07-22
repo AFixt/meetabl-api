@@ -14,12 +14,12 @@ const User = require('./user.model');
 
 const AvailabilityRule = sequelize.define('AvailabilityRule', {
   id: {
-    type: DataTypes.INTEGER,
+    type: DataTypes.STRING(36),
     primaryKey: true,
-    autoIncrement: true
+    defaultValue: () => uuidv4()
   },
   userId: {
-    type: DataTypes.INTEGER,
+    type: DataTypes.STRING(36),
     allowNull: false,
     references: {
       model: User,
@@ -62,7 +62,7 @@ const AvailabilityRule = sequelize.define('AvailabilityRule', {
 });
 
 // Define relationships
-User.hasMany(AvailabilityRule, { foreignKey: 'user_id', onDelete: 'CASCADE' });
-AvailabilityRule.belongsTo(User, { foreignKey: 'user_id' });
+User.hasMany(AvailabilityRule, { foreignKey: 'userId', onDelete: 'CASCADE' });
+AvailabilityRule.belongsTo(User, { foreignKey: 'userId' });
 
 module.exports = AvailabilityRule;

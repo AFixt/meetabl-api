@@ -1,13 +1,13 @@
 /**
  * Subscription management service
  * 
- * Handles subscription-based feature access and plan management
+ * Handles subscription-based feature access and plan management using Stripe
  * 
  * @author meetabl Team
  */
 
 const { createLogger } = require('../config/logger');
-const outsetaService = require('./outseta.service');
+const stripeService = require('./stripe.service');
 const { User } = require('../models');
 
 const logger = createLogger('subscription-service');
@@ -95,9 +95,21 @@ class SubscriptionService {
         return false;
       }
 
-      // If user has Outseta ID, check with Outseta
-      if (user.outseta_uid) {
-        return await outsetaService.checkFeatureAccess(user.outseta_uid, feature);
+      // Check Stripe subscription if user has a customer ID
+      if (user.stripe_customer_id) {
+        try {
+          const subscription = await stripeService.getActiveSubscription(user.stripe_customer_id);
+          if (subscription && subscription.status === 'active') {
+            // Map Stripe product/price to our tier system
+            const planMetadata = subscription.items.data[0]?.price?.metadata;
+            const tier = planMetadata?.tier || 'basic';
+            const tierConfig = FEATURE_TIERS[tier] || FEATURE_TIERS.basic;
+            
+            return tierConfig.features.includes(feature);
+          }
+        } catch (error) {
+          logger.warn('Failed to check Stripe subscription', { error: error.message });
+        }
       }
 
       // Fallback to local subscription data
@@ -162,32 +174,38 @@ class SubscriptionService {
         throw new Error('User not found');
       }
 
-      // Get fresh data from Outseta if available
-      if (user.outseta_uid) {
+      // Get fresh data from Stripe if available
+      if (user.stripe_customer_id) {
         try {
-          const subscription = await outsetaService.getUserSubscription(user.outseta_uid);
+          const subscription = await stripeService.getActiveSubscription(user.stripe_customer_id);
           
-          // Update local cache
-          await user.update({
-            subscription_plan: subscription.plan?.name,
-            subscription_status: subscription.status,
-            subscription_end_date: subscription.endDate
-          });
+          if (subscription) {
+            const planMetadata = subscription.items.data[0]?.price?.metadata;
+            const tier = planMetadata?.tier || 'basic';
+            const tierConfig = FEATURE_TIERS[tier] || FEATURE_TIERS.basic;
+            
+            // Update local cache
+            await user.update({
+              subscription_plan: tierConfig.name,
+              subscription_status: subscription.status,
+              subscription_end_date: new Date(subscription.current_period_end * 1000)
+            });
 
-          return {
-            plan: subscription.plan?.name || 'Basic',
-            status: subscription.status,
-            endDate: subscription.endDate,
-            features: FEATURE_TIERS[subscription.plan?.name?.toLowerCase()]?.features || FEATURE_TIERS.basic.features,
-            limits: FEATURE_TIERS[subscription.plan?.name?.toLowerCase()]?.limits || FEATURE_TIERS.basic.limits,
-            billing: {
-              amount: subscription.amount,
-              currency: subscription.currency,
-              interval: subscription.interval
-            }
-          };
+            return {
+              plan: tierConfig.name,
+              status: subscription.status,
+              endDate: new Date(subscription.current_period_end * 1000),
+              features: tierConfig.features,
+              limits: tierConfig.limits,
+              billing: {
+                amount: subscription.items.data[0]?.price?.unit_amount / 100,
+                currency: subscription.currency,
+                interval: subscription.items.data[0]?.price?.recurring?.interval
+              }
+            };
+          }
         } catch (error) {
-          logger.warn('Failed to fetch subscription from Outseta', { error: error.message });
+          logger.warn('Failed to fetch subscription from Stripe', { error: error.message });
         }
       }
 

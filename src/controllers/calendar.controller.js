@@ -23,6 +23,17 @@ const getGoogleAuthUrl = (req, res) => {
   try {
     const userId = req.user.id;
 
+    // Check if Google OAuth credentials are configured
+    if (!process.env.GOOGLE_CLIENT_ID || !process.env.GOOGLE_CLIENT_SECRET) {
+      logger.warn('Google OAuth credentials not configured');
+      return res.status(503).json({
+        error: {
+          code: 'service_unavailable',
+          message: 'Google Calendar integration is not configured. Please contact your administrator.'
+        }
+      });
+    }
+
     // Create OAuth2 client
     const oauth2Client = new google.auth.OAuth2(
       process.env.GOOGLE_CLIENT_ID,
@@ -166,6 +177,17 @@ const handleGoogleCallback = async (req, res) => {
 const getMicrosoftAuthUrl = (req, res) => {
   try {
     const userId = req.user.id;
+    
+    // Check if Microsoft OAuth credentials are configured
+    if (!process.env.MICROSOFT_CLIENT_ID || !process.env.MICROSOFT_CLIENT_SECRET) {
+      logger.warn('Microsoft OAuth credentials not configured');
+      return res.status(503).json({
+        error: {
+          code: 'service_unavailable',
+          message: 'Microsoft Calendar integration is not configured. Please contact your administrator.'
+        }
+      });
+    }
 
     // Microsoft OAuth configuration
     const authUrl = `https://login.microsoftonline.com/common/oauth2/v2.0/authorize?client_id=${
@@ -449,11 +471,71 @@ const disconnectCalendar = async (req, res) => {
   }
 };
 
+/**
+ * Get Google Calendar integration status
+ * @param {Object} req - Express request object
+ * @param {Object} res - Express response object
+ */
+const getGoogleStatus = (req, res) => {
+  try {
+    // Check if Google OAuth credentials are configured
+    const isConfigured = !!(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET);
+    
+    return res.status(200).json({
+      provider: 'google',
+      configured: isConfigured,
+      message: isConfigured 
+        ? 'Google Calendar integration is available'
+        : 'Google Calendar integration is not configured. OAuth credentials are missing.'
+    });
+  } catch (error) {
+    logger.error('Error getting Google Calendar status:', error);
+    
+    return res.status(500).json({
+      error: {
+        code: 'internal_server_error',
+        message: 'Failed to get Google Calendar status'
+      }
+    });
+  }
+};
+
+/**
+ * Get Microsoft Calendar integration status
+ * @param {Object} req - Express request object
+ * @param {Object} res - Express response object
+ */
+const getMicrosoftStatus = (req, res) => {
+  try {
+    // Check if Microsoft OAuth credentials are configured
+    const isConfigured = !!(process.env.MICROSOFT_CLIENT_ID && process.env.MICROSOFT_CLIENT_SECRET);
+    
+    return res.status(200).json({
+      provider: 'microsoft',
+      configured: isConfigured,
+      message: isConfigured 
+        ? 'Microsoft Calendar integration is available'
+        : 'Microsoft Calendar integration is not configured. OAuth credentials are missing.'
+    });
+  } catch (error) {
+    logger.error('Error getting Microsoft Calendar status:', error);
+    
+    return res.status(500).json({
+      error: {
+        code: 'internal_server_error',
+        message: 'Failed to get Microsoft Calendar status'
+      }
+    });
+  }
+};
+
 module.exports = {
   getGoogleAuthUrl,
   handleGoogleCallback,
   getMicrosoftAuthUrl,
   handleMicrosoftCallback,
   getCalendarStatus,
-  disconnectCalendar
+  disconnectCalendar,
+  getGoogleStatus,
+  getMicrosoftStatus
 };

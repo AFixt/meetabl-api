@@ -27,7 +27,7 @@ const getAvailabilityRules = async (req, res) => {
 
     // Find all rules for this user
     const rules = await AvailabilityRule.findAll({
-      where: { user_id: userId }
+      where: { userId: userId }
     });
 
     // Calculate pagination headers
@@ -62,16 +62,40 @@ const getAvailabilityRules = async (req, res) => {
 const createAvailabilityRule = async (req, res) => {
   try {
     const userId = req.user.id;
+    
+    // Log the incoming request body for debugging
+    logger.info('Create availability rule request:', {
+      userId,
+      body: req.body,
+      headers: req.headers['content-type']
+    });
+    
+    // Handle both snake_case and camelCase field names
     const {
-      day_of_week: dayOfWeek,
-      start_time: startTime,
-      end_time: endTime,
-      buffer_minutes: bufferMinutes,
-      max_bookings_per_day: maxBookingsPerDay
+      day_of_week,
+      dayOfWeek,
+      start_time,
+      startTime,
+      end_time,
+      endTime,
+      buffer_minutes,
+      bufferMinutes,
+      max_bookings_per_day,
+      maxBookingsPerDay,
+      isActive
     } = req.body;
+    
+    // Use the value that exists (prefer snake_case from body)
+    const ruleData = {
+      dayOfWeek: day_of_week !== undefined ? day_of_week : dayOfWeek,
+      startTime: start_time !== undefined ? start_time : startTime,
+      endTime: end_time !== undefined ? end_time : endTime,
+      bufferMinutes: buffer_minutes !== undefined ? buffer_minutes : bufferMinutes,
+      maxBookingsPerDay: max_bookings_per_day !== undefined ? max_bookings_per_day : maxBookingsPerDay
+    };
 
     // Validate time range
-    if (startTime >= endTime) {
+    if (ruleData.startTime >= ruleData.endTime) {
       return res.status(400).json({
         error: {
           code: 'bad_request',
@@ -89,26 +113,26 @@ const createAvailabilityRule = async (req, res) => {
     // Create rule
     const rule = await AvailabilityRule.create({
       id: uuidv4(),
-      user_id: userId,
-      day_of_week: dayOfWeek,
-      start_time: startTime,
-      end_time: endTime,
-      buffer_minutes: bufferMinutes,
-      max_bookings_per_day: maxBookingsPerDay
+      userId: userId,
+      day_of_week: ruleData.dayOfWeek,
+      start_time: ruleData.startTime,
+      end_time: ruleData.endTime,
+      buffer_minutes: ruleData.bufferMinutes || 0,
+      max_bookings_per_day: ruleData.maxBookingsPerDay || null
     });
 
     // Create audit log
     await AuditLog.create({
       id: uuidv4(),
-      user_id: userId,
+      userId: userId,
       action: 'availability.rule.create',
       metadata: {
         ruleId: rule.id,
-        day_of_week: dayOfWeek,
-        start_time: startTime,
-        end_time: endTime,
-        buffer_minutes: bufferMinutes,
-        max_bookings_per_day: maxBookingsPerDay
+        day_of_week: ruleData.dayOfWeek,
+        start_time: ruleData.startTime,
+        end_time: ruleData.endTime,
+        buffer_minutes: ruleData.bufferMinutes || 0,
+        max_bookings_per_day: ruleData.maxBookingsPerDay || null
       }
     });
 
@@ -117,12 +141,18 @@ const createAvailabilityRule = async (req, res) => {
 
     return res.status(201).json({ rule });
   } catch (error) {
-    logger.error('Error creating availability rule:', error);
+    logger.error('Error creating availability rule:', {
+      error: error.message,
+      stack: error.stack,
+      userId: req.user?.id,
+      body: req.body
+    });
 
     return res.status(500).json({
       error: {
         code: 'internal_server_error',
-        message: 'Failed to create availability rule'
+        message: 'Failed to create availability rule',
+        details: error.message // Include error details for debugging
       }
     });
   }
@@ -140,7 +170,7 @@ const getAvailabilityRule = async (req, res) => {
 
     // Find rule
     const rule = await AvailabilityRule.findOne({
-      where: { id, user_id: userId }
+      where: { id, userId: userId }
     });
 
     if (!rule) {
@@ -174,17 +204,33 @@ const updateAvailabilityRule = async (req, res) => {
   try {
     const userId = req.user.id;
     const { id } = req.params;
+    // Handle both snake_case and camelCase field names
     const {
-      day_of_week: dayOfWeek,
-      start_time: startTime,
-      end_time: endTime,
-      buffer_minutes: bufferMinutes,
-      max_bookings_per_day: maxBookingsPerDay
+      day_of_week,
+      dayOfWeek,
+      start_time,
+      startTime,
+      end_time,
+      endTime,
+      buffer_minutes,
+      bufferMinutes,
+      max_bookings_per_day,
+      maxBookingsPerDay,
+      isActive
     } = req.body;
+    
+    // Use the value that exists (prefer snake_case from body)
+    const ruleData = {
+      dayOfWeek: day_of_week !== undefined ? day_of_week : dayOfWeek,
+      startTime: start_time !== undefined ? start_time : startTime,
+      endTime: end_time !== undefined ? end_time : endTime,
+      bufferMinutes: buffer_minutes !== undefined ? buffer_minutes : bufferMinutes,
+      maxBookingsPerDay: max_bookings_per_day !== undefined ? max_bookings_per_day : maxBookingsPerDay
+    };
 
     // Find rule
     const rule = await AvailabilityRule.findOne({
-      where: { id, user_id: userId }
+      where: { id, userId: userId }
     });
 
     if (!rule) {
@@ -197,7 +243,7 @@ const updateAvailabilityRule = async (req, res) => {
     }
 
     // Validate time range if both times are provided
-    if (startTime && endTime && startTime >= endTime) {
+    if (ruleData.startTime && ruleData.endTime && ruleData.startTime >= ruleData.endTime) {
       return res.status(400).json({
         error: {
           code: 'bad_request',
@@ -213,27 +259,27 @@ const updateAvailabilityRule = async (req, res) => {
     }
 
     // Update fields
-    if (dayOfWeek !== undefined) rule.day_of_week = dayOfWeek;
-    if (startTime !== undefined) rule.start_time = startTime;
-    if (endTime !== undefined) rule.end_time = endTime;
-    if (bufferMinutes !== undefined) rule.buffer_minutes = bufferMinutes;
-    if (maxBookingsPerDay !== undefined) rule.max_bookings_per_day = maxBookingsPerDay;
+    if (ruleData.dayOfWeek !== undefined) rule.day_of_week = ruleData.dayOfWeek;
+    if (ruleData.startTime !== undefined) rule.start_time = ruleData.startTime;
+    if (ruleData.endTime !== undefined) rule.end_time = ruleData.endTime;
+    if (ruleData.bufferMinutes !== undefined) rule.buffer_minutes = ruleData.bufferMinutes;
+    if (ruleData.maxBookingsPerDay !== undefined) rule.max_bookings_per_day = ruleData.maxBookingsPerDay;
 
     await rule.save();
 
     // Create audit log
     await AuditLog.create({
       id: uuidv4(),
-      user_id: userId,
+      userId: userId,
       action: 'availability.rule.update',
       metadata: {
         ruleId: rule.id,
         updated: {
-          day_of_week: dayOfWeek,
-          start_time: startTime,
-          end_time: endTime,
-          buffer_minutes: bufferMinutes,
-          max_bookings_per_day: maxBookingsPerDay
+          day_of_week: ruleData.dayOfWeek,
+          start_time: ruleData.startTime,
+          end_time: ruleData.endTime,
+          buffer_minutes: ruleData.bufferMinutes,
+          max_bookings_per_day: ruleData.maxBookingsPerDay
         }
       }
     });
@@ -266,7 +312,7 @@ const deleteAvailabilityRule = async (req, res) => {
 
     // Find rule
     const rule = await AvailabilityRule.findOne({
-      where: { id, user_id: userId }
+      where: { id, userId: userId }
     });
 
     if (!rule) {
@@ -284,7 +330,7 @@ const deleteAvailabilityRule = async (req, res) => {
     // Create audit log
     await AuditLog.create({
       id: uuidv4(),
-      user_id: userId,
+      userId: userId,
       action: 'availability.rule.delete',
       metadata: {
         ruleId: id
@@ -357,7 +403,7 @@ const getAvailableTimeSlots = async (req, res) => {
 
     // Get availability rules for this day of week
     const rules = await AvailabilityRule.findAll({
-      where: { user_id: userId, day_of_week: dayOfWeek }
+      where: { userId: userId, day_of_week: dayOfWeek }
     });
 
     if (rules.length === 0) {
@@ -370,7 +416,7 @@ const getAvailableTimeSlots = async (req, res) => {
 
     const bookings = await Booking.findAll({
       where: {
-        user_id: userId,
+        userId: userId,
         start_time: { [Op.gte]: dayStart },
         end_time: { [Op.lte]: dayEnd },
         status: 'confirmed'
