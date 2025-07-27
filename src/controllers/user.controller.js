@@ -8,10 +8,158 @@
 
 const { v4: uuidv4 } = require('uuid');
 const bcrypt = require('bcrypt');
+const multer = require('multer');
+const path = require('path');
 const logger = require('../config/logger');
 const { User, UserSettings, AuditLog } = require('../models');
 const { sequelize } = require('../config/database');
 const { asyncHandler, successResponse, notFoundError, validationError, unauthorizedError } = require('../utils/error-response');
+const { uploadFile, deleteFile } = require('../services/storage.service');
+
+// Configure multer for file uploads
+const upload = multer({
+  dest: '/tmp/uploads/', // Temporary storage
+  limits: {
+    fileSize: 5 * 1024 * 1024, // 5MB limit
+    files: 1
+  },
+  fileFilter: (req, file, cb) => {
+    // Check if file is an image
+    const allowedMimes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp'];
+    if (allowedMimes.includes(file.mimetype)) {
+      cb(null, true);
+    } else {
+      cb(new Error('Only image files (JPEG, PNG, GIF, WebP) are allowed'), false);
+    }
+  }
+});
+
+/**
+ * Upload logo image
+ * @param {Object} req - Express request object
+ * @param {Object} res - Express response object
+ */
+const uploadLogo = asyncHandler(async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { logoAltText } = req.body;
+
+    if (!req.file) {
+      throw validationError([{ field: 'logo', message: 'Logo image is required' }]);
+    }
+
+    // Additional image validation
+    const allowedExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.webp'];
+    const fileExtension = path.extname(req.file.originalname).toLowerCase();
+    
+    if (!allowedExtensions.includes(fileExtension)) {
+      throw validationError([{ field: 'logo', message: 'Invalid file type. Only JPEG, PNG, GIF, and WebP images are allowed' }]);
+    }
+
+    // Upload to S3
+    const uploadResult = await uploadFile(req.file, 'logos');
+
+    // Find or create user settings
+    let settings = await UserSettings.findOne({ where: { userId: userId } });
+    
+    if (!settings) {
+      settings = await UserSettings.create({
+        id: uuidv4(),
+        userId: userId
+      });
+    }
+
+    // Delete old logo if exists
+    if (settings.logoUrl) {
+      try {
+        // Extract S3 key from URL
+        const urlParts = settings.logoUrl.split('/');
+        const oldKey = urlParts.slice(-2).join('/'); // Get 'logos/filename.ext'
+        await deleteFile(oldKey);
+      } catch (deleteError) {
+        logger.warn(`Failed to delete old logo: ${deleteError.message}`);
+      }
+    }
+
+    // Update settings with new logo
+    settings.logoUrl = uploadResult.url;
+    if (logoAltText !== undefined) {
+      settings.logoAltText = logoAltText;
+    }
+    
+    await settings.save();
+
+    // Create audit log
+    await AuditLog.create({
+      id: uuidv4(),
+      user_id: userId,
+      action: 'user.logo.upload',
+      metadata: {
+        logoUrl: uploadResult.url,
+        logoAltText: logoAltText,
+        originalFilename: uploadResult.originalName,
+        fileSize: uploadResult.size
+      }
+    });
+
+    logger.info(`Logo uploaded for user: ${userId}`);
+
+    return successResponse(res, {
+      logoUrl: uploadResult.url,
+      logoAltText: settings.logoAltText
+    }, 'Logo uploaded successfully');
+  } catch (error) {
+    throw error;
+  }
+});
+
+/**
+ * Delete logo image
+ * @param {Object} req - Express request object
+ * @param {Object} res - Express response object
+ */
+const deleteLogo = asyncHandler(async (req, res) => {
+  try {
+    const userId = req.user.id;
+
+    // Find user settings
+    const settings = await UserSettings.findOne({ where: { userId: userId } });
+    
+    if (!settings || !settings.logoUrl) {
+      throw notFoundError('Logo not found');
+    }
+
+    // Delete from S3
+    try {
+      const urlParts = settings.logoUrl.split('/');
+      const key = urlParts.slice(-2).join('/'); // Get 'logos/filename.ext'
+      await deleteFile(key);
+    } catch (deleteError) {
+      logger.warn(`Failed to delete logo from S3: ${deleteError.message}`);
+    }
+
+    // Update settings
+    settings.logoUrl = null;
+    settings.logoAltText = null;
+    await settings.save();
+
+    // Create audit log
+    await AuditLog.create({
+      id: uuidv4(),
+      user_id: userId,
+      action: 'user.logo.delete',
+      metadata: {
+        deletedAt: new Date()
+      }
+    });
+
+    logger.info(`Logo deleted for user: ${userId}`);
+
+    return successResponse(res, null, 'Logo deleted successfully');
+  } catch (error) {
+    throw error;
+  }
+});
 
 /**
  * Get current user profile
@@ -127,7 +275,7 @@ const updateUserSettings = asyncHandler(async (req, res) => {
   try {
     const userId = req.user.id;
     const {
-      branding_color, confirmation_email_copy, accessibility_mode, alt_text_enabled, booking_horizon, google_analytics_id
+      branding_color, confirmation_email_copy, accessibility_mode, alt_text_enabled, booking_horizon, google_analytics_id, logo_alt_text
     } = req.body;
 
     // Find settings
@@ -148,6 +296,7 @@ const updateUserSettings = asyncHandler(async (req, res) => {
     if (alt_text_enabled !== undefined) settings.alt_text_enabled = alt_text_enabled;
     if (booking_horizon !== undefined) settings.booking_horizon = booking_horizon;
     if (google_analytics_id !== undefined) settings.google_analytics_id = google_analytics_id;
+    if (logo_alt_text !== undefined) settings.logo_alt_text = logo_alt_text;
 
     await settings.save();
 
@@ -158,7 +307,7 @@ const updateUserSettings = asyncHandler(async (req, res) => {
       action: 'user.settings.update',
       metadata: {
         updated: {
-          branding_color, confirmation_email_copy, accessibility_mode, alt_text_enabled, booking_horizon, google_analytics_id
+          branding_color, confirmation_email_copy, accessibility_mode, alt_text_enabled, booking_horizon, google_analytics_id, logo_alt_text
         }
       }
     });
@@ -451,5 +600,8 @@ module.exports = {
   changePassword,
   deleteAccount,
   getPublicProfile,
-  updatePublicProfile
+  updatePublicProfile,
+  uploadLogo,
+  deleteLogo,
+  upload
 };

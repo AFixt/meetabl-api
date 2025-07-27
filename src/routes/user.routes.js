@@ -73,6 +73,20 @@ router.delete('/me', userController.deleteAccount);
  */
 router.put('/me/public-profile', userController.updatePublicProfile);
 
+/**
+ * @route POST /api/users/me/logo
+ * @desc Upload logo image
+ * @access Private
+ */
+router.post('/me/logo', userController.upload.single('logo'), userController.uploadLogo);
+
+/**
+ * @route DELETE /api/users/me/logo
+ * @desc Delete logo image
+ * @access Private
+ */
+router.delete('/me/logo', userController.deleteLogo);
+
 // Public routes (no authentication required)
 
 /**

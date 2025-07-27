@@ -91,6 +91,16 @@ const UserSettings = sequelize.define('UserSettings', {
     validate: {
       is: /^(G-[A-Z0-9]+|UA-[0-9]+-[0-9]+|GT-[A-Z0-9]+)?$/i
     }
+  },
+  logoUrl: {
+    type: DataTypes.STRING(500),
+    allowNull: true,
+    field: 'logo_url'
+  },
+  logoAltText: {
+    type: DataTypes.STRING(255),
+    allowNull: true,
+    field: 'logo_alt_text'
   }
 }, {
   tableName: 'UserSettings',
