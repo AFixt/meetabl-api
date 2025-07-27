@@ -24,11 +24,18 @@ router.use(['/status', '/disconnect', '/google/auth', '/microsoft/auth'], authen
 router.get('/status', calendarController.getCalendarStatus);
 
 /**
- * @route DELETE /api/calendar/disconnect/:provider
- * @desc Disconnect calendar integration
+ * @route DELETE /api/calendar/disconnect/token/:tokenId
+ * @desc Disconnect calendar integration by token ID
  * @access Private
  */
-router.delete('/disconnect/:provider', calendarController.disconnectCalendar);
+router.delete('/disconnect/token/:tokenId', calendarController.disconnectCalendar);
+
+/**
+ * @route DELETE /api/calendar/disconnect/:provider
+ * @desc Disconnect calendar integration by provider (legacy)
+ * @access Private
+ */
+router.delete('/disconnect/:provider', calendarController.disconnectCalendarByProvider);
 
 /**
  * @route GET /api/calendar/google/status

@@ -408,11 +408,104 @@ const getCalendarStatus = async (req, res) => {
 };
 
 /**
- * Disconnect calendar integration
+ * Disconnect calendar integration by token ID
  * @param {Object} req - Express request object
  * @param {Object} res - Express response object
  */
 const disconnectCalendar = async (req, res) => {
+  const transaction = await sequelize.transaction();
+
+  try {
+    const userId = req.user.id;
+    const { tokenId } = req.params;
+
+    // Validate token ID
+    if (!tokenId) {
+      return res.status(400).json({
+        error: {
+          code: 'bad_request',
+          message: 'Token ID is required'
+        }
+      });
+    }
+
+    // Find user
+    const user = await User.findOne({ where: { id: userId } });
+
+    if (!user) {
+      return res.status(404).json({
+        error: {
+          code: 'not_found',
+          message: 'User not found'
+        }
+      });
+    }
+
+    // Find and delete token (ensure it belongs to the user)
+    const token = await CalendarToken.findOne({
+      where: { id: tokenId, userId: userId }
+    });
+
+    if (!token) {
+      return res.status(404).json({
+        error: {
+          code: 'not_found',
+          message: 'Calendar token not found'
+        }
+      });
+    }
+
+    const provider = token.provider;
+    await token.destroy({ transaction });
+
+    // Update user calendar provider if it was the last token of this provider
+    const remainingTokens = await CalendarToken.count({
+      where: { userId: userId, provider }
+    });
+
+    if (user.calendar_provider === provider && remainingTokens === 0) {
+      user.calendar_provider = 'none';
+      await user.save({ transaction });
+    }
+
+    // Create audit log
+    await AuditLog.create({
+      id: uuidv4(),
+      userId: userId,
+      action: `calendar.${provider}.disconnect`,
+      metadata: { tokenId }
+    }, { transaction });
+
+    // Commit transaction
+    await transaction.commit();
+
+    // Log disconnection
+    logger.info(`${provider} Calendar disconnected for user: ${userId}`);
+
+    return res.status(200).json({
+      message: `${provider} Calendar disconnected successfully`
+    });
+  } catch (error) {
+    // Rollback transaction
+    await transaction.rollback();
+
+    logger.error('Error disconnecting calendar:', error);
+
+    return res.status(500).json({
+      error: {
+        code: 'internal_server_error',
+        message: 'Failed to disconnect calendar integration'
+      }
+    });
+  }
+};
+
+/**
+ * Legacy: Disconnect calendar by provider (for backward compatibility)
+ * @param {Object} req - Express request object
+ * @param {Object} res - Express response object
+ */
+const disconnectCalendarByProvider = async (req, res) => {
   const transaction = await sequelize.transaction();
 
   try {
@@ -447,12 +540,12 @@ const disconnectCalendar = async (req, res) => {
       });
     }
 
-    // Find and delete token
-    const token = await CalendarToken.findOne({
+    // Find and delete all tokens for this provider
+    const tokens = await CalendarToken.findAll({
       where: { userId: userId, provider }
     });
 
-    if (token) {
+    for (const token of tokens) {
       await token.destroy({ transaction });
     }
 
@@ -466,24 +559,25 @@ const disconnectCalendar = async (req, res) => {
     await AuditLog.create({
       id: uuidv4(),
       userId: userId,
-      action: `calendar.${provider}.disconnect`,
-      metadata: {}
+      action: `calendar.${provider}.disconnect_all`,
+      metadata: { tokenCount: tokens.length }
     }, { transaction });
 
     // Commit transaction
     await transaction.commit();
 
     // Log disconnection
-    logger.info(`${provider} Calendar disconnected for user: ${userId}`);
+    logger.info(`${provider} Calendar(s) disconnected for user: ${userId}`);
 
     return res.status(200).json({
-      message: `${provider} Calendar disconnected successfully`
+      message: `${provider} Calendar(s) disconnected successfully`,
+      tokensRemoved: tokens.length
     });
   } catch (error) {
     // Rollback transaction
     await transaction.rollback();
 
-    logger.error('Error disconnecting calendar:', error);
+    logger.error('Error disconnecting calendar by provider:', error);
 
     return res.status(500).json({
       error: {
@@ -559,6 +653,7 @@ module.exports = {
   handleMicrosoftCallback,
   getCalendarStatus,
   disconnectCalendar,
+  disconnectCalendarByProvider,
   getGoogleStatus,
   getMicrosoftStatus
 };
