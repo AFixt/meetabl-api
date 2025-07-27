@@ -236,6 +236,13 @@ const validateUserSettings = [
     .isBoolean()
     .withMessage('Alt text enabled must be a boolean'),
 
+  body('booking_horizon')
+    .optional()
+    .isInt({ min: 1 })
+    .withMessage('Booking horizon must be a positive integer')
+    .isIn([7, 14, 21, 30])
+    .withMessage('Booking horizon must be 7, 14, 21, or 30 days'),
+
   validateRequest
 ];
 

@@ -25,7 +25,7 @@ const {
 } = require('date-fns');
 const logger = require('../config/logger');
 const {
-  Booking, User, Notification, AuditLog, AvailabilityRule
+  Booking, User, Notification, AuditLog, AvailabilityRule, UserSettings
 } = require('../models');
 const { sequelize, Op } = require('../config/database');
 const notificationService = require('../services/notification.service');
@@ -338,14 +338,15 @@ const cancelBooking = asyncHandler(async (req, res) => {
 const getPublicBookings = asyncHandler(async (req, res) => {
   const { username } = req.params;
 
-  // Find user by username
+  // Find user by username with settings
   const user = await User.findOne({
     where: {
       [Op.or]: [
         { username: username }, // Check if username matches username field
         { id: username } // Check if username matches ID
       ]
-    }
+    },
+    include: [{ model: UserSettings }]
   });
 
   if (!user) {
@@ -367,6 +368,25 @@ const getPublicBookings = asyncHandler(async (req, res) => {
     // Parse date and get day of week (0 = Sunday, 6 = Saturday)
     const targetDate = parse(date, 'yyyy-MM-dd', new Date());
     const dayOfWeek = getDay(targetDate);
+
+    // Check booking horizon
+    const today = new Date();
+    const daysDifference = Math.ceil((targetDate - today) / (1000 * 60 * 60 * 24));
+    const bookingHorizon = user.UserSettings?.booking_horizon || 30; // Default 30 days
+    
+    if (daysDifference > bookingHorizon) {
+      throw validationError([{
+        field: 'date',
+        message: `Bookings can only be made up to ${bookingHorizon} days in advance`
+      }]);
+    }
+    
+    if (daysDifference < 0) {
+      throw validationError([{
+        field: 'date',
+        message: 'Cannot book dates in the past'
+      }]);
+    }
 
     // Validate duration
     const slotDuration = parseInt(duration, 10) || 60; // Default 60 minutes

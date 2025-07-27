@@ -74,6 +74,15 @@ const UserSettings = sequelize.define('UserSettings', {
     type: DataTypes.TEXT,
     allowNull: true,
     field: 'booking_page_description'
+  },
+  bookingHorizon: {
+    type: DataTypes.INTEGER,
+    allowNull: false,
+    defaultValue: 30,
+    field: 'booking_horizon',
+    validate: {
+      isIn: [[7, 14, 21, 30]]
+    }
   }
 }, {
   tableName: 'UserSettings',

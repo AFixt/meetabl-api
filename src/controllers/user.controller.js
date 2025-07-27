@@ -127,7 +127,7 @@ const updateUserSettings = asyncHandler(async (req, res) => {
   try {
     const userId = req.user.id;
     const {
-      branding_color, confirmation_email_copy, accessibility_mode, alt_text_enabled
+      branding_color, confirmation_email_copy, accessibility_mode, alt_text_enabled, booking_horizon
     } = req.body;
 
     // Find settings
@@ -146,6 +146,7 @@ const updateUserSettings = asyncHandler(async (req, res) => {
     if (confirmation_email_copy !== undefined) settings.confirmation_email_copy = confirmation_email_copy;
     if (accessibility_mode !== undefined) settings.accessibility_mode = accessibility_mode;
     if (alt_text_enabled !== undefined) settings.alt_text_enabled = alt_text_enabled;
+    if (booking_horizon !== undefined) settings.booking_horizon = booking_horizon;
 
     await settings.save();
 
@@ -156,7 +157,7 @@ const updateUserSettings = asyncHandler(async (req, res) => {
       action: 'user.settings.update',
       metadata: {
         updated: {
-          branding_color, confirmation_email_copy, accessibility_mode, alt_text_enabled
+          branding_color, confirmation_email_copy, accessibility_mode, alt_text_enabled, booking_horizon
         }
       }
     });
