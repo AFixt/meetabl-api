@@ -24,7 +24,7 @@ class StripeService {
       return;
     }
 
-    const apiKey = process.env.STRIPE_API_KEY;
+    const apiKey = process.env.STRIPE_SECRET_KEY || process.env.STRIPE_API_KEY;
     if (!apiKey) {
       throw new AppError('Stripe API key not configured', 500);
     }

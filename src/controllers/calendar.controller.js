@@ -109,7 +109,7 @@ const handleGoogleCallback = async (req, res) => {
 
     // Check existing token
     const existingToken = await CalendarToken.findOne({
-      where: { user_id: userId, provider: 'google' }
+      where: { userId: userId, provider: 'google' }
     });
 
     // Calculate expiry date
@@ -117,9 +117,9 @@ const handleGoogleCallback = async (req, res) => {
 
     if (existingToken) {
       // Update existing token
-      existingToken.access_token = tokens.access_token;
-      existingToken.refresh_token = tokens.refresh_token || existingToken.refresh_token;
-      existingToken.expires_at = expiresAt;
+      existingToken.accessToken = tokens.access_token;
+      existingToken.refreshToken = tokens.refresh_token || existingToken.refreshToken;
+      existingToken.expiresAt = expiresAt;
       existingToken.scope = tokens.scope;
 
       await existingToken.save({ transaction });
@@ -127,11 +127,11 @@ const handleGoogleCallback = async (req, res) => {
       // Create new token
       await CalendarToken.create({
         id: uuidv4(),
-        user_id: userId,
+        userId: userId,
         provider: 'google',
-        access_token: tokens.access_token,
-        refresh_token: tokens.refresh_token,
-        expires_at: expiresAt,
+        accessToken: tokens.access_token,
+        refreshToken: tokens.refresh_token,
+        expiresAt: expiresAt,
         scope: tokens.scope
       }, { transaction });
 
@@ -143,7 +143,7 @@ const handleGoogleCallback = async (req, res) => {
     // Create audit log
     await AuditLog.create({
       id: uuidv4(),
-      user_id: userId,
+      userId: userId,
       action: 'calendar.google.connect',
       metadata: {
         scope: tokens.scope
@@ -157,7 +157,7 @@ const handleGoogleCallback = async (req, res) => {
     logger.info(`Google Calendar connected for user: ${userId}`);
 
     // Redirect to frontend
-    return res.redirect(`${process.env.FRONTEND_URL}/settings/calendar?success=true&provider=google`);
+    return res.redirect(`${process.env.FRONTEND_URL}/calendar?success=true&provider=google`);
   } catch (error) {
     // Rollback transaction
     await transaction.rollback();
@@ -165,7 +165,7 @@ const handleGoogleCallback = async (req, res) => {
     logger.error('Error handling Google callback:', error);
 
     // Redirect to frontend with error
-    return res.redirect(`${process.env.FRONTEND_URL}/settings/calendar?error=true&provider=google`);
+    return res.redirect(`${process.env.FRONTEND_URL}/calendar?error=true&provider=google`);
   }
 };
 
@@ -248,7 +248,6 @@ const handleMicrosoftCallback = async (req, res) => {
     }
 
     // Exchange code for tokens
-    const fetch = require('node-fetch');
     const tokenResponse = await fetch('https://login.microsoftonline.com/common/oauth2/v2.0/token', {
       method: 'POST',
       headers: {
@@ -264,14 +263,32 @@ const handleMicrosoftCallback = async (req, res) => {
     });
 
     if (!tokenResponse.ok) {
-      throw new Error(`Microsoft token exchange failed: ${tokenResponse.status}`);
+      const errorBody = await tokenResponse.text();
+      logger.error('Microsoft token exchange error details:', {
+        status: tokenResponse.status,
+        statusText: tokenResponse.statusText,
+        body: errorBody,
+        clientId: process.env.MICROSOFT_CLIENT_ID,
+        redirectUri: process.env.MICROSOFT_REDIRECT_URI
+      });
+      throw new Error(`Microsoft token exchange failed: ${tokenResponse.status} - ${errorBody}`);
     }
 
     const tokens = await tokenResponse.json();
 
+    // Debug log the Microsoft token response
+    logger.info('Microsoft token response received:', {
+      hasAccessToken: !!tokens.access_token,
+      hasRefreshToken: !!tokens.refresh_token,
+      expiresIn: tokens.expires_in,
+      scope: tokens.scope,
+      tokenType: tokens.token_type,
+      userId: userId
+    });
+
     // Check existing token
     const existingToken = await CalendarToken.findOne({
-      where: { user_id: userId, provider: 'microsoft' }
+      where: { userId: userId, provider: 'microsoft' }
     });
 
     // Calculate expiry date
@@ -279,9 +296,9 @@ const handleMicrosoftCallback = async (req, res) => {
 
     if (existingToken) {
       // Update existing token
-      existingToken.access_token = tokens.access_token;
-      existingToken.refresh_token = tokens.refresh_token || existingToken.refresh_token;
-      existingToken.expires_at = expiresAt;
+      existingToken.accessToken = tokens.access_token;
+      existingToken.refreshToken = tokens.refresh_token || existingToken.refreshToken;
+      existingToken.expiresAt = expiresAt;
       existingToken.scope = tokens.scope;
 
       await existingToken.save({ transaction });
@@ -289,11 +306,11 @@ const handleMicrosoftCallback = async (req, res) => {
       // Create new token
       await CalendarToken.create({
         id: uuidv4(),
-        user_id: userId,
+        userId: userId,
         provider: 'microsoft',
-        access_token: tokens.access_token,
-        refresh_token: tokens.refresh_token,
-        expires_at: expiresAt,
+        accessToken: tokens.access_token,
+        refreshToken: tokens.refresh_token,
+        expiresAt: expiresAt,
         scope: tokens.scope
       }, { transaction });
 
@@ -305,7 +322,7 @@ const handleMicrosoftCallback = async (req, res) => {
     // Create audit log
     await AuditLog.create({
       id: uuidv4(),
-      user_id: userId,
+      userId: userId,
       action: 'calendar.microsoft.connect',
       metadata: {
         scope: tokens.scope
@@ -319,7 +336,7 @@ const handleMicrosoftCallback = async (req, res) => {
     logger.info(`Microsoft Calendar connected for user: ${userId}`);
 
     // Redirect to frontend
-    return res.redirect(`${process.env.FRONTEND_URL}/settings/calendar?success=true&provider=microsoft`);
+    return res.redirect(`${process.env.FRONTEND_URL}/calendar?success=true&provider=microsoft`);
   } catch (error) {
     // Rollback transaction
     await transaction.rollback();
@@ -327,7 +344,7 @@ const handleMicrosoftCallback = async (req, res) => {
     logger.error('Error handling Microsoft callback:', error);
 
     // Redirect to frontend with error
-    return res.redirect(`${process.env.FRONTEND_URL}/settings/calendar?error=true&provider=microsoft`);
+    return res.redirect(`${process.env.FRONTEND_URL}/calendar?error=true&provider=microsoft`);
   }
 };
 
@@ -343,7 +360,7 @@ const getCalendarStatus = async (req, res) => {
     // Find user
     const user = await User.findOne({
       where: { id: userId },
-      attributes: ['id', 'calendar_provider']
+      attributes: ['id', 'email', 'calendar_provider']
     });
 
     if (!user) {
@@ -357,17 +374,23 @@ const getCalendarStatus = async (req, res) => {
 
     // Find calendar tokens
     const tokens = await CalendarToken.findAll({
-      where: { user_id: userId },
-      attributes: ['provider', 'expires_at', 'scope']
+      where: { userId: userId },
+      attributes: ['id', 'provider', 'expiresAt', 'scope']
     });
 
     const calendarStatus = {
       provider: user.calendar_provider,
       connected: user.calendar_provider !== 'none',
       connections: tokens.map((token) => ({
+        id: token.id,
         provider: token.provider,
-        expires_at: token.expires_at,
-        scope: token.scope
+        email: user.email, // Use user's email since token doesn't store provider email
+        isActive: true, // Token exists means it's active
+        userId: userId,
+        expires_at: token.expiresAt,
+        scope: token.scope,
+        createdAt: new Date().toISOString(), // Fallback since table doesn't have timestamps
+        updatedAt: new Date().toISOString() // Fallback since table doesn't have timestamps
       }))
     };
 
@@ -426,7 +449,7 @@ const disconnectCalendar = async (req, res) => {
 
     // Find and delete token
     const token = await CalendarToken.findOne({
-      where: { user_id: userId, provider }
+      where: { userId: userId, provider }
     });
 
     if (token) {
@@ -442,7 +465,7 @@ const disconnectCalendar = async (req, res) => {
     // Create audit log
     await AuditLog.create({
       id: uuidv4(),
-      user_id: userId,
+      userId: userId,
       action: `calendar.${provider}.disconnect`,
       metadata: {}
     }, { transaction });

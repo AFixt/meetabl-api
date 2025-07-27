@@ -229,7 +229,7 @@ const getBooking = asyncHandler(async (req, res) => {
 
   // Find booking with optimized includes to prevent N+1 queries
   const booking = await Booking.findOne({
-    where: { id, user_id: userId },
+    where: { id, userId: userId },
     include: [
       {
         model: User,
@@ -265,7 +265,7 @@ const cancelBooking = asyncHandler(async (req, res) => {
 
     // Find booking
     const booking = await Booking.findOne({
-      where: { id, user_id: userId }
+      where: { id, userId: userId }
     });
 
     if (!booking) {
@@ -379,7 +379,7 @@ const getPublicBookings = asyncHandler(async (req, res) => {
 
     // Get availability rules for this day of week
     const rules = await AvailabilityRule.findAll({
-      where: { user_id: userId, day_of_week: dayOfWeek }
+      where: { userId: userId, day_of_week: dayOfWeek }
     });
 
     if (rules.length === 0) {
@@ -642,7 +642,7 @@ const rescheduleBooking = asyncHandler(async (req, res) => {
 
     // Find booking
     const booking = await Booking.findOne({
-      where: { id, user_id: userId }
+      where: { id, userId: userId }
     });
 
     if (!booking) {

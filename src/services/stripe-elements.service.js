@@ -36,15 +36,17 @@ class StripeElementsService {
       const setupIntentData = {
         customer: customer.id,
         usage: 'off_session', // For future payments
-        payment_method_types: ['card'],
         metadata: {
           user_id: userId,
           purpose: options.purpose || 'payment_method_setup'
         }
       };
 
-      // Add automatic payment methods if specified
-      if (options.automatic_payment_methods) {
+      // Use automatic payment methods by default for better payment method support
+      // Only use payment_method_types if automatic_payment_methods is explicitly false
+      if (options.automatic_payment_methods === false) {
+        setupIntentData.payment_method_types = ['card'];
+      } else {
         setupIntentData.automatic_payment_methods = {
           enabled: true
         };
@@ -55,7 +57,7 @@ class StripeElementsService {
       // Log setup intent creation
       await AuditLog.create({
         id: uuidv4(),
-        user_id: userId,
+        userId: userId,
         action: 'stripe.setup_intent_created',
         metadata: {
           setup_intent_id: setupIntent.id,
@@ -103,7 +105,6 @@ class StripeElementsService {
         currency: currency.toLowerCase(),
         customer: customer.id,
         setup_future_usage: options.setup_future_usage || 'off_session',
-        payment_method_types: ['card'],
         metadata: {
           user_id: userId,
           purpose: options.purpose || 'one_time_payment',
@@ -111,8 +112,11 @@ class StripeElementsService {
         }
       };
 
-      // Add automatic payment methods if specified
-      if (options.automatic_payment_methods) {
+      // Use automatic payment methods by default for better payment method support
+      // Only use payment_method_types if automatic_payment_methods is explicitly false
+      if (options.automatic_payment_methods === false) {
+        paymentIntentData.payment_method_types = ['card'];
+      } else {
         paymentIntentData.automatic_payment_methods = {
           enabled: true
         };
@@ -133,7 +137,7 @@ class StripeElementsService {
       // Log payment intent creation
       await AuditLog.create({
         id: uuidv4(),
-        user_id: userId,
+        userId: userId,
         action: 'stripe.payment_intent_created',
         metadata: {
           payment_intent_id: paymentIntent.id,
@@ -179,7 +183,7 @@ class StripeElementsService {
       // Log setup intent confirmation
       await AuditLog.create({
         id: uuidv4(),
-        user_id: userId,
+        userId: userId,
         action: 'stripe.setup_intent_confirmed',
         metadata: {
           setup_intent_id: setupIntentId,
@@ -296,7 +300,7 @@ class StripeElementsService {
       // Log successful setup
       await AuditLog.create({
         id: uuidv4(),
-        user_id: userId,
+        userId: userId,
         action: 'stripe.payment_method_setup_completed',
         metadata: {
           setup_intent_id: setupIntentId,
@@ -357,7 +361,7 @@ class StripeElementsService {
       // Log ephemeral key creation
       await AuditLog.create({
         id: uuidv4(),
-        user_id: userId,
+        userId: userId,
         action: 'stripe.ephemeral_key_created',
         metadata: {
           customer_id: customer.id,

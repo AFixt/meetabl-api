@@ -21,6 +21,7 @@ const CalendarToken = sequelize.define('CalendarToken', {
   userId: {
     type: DataTypes.STRING(36),
     allowNull: false,
+    field: 'user_id',
     references: {
       model: User,
       key: 'id'
@@ -32,15 +33,18 @@ const CalendarToken = sequelize.define('CalendarToken', {
   },
   accessToken: {
     type: DataTypes.TEXT,
-    allowNull: false
+    allowNull: false,
+    field: 'access_token'
   },
   refreshToken: {
     type: DataTypes.TEXT,
-    allowNull: false
+    allowNull: false,
+    field: 'refresh_token'
   },
   expiresAt: {
     type: DataTypes.DATE,
-    allowNull: false
+    allowNull: false,
+    field: 'expires_at'
   },
   scope: {
     type: DataTypes.TEXT,

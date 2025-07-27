@@ -143,7 +143,7 @@ const upgradeSubscription = asyncHandler(async (req, res) => {
     // Log the upgrade
     await AuditLog.create({
       id: uuidv4(),
-      user_id: userId,
+      userId: userId,
       action: 'subscription.upgrade',
       metadata: {
         price_id,
@@ -203,7 +203,7 @@ const downgradeSubscription = asyncHandler(async (req, res) => {
     // Log the downgrade
     await AuditLog.create({
       id: uuidv4(),
-      user_id: userId,
+      userId: userId,
       action: 'subscription.downgrade',
       metadata: {
         price_id,
@@ -261,7 +261,7 @@ const cancelSubscription = asyncHandler(async (req, res) => {
     // Log the cancellation
     await AuditLog.create({
       id: uuidv4(),
-      user_id: userId,
+      userId: userId,
       action: 'subscription.cancel',
       metadata: {
         subscription_id: result.id,
@@ -316,7 +316,7 @@ const reactivateSubscription = asyncHandler(async (req, res) => {
     // Log the reactivation
     await AuditLog.create({
       id: uuidv4(),
-      user_id: userId,
+      userId: userId,
       action: 'subscription.reactivate',
       metadata: {
         subscription_id: result.id
@@ -450,7 +450,7 @@ const createSetupIntent = asyncHandler(async (req, res) => {
     // Log setup intent creation
     await AuditLog.create({
       id: uuidv4(),
-      user_id: userId,
+      userId: userId,
       action: 'payment_method.setup_intent_created',
       metadata: {
         setup_intent_id: setupIntent.id,
@@ -500,7 +500,7 @@ const setDefaultPaymentMethod = asyncHandler(async (req, res) => {
     // Log the change
     await AuditLog.create({
       id: uuidv4(),
-      user_id: userId,
+      userId: userId,
       action: 'payment_method.set_default',
       metadata: {
         payment_method_id,
@@ -543,7 +543,7 @@ const removePaymentMethod = asyncHandler(async (req, res) => {
     // Log the removal
     await AuditLog.create({
       id: uuidv4(),
-      user_id: userId,
+      userId: userId,
       action: 'payment_method.removed',
       metadata: {
         payment_method_id,
@@ -737,7 +737,7 @@ const recordUsage = asyncHandler(async (req, res) => {
     // Log the usage recording
     await AuditLog.create({
       id: uuidv4(),
-      user_id: userId,
+      userId: userId,
       action: 'usage.recorded',
       metadata: {
         metric_name,
@@ -900,7 +900,7 @@ const getCustomerPortal = asyncHandler(async (req, res) => {
     // Log portal access
     await AuditLog.create({
       id: uuidv4(),
-      user_id: userId,
+      userId: userId,
       action: 'billing.portal_accessed',
       metadata: {
         customer_id: user.stripe_customer_id,
