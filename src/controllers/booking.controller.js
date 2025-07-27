@@ -490,6 +490,12 @@ const getPublicBookings = asyncHandler(async (req, res) => {
         lastName: user.lastName,
         username: user.username
       },
+      settings: {
+        googleAnalyticsId: user.UserSettings?.google_analytics_id || null,
+        bookingPageTitle: user.UserSettings?.booking_page_title || null,
+        bookingPageDescription: user.UserSettings?.booking_page_description || null,
+        brandingColor: user.UserSettings?.branding_color || '#000000'
+      },
       date,
       available_slots: allSlots
     }, 'Available booking slots retrieved successfully');

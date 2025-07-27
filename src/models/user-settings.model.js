@@ -83,6 +83,14 @@ const UserSettings = sequelize.define('UserSettings', {
     validate: {
       isIn: [[7, 14, 21, 30]]
     }
+  },
+  googleAnalyticsId: {
+    type: DataTypes.STRING(20),
+    allowNull: true,
+    field: 'google_analytics_id',
+    validate: {
+      is: /^(G-[A-Z0-9]+|UA-[0-9]+-[0-9]+|GT-[A-Z0-9]+)?$/i
+    }
   }
 }, {
   tableName: 'UserSettings',

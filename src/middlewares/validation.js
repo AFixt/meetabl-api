@@ -243,6 +243,11 @@ const validateUserSettings = [
     .isIn([7, 14, 21, 30])
     .withMessage('Booking horizon must be 7, 14, 21, or 30 days'),
 
+  body('google_analytics_id')
+    .optional()
+    .matches(/^(G-[A-Z0-9]+|UA-[0-9]+-[0-9]+|GT-[A-Z0-9]+)?$/i)
+    .withMessage('Google Analytics ID must be in G-XXXXXXXX, UA-XXXXXXX-X, or GT-XXXXXXXX format'),
+
   validateRequest
 ];
 
