@@ -10,6 +10,10 @@ const jwt = require('jsonwebtoken');
 const bcrypt = require('bcrypt');
 const crypto = require('crypto');
 const { v4: uuidv4 } = require('uuid');
+const { 
+  generateUserVerificationToken, 
+  generatePasswordResetToken 
+} = require('../utils/crypto');
 const logger = require('../config/logger');
 const { User, UserSettings, AuditLog, JwtBlacklist } = require('../models');
 const { sequelize } = require('../config/database');
@@ -63,7 +67,7 @@ const register = asyncHandler(async (req, res) => {
     const userId = uuidv4();
     
     // Generate email verification token
-    const verificationToken = crypto.randomBytes(32).toString('hex');
+    const verificationToken = generateUserVerificationToken();
     const hashedVerificationToken = crypto.createHash('sha256').update(verificationToken).digest('hex');
 
     // Set default consent for new users (can be changed later)
@@ -426,7 +430,7 @@ const forgotPassword = asyncHandler(async (req, res) => {
     }
 
     // Generate reset token
-    const resetToken = crypto.randomBytes(32).toString('hex');
+    const resetToken = generatePasswordResetToken();
     const hashedToken = crypto.createHash('sha256').update(resetToken).digest('hex');
 
     // Save hashed token and expiration to user
@@ -751,7 +755,7 @@ const resendVerificationEmail = asyncHandler(async (req, res) => {
     }
 
     // Generate new verification token
-    const verificationToken = crypto.randomBytes(32).toString('hex');
+    const verificationToken = generateUserVerificationToken();
     const hashedToken = crypto.createHash('sha256').update(verificationToken).digest('hex');
 
     // Update user with new token

@@ -8,6 +8,7 @@
 
 const { v4: uuidv4 } = require('uuid');
 const crypto = require('crypto');
+const { generateTokenWithExpiration } = require('../utils/crypto');
 const {
   isValid,
   parseISO,
@@ -657,12 +658,8 @@ const createPublicBooking = asyncHandler(async (req, res) => {
       throw conflictError('Time slot has a pending booking request. Please try another time.');
     }
 
-    // Generate confirmation token
-    const confirmationToken = crypto.randomBytes(32).toString('hex');
-    
-    // Set expiration time (30 minutes from now)
-    const expiresAt = new Date();
-    expiresAt.setMinutes(expiresAt.getMinutes() + 30);
+    // Generate confirmation token and expiration time
+    const { token: confirmationToken, expiresAt } = generateTokenWithExpiration(32, 30);
 
     // Create booking request
     const bookingRequestId = uuidv4();
