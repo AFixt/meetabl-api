@@ -8,8 +8,9 @@
 
 // Set test environment before any imports
 process.env.NODE_ENV = 'test';
-process.env.JWT_SECRET = 'TestJwtSecret123';
-process.env.JWT_REFRESH_SECRET = 'TestJwtRefreshSecret789';
+process.env.JWT_SECRET = 'TestJwtSecret123ForIntegrationTests456';
+process.env.JWT_REFRESH_SECRET = 'TestJwtRefreshSecret789ForIntegrationTests012';
+process.env.SESSION_SECRET = 'TestSessionSecret123ForIntegrationTests456';
 
 const request = require('supertest');
 const { v4: uuidv4 } = require('uuid');
@@ -27,14 +28,33 @@ jest.mock('../../src/services/calendar.service', () => ({
   createCalendarEvent: jest.fn().mockResolvedValue()
 }));
 
-// Mock performance monitoring to prevent open handles
+// Mock performance monitoring completely
 jest.mock('../../src/middlewares/performance', () => ({
+  requestPerformanceMiddleware: (req, res, next) => next(),
+  databasePerformanceWrapper: (fn) => fn,
+  bookingPerformanceWrapper: (fn) => fn,
   initializePerformanceMonitoring: jest.fn(),
-  performanceMiddleware: (req, res, next) => next()
+  shutdownPerformanceMonitoring: jest.fn()
 }));
 
-// Import app after mocking
-const app = require('../../src/app');
+// Mock express-status-monitor
+jest.mock('express-status-monitor', () => ({
+  middleware: (req, res, next) => next()
+}));
+
+// Create express app directly instead of importing full app
+const express = require('express');
+const bookingRoutes = require('../../src/routes/booking.routes');
+const { errorHandler } = require('../../src/utils/error-response');
+
+const createTestApp = () => {
+  const app = express();
+  app.use(express.json());
+  app.use('/api/bookings', bookingRoutes);
+  app.use(errorHandler);
+  return app;
+};
+
 const notificationService = require('../../src/services/notification.service');
 const calendarService = require('../../src/services/calendar.service');
 
@@ -42,8 +62,12 @@ describe('Booking Confirmation Integration Tests - Simple', () => {
   let testUser;
   let testBookingRequest;
   let validToken;
+  let app;
 
   beforeAll(async () => {
+    // Create test app
+    app = createTestApp();
+    
     // Wait for database connection
     await sequelize.authenticate();
     
