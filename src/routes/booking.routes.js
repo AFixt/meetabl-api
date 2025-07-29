@@ -39,9 +39,9 @@ router.post('/my',
     
     return await Booking.count({
       where: {
-        hostId: req.user.id,
+        userId: req.user.id,
         startTime: {
-          $gte: startOfMonth
+          [require('sequelize').Op.gte]: startOfMonth
         }
       }
     });
@@ -92,5 +92,12 @@ router.get('/public/:username', bookingController.getPublicBookings);
  * @access Public
  */
 router.post('/public/:username', validateBooking, bookingController.createPublicBooking);
+
+/**
+ * @route GET /api/bookings/confirm/:token
+ * @desc Confirm a booking request
+ * @access Public
+ */
+router.get('/confirm/:token', bookingController.confirmBookingRequest);
 
 module.exports = router;

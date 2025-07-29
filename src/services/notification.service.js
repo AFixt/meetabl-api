@@ -194,7 +194,7 @@ const queueNotification = async (bookingId, type = 'email') => {
     // Create notification record
     const notification = await Notification.create({
       id: uuidv4(),
-      booking_id: bookingId,
+      bookingId: bookingId,
       type,
       status: 'pending'
     });
@@ -301,9 +301,275 @@ const sendEmailVerification = async (user, verificationToken) => {
   }
 };
 
+/**
+ * Send booking confirmation request email
+ * @param {Object} params - Email parameters
+ * @returns {Promise<void>}
+ */
+const sendBookingConfirmationRequest = async (params) => {
+  try {
+    const {
+      to,
+      customerName,
+      hostName,
+      startTime,
+      endTime,
+      confirmationUrl,
+      expiresAt
+    } = params;
+
+    const transporter = createTransporter();
+
+    // Format date and time
+    const startDate = new Date(startTime);
+    const formattedDate = startDate.toLocaleDateString('en-US', {
+      weekday: 'long',
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric'
+    });
+    const formattedStartTime = startDate.toLocaleTimeString('en-US', {
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+    const formattedEndTime = new Date(endTime).toLocaleTimeString('en-US', {
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+
+    // Create HTML email content
+    const emailHtml = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <style>
+          body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+          .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+          .header { background-color: #f8f9fa; padding: 20px; text-align: center; }
+          .content { padding: 20px; }
+          .button { display: inline-block; padding: 12px 24px; background-color: #007bff; color: white; text-decoration: none; border-radius: 4px; margin: 20px 0; }
+          .details { background-color: #f8f9fa; padding: 15px; border-radius: 4px; margin: 20px 0; }
+          .warning { color: #dc3545; font-style: italic; }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <div class="header">
+            <h1>Confirm Your Booking</h1>
+          </div>
+          <div class="content">
+            <p>Hi ${customerName},</p>
+            <p>You're almost done! Please confirm your booking request with ${hostName}.</p>
+            
+            <div class="details">
+              <h3>Booking Details:</h3>
+              <p><strong>Date:</strong> ${formattedDate}</p>
+              <p><strong>Time:</strong> ${formattedStartTime} - ${formattedEndTime}</p>
+              <p><strong>With:</strong> ${hostName}</p>
+            </div>
+            
+            <p style="text-align: center;">
+              <a href="${confirmationUrl}" class="button">Confirm Booking</a>
+            </p>
+            
+            <p class="warning">This link expires in 30 minutes. If you don't confirm in time, you'll need to request a new booking.</p>
+            
+            <p>If you didn't request this booking, you can safely ignore this email.</p>
+            
+            <p>Best regards,<br>The Meetabl Team</p>
+          </div>
+        </div>
+      </body>
+      </html>
+    `;
+
+    // Send email
+    const info = await transporter.sendMail({
+      from: `"Meetabl" <${process.env.EMAIL_FROM || process.env.EMAIL_USER}>`,
+      to: to,
+      subject: `Action Required: Confirm your booking with ${hostName}`,
+      html: emailHtml
+    });
+
+    logger.info(`Booking confirmation request sent to ${to}: ${info.messageId}`);
+  } catch (error) {
+    logger.error('Error sending booking confirmation request:', error);
+    throw error;
+  }
+};
+
+/**
+ * Send booking confirmation to customer
+ * @param {Object} params - Parameters with booking and host
+ * @returns {Promise<void>}
+ */
+const sendBookingConfirmationToCustomer = async (params) => {
+  try {
+    const { booking, host } = params;
+    const transporter = createTransporter();
+
+    // Format date and time
+    const startDate = new Date(booking.startTime);
+    const formattedDate = startDate.toLocaleDateString('en-US', {
+      weekday: 'long',
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric'
+    });
+    const formattedStartTime = startDate.toLocaleTimeString('en-US', {
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+    const formattedEndTime = new Date(booking.endTime).toLocaleTimeString('en-US', {
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+
+    const emailHtml = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <style>
+          body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+          .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+          .header { background-color: #28a745; color: white; padding: 20px; text-align: center; }
+          .content { padding: 20px; }
+          .details { background-color: #f8f9fa; padding: 15px; border-radius: 4px; margin: 20px 0; }
+          .footer { text-align: center; color: #666; font-size: 14px; margin-top: 30px; }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <div class="header">
+            <h1>Booking Confirmed!</h1>
+          </div>
+          <div class="content">
+            <p>Hi ${booking.customerName},</p>
+            <p>Great news! Your booking has been confirmed.</p>
+            
+            <div class="details">
+              <h3>Booking Details:</h3>
+              <p><strong>Date:</strong> ${formattedDate}</p>
+              <p><strong>Time:</strong> ${formattedStartTime} - ${formattedEndTime}</p>
+              <p><strong>With:</strong> ${host.firstName} ${host.lastName}</p>
+              ${booking.notes ? `<p><strong>Notes:</strong> ${booking.notes}</p>` : ''}
+            </div>
+            
+            <p>We've sent this information to ${host.firstName} as well. They may contact you if they need any additional information.</p>
+            
+            <p>Add this event to your calendar so you don't forget!</p>
+            
+            <p>Best regards,<br>The Meetabl Team</p>
+          </div>
+          <div class="footer">
+            <p>Need to cancel? Contact ${host.firstName} directly at ${host.email}</p>
+          </div>
+        </div>
+      </body>
+      </html>
+    `;
+
+    const info = await transporter.sendMail({
+      from: `"Meetabl" <${process.env.EMAIL_FROM || process.env.EMAIL_USER}>`,
+      to: booking.customerEmail,
+      subject: `Booking Confirmed with ${host.firstName} ${host.lastName}`,
+      html: emailHtml
+    });
+
+    logger.info(`Booking confirmation sent to customer ${booking.customerEmail}: ${info.messageId}`);
+  } catch (error) {
+    logger.error('Error sending booking confirmation to customer:', error);
+    throw error;
+  }
+};
+
+/**
+ * Send booking notification to host
+ * @param {Object} params - Parameters with booking and host
+ * @returns {Promise<void>}
+ */
+const sendBookingNotificationToHost = async (params) => {
+  try {
+    const { booking, host } = params;
+    const transporter = createTransporter();
+
+    // Format date and time
+    const startDate = new Date(booking.startTime);
+    const formattedDate = startDate.toLocaleDateString('en-US', {
+      weekday: 'long',
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric'
+    });
+    const formattedStartTime = startDate.toLocaleTimeString('en-US', {
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+    const formattedEndTime = new Date(booking.endTime).toLocaleTimeString('en-US', {
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+
+    const emailHtml = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <style>
+          body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+          .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+          .header { background-color: #007bff; color: white; padding: 20px; text-align: center; }
+          .content { padding: 20px; }
+          .details { background-color: #f8f9fa; padding: 15px; border-radius: 4px; margin: 20px 0; }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <div class="header">
+            <h1>New Booking Confirmed</h1>
+          </div>
+          <div class="content">
+            <p>Hi ${host.firstName},</p>
+            <p>You have a new confirmed booking!</p>
+            
+            <div class="details">
+              <h3>Booking Details:</h3>
+              <p><strong>Date:</strong> ${formattedDate}</p>
+              <p><strong>Time:</strong> ${formattedStartTime} - ${formattedEndTime}</p>
+              <p><strong>Customer:</strong> ${booking.customerName}</p>
+              <p><strong>Email:</strong> ${booking.customerEmail}</p>
+              ${booking.customerPhone ? `<p><strong>Phone:</strong> ${booking.customerPhone}</p>` : ''}
+              ${booking.notes ? `<p><strong>Notes:</strong> ${booking.notes}</p>` : ''}
+            </div>
+            
+            <p>This booking has been added to your calendar. The customer has received a confirmation email.</p>
+            
+            <p>Best regards,<br>The Meetabl Team</p>
+          </div>
+        </div>
+      </body>
+      </html>
+    `;
+
+    const info = await transporter.sendMail({
+      from: `"Meetabl" <${process.env.EMAIL_FROM || process.env.EMAIL_USER}>`,
+      to: host.email,
+      subject: `New Booking: ${booking.customerName} on ${formattedDate}`,
+      html: emailHtml
+    });
+
+    logger.info(`Booking notification sent to host ${host.email}: ${info.messageId}`);
+  } catch (error) {
+    logger.error('Error sending booking notification to host:', error);
+    throw error;
+  }
+};
+
 module.exports = {
   processNotificationQueue,
   queueNotification,
   sendPasswordResetEmail,
-  sendEmailVerification
+  sendEmailVerification,
+  sendBookingConfirmationRequest,
+  sendBookingConfirmationToCustomer,
+  sendBookingNotificationToHost
 };

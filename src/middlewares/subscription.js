@@ -73,7 +73,7 @@ const checkCalendarLimit = async (req, res, next) => {
     next();
   } catch (error) {
     logger.error('Error checking calendar limit', {
-      error: error.message,
+      error: error?.message || error,
       userId: req.user?.id
     });
     

@@ -43,10 +43,9 @@ const User = sequelize.define('User', {
   },
   username: {
     type: DataTypes.STRING(100),
-    allowNull: false,
+    allowNull: true,
     unique: true,
     validate: {
-      notEmpty: true,
       is: /^[a-z0-9-]+$/i // Allow only alphanumeric and hyphens
     }
   },
@@ -80,6 +79,16 @@ const User = sequelize.define('User', {
     type: DataTypes.STRING(100),
     allowNull: false,
     defaultValue: 'UTC'
+  },
+  language: {
+    type: DataTypes.STRING(10),
+    allowNull: true,
+    defaultValue: 'en'
+  },
+  phoneNumber: {
+    type: DataTypes.STRING(20),
+    allowNull: true,
+    field: 'phone_number'
   },
   calendar_provider: {
     type: DataTypes.ENUM('none', 'google', 'microsoft'),

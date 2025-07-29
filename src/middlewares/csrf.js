@@ -135,10 +135,25 @@ const protectCsrf = (req, res, next) => {
   next();
 };
 
+/**
+ * Middleware to conditionally protect against CSRF attacks
+ * Skips protection for public routes
+ */
+const protectCsrfConditional = (req, res, next) => {
+  // Skip CSRF protection for public routes
+  if (req.path.includes('/public/')) {
+    return next();
+  }
+  
+  // Apply CSRF protection for all other routes
+  return protectCsrf(req, res, next);
+};
+
 module.exports = {
   initializeCsrf,
   provideCsrfToken,
   protectCsrf,
+  protectCsrfConditional,
   generateSecret,
   generateToken,
   verifyToken

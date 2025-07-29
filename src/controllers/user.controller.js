@@ -41,7 +41,7 @@ const upload = multer({
  */
 const uploadLogo = asyncHandler(async (req, res) => {
   try {
-    const userId = req.user.id;
+    const userId = req.user.id || req.user.dataValues?.id;
     const { logoAltText } = req.body;
 
     if (!req.file) {
@@ -92,7 +92,7 @@ const uploadLogo = asyncHandler(async (req, res) => {
     // Create audit log
     await AuditLog.create({
       id: uuidv4(),
-      user_id: userId,
+      userId: userId,
       action: 'user.logo.upload',
       metadata: {
         logoUrl: uploadResult.url,
@@ -120,7 +120,7 @@ const uploadLogo = asyncHandler(async (req, res) => {
  */
 const deleteLogo = asyncHandler(async (req, res) => {
   try {
-    const userId = req.user.id;
+    const userId = req.user.id || req.user.dataValues?.id;
 
     // Find user settings
     const settings = await UserSettings.findOne({ where: { userId: userId } });
@@ -146,7 +146,7 @@ const deleteLogo = asyncHandler(async (req, res) => {
     // Create audit log
     await AuditLog.create({
       id: uuidv4(),
-      user_id: userId,
+      userId: userId,
       action: 'user.logo.delete',
       metadata: {
         deletedAt: new Date()
@@ -168,7 +168,7 @@ const deleteLogo = asyncHandler(async (req, res) => {
  */
 const getCurrentUser = asyncHandler(async (req, res) => {
   try {
-    const userId = req.user.id;
+    const userId = req.user.id || req.user.dataValues?.id;
 
     // Find user with settings
     const user = await User.findOne({
@@ -195,8 +195,15 @@ const getCurrentUser = asyncHandler(async (req, res) => {
  */
 const updateUser = asyncHandler(async (req, res) => {
   try {
-    const userId = req.user.id;
-    const { name, timezone } = req.body;
+    // Get userId from the authenticated user
+    // Sequelize model instances expose their properties directly
+    const userId = req.user.id || req.user.dataValues?.id;
+    
+    if (!userId) {
+      throw new Error('User ID not found in request');
+    }
+    
+    const { firstName, lastName, email, username, timezone, language, phoneNumber } = req.body;
 
     // Find user
     const user = await User.findOne({ where: { id: userId } });
@@ -205,19 +212,48 @@ const updateUser = asyncHandler(async (req, res) => {
       throw notFoundError('User');
     }
 
+    // Track what fields were updated
+    const updatedFields = {};
+
     // Update user fields
-    if (name) user.name = name;
-    if (timezone) user.timezone = timezone;
+    if (firstName !== undefined && firstName !== user.firstName) {
+      user.firstName = firstName;
+      updatedFields.firstName = firstName;
+    }
+    if (lastName !== undefined && lastName !== user.lastName) {
+      user.lastName = lastName;
+      updatedFields.lastName = lastName;
+    }
+    if (email !== undefined && email !== user.email) {
+      user.email = email;
+      updatedFields.email = email;
+    }
+    if (username !== undefined && username !== user.username) {
+      user.username = username;
+      updatedFields.username = username;
+    }
+    if (timezone !== undefined && timezone !== user.timezone) {
+      user.timezone = timezone;
+      updatedFields.timezone = timezone;
+    }
+    if (language !== undefined && language !== user.language) {
+      user.language = language;
+      updatedFields.language = language;
+    }
+    if (phoneNumber !== undefined && phoneNumber !== user.phoneNumber) {
+      user.phoneNumber = phoneNumber;
+      updatedFields.phoneNumber = phoneNumber;
+    }
 
     await user.save();
 
     // Create audit log
     await AuditLog.create({
       id: uuidv4(),
-      user_id: userId,
+      userId: userId,
       action: 'user.update',
       metadata: {
-        updated: { name, timezone }
+        updated: updatedFields
       }
     });
 
@@ -246,16 +282,16 @@ const updateUser = asyncHandler(async (req, res) => {
  */
 const getUserSettings = asyncHandler(async (req, res) => {
   try {
-    const userId = req.user.id;
+    const userId = req.user.id || req.user.dataValues?.id;
 
     // Find settings
-    let settings = await UserSettings.findOne({ where: { user_id: userId } });
+    let settings = await UserSettings.findOne({ where: { userId: userId } });
 
     // Create settings if not found
     if (!settings) {
       settings = await UserSettings.create({
         id: uuidv4(),
-        user_id: userId
+        userId: userId
       });
     }
 
@@ -273,41 +309,43 @@ const getUserSettings = asyncHandler(async (req, res) => {
  */
 const updateUserSettings = asyncHandler(async (req, res) => {
   try {
-    const userId = req.user.id;
+    const userId = req.user.id || req.user.dataValues?.id;
     const {
-      branding_color, confirmation_email_copy, accessibility_mode, alt_text_enabled, booking_horizon, google_analytics_id, logo_alt_text
+      branding_color, confirmation_email_copy, accessibility_mode, alt_text_enabled, booking_horizon, google_analytics_id, logo_alt_text, meeting_duration, buffer_minutes
     } = req.body;
 
     // Find settings
-    let settings = await UserSettings.findOne({ where: { user_id: userId } });
+    let settings = await UserSettings.findOne({ where: { userId: userId } });
 
     // Create settings if not found
     if (!settings) {
       settings = await UserSettings.create({
         id: uuidv4(),
-        user_id: userId
+        userId: userId
       });
     }
 
     // Update settings fields
-    if (branding_color !== undefined) settings.branding_color = branding_color;
-    if (confirmation_email_copy !== undefined) settings.confirmation_email_copy = confirmation_email_copy;
-    if (accessibility_mode !== undefined) settings.accessibility_mode = accessibility_mode;
-    if (alt_text_enabled !== undefined) settings.alt_text_enabled = alt_text_enabled;
-    if (booking_horizon !== undefined) settings.booking_horizon = booking_horizon;
-    if (google_analytics_id !== undefined) settings.google_analytics_id = google_analytics_id;
-    if (logo_alt_text !== undefined) settings.logo_alt_text = logo_alt_text;
+    if (branding_color !== undefined) settings.brandingColor = branding_color;
+    if (confirmation_email_copy !== undefined) settings.confirmationEmailCopy = confirmation_email_copy;
+    if (accessibility_mode !== undefined) settings.accessibilityMode = accessibility_mode;
+    if (alt_text_enabled !== undefined) settings.altTextEnabled = alt_text_enabled;
+    if (booking_horizon !== undefined) settings.bookingHorizon = booking_horizon;
+    if (google_analytics_id !== undefined) settings.googleAnalyticsId = google_analytics_id;
+    if (logo_alt_text !== undefined) settings.logoAltText = logo_alt_text;
+    if (meeting_duration !== undefined) settings.meetingDuration = meeting_duration;
+    if (buffer_minutes !== undefined) settings.bufferMinutes = buffer_minutes;
 
     await settings.save();
 
     // Create audit log
     await AuditLog.create({
       id: uuidv4(),
-      user_id: userId,
+      userId: userId,
       action: 'user.settings.update',
       metadata: {
         updated: {
-          branding_color, confirmation_email_copy, accessibility_mode, alt_text_enabled, booking_horizon, google_analytics_id, logo_alt_text
+          branding_color, confirmation_email_copy, accessibility_mode, alt_text_enabled, booking_horizon, google_analytics_id, logo_alt_text, meeting_duration
         }
       }
     });
@@ -329,7 +367,7 @@ const updateUserSettings = asyncHandler(async (req, res) => {
  */
 const changePassword = asyncHandler(async (req, res) => {
   try {
-    const userId = req.user.id;
+    const userId = req.user.id || req.user.dataValues?.id;
     const { currentPassword, newPassword } = req.body;
 
     // Validate input
@@ -366,7 +404,7 @@ const changePassword = asyncHandler(async (req, res) => {
     // Create audit log
     await AuditLog.create({
       id: uuidv4(),
-      user_id: userId,
+      userId: userId,
       action: 'user.password.change',
       metadata: {
         changed_at: new Date()
@@ -390,7 +428,7 @@ const deleteAccount = async (req, res) => {
   const transaction = await sequelize.transaction();
 
   try {
-    const userId = req.user.id;
+    const userId = req.user.id || req.user.dataValues?.id;
     const { password } = req.body;
 
     // Validate password is provided
@@ -440,7 +478,7 @@ const deleteAccount = async (req, res) => {
     // Create final audit log entry
     await AuditLog.create({
       id: uuidv4(),
-      user_id: userId,
+      userId: userId,
       action: 'user.account.deleted',
       metadata: {
         email: user.email,
@@ -528,19 +566,19 @@ const getPublicProfile = async (req, res) => {
  */
 const updatePublicProfile = async (req, res) => {
   try {
-    const userId = req.user.id;
+    const userId = req.user.id || req.user.dataValues?.id;
     const {
       public_name, public_bio, public_avatar_url, branding_color, 
       booking_page_title, booking_page_description
     } = req.body;
 
     // Find or create user settings
-    let settings = await UserSettings.findOne({ where: { user_id: userId } });
+    let settings = await UserSettings.findOne({ where: { userId: userId } });
 
     if (!settings) {
       settings = await UserSettings.create({
         id: uuidv4(),
-        user_id: userId
+        userId: userId
       });
     }
 
@@ -557,7 +595,7 @@ const updatePublicProfile = async (req, res) => {
     // Create audit log
     await AuditLog.create({
       id: uuidv4(),
-      user_id: userId,
+      userId: userId,
       action: 'user.public_profile.update',
       metadata: {
         updated: {

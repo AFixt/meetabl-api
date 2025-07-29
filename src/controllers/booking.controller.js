@@ -7,6 +7,7 @@
  */
 
 const { v4: uuidv4 } = require('uuid');
+const crypto = require('crypto');
 const {
   isValid,
   parseISO,
@@ -25,7 +26,7 @@ const {
 } = require('date-fns');
 const logger = require('../config/logger');
 const {
-  Booking, User, Notification, AuditLog, AvailabilityRule, UserSettings
+  Booking, BookingRequest, User, Notification, AuditLog, AvailabilityRule, UserSettings
 } = require('../models');
 const { sequelize, Op } = require('../config/database');
 const notificationService = require('../services/notification.service');
@@ -49,6 +50,7 @@ const isSameOrBefore = (date1, date2) => isEqual(date1, date2) || isBefore(date1
  */
 const getUserBookings = asyncHandler(async (req, res) => {
   const userId = req.user.id;
+  logger.info(`Getting bookings for user ${userId}`);
   const {
     limit = 100, offset = 0, order = 'start_time', dir = 'desc'
   } = req.query;
@@ -81,6 +83,8 @@ const getUserBookings = asyncHandler(async (req, res) => {
       'X-Current-Page': Math.floor(offset / limit) + 1
     });
 
+    logger.info(`Found ${bookings.count} bookings for user ${userId}`);
+    
     return paginatedResponse(res, bookings.rows, {
       page: Math.floor(offset / limit) + 1,
       limit: parseInt(limit),
@@ -175,7 +179,7 @@ const createBooking = asyncHandler(async (req, res) => {
     // Create email notification
     await Notification.create({
       id: uuidv4(),
-      booking_id: bookingId,
+      bookingId: bookingId,
       type: 'email',
       status: 'pending'
     }, { transaction });
@@ -287,7 +291,7 @@ const cancelBooking = asyncHandler(async (req, res) => {
     // Create cancellation notification
     await Notification.create({
       id: uuidv4(),
-      booking_id: id,
+      bookingId: id,
       type: 'email',
       status: 'pending'
     }, { transaction });
@@ -372,7 +376,7 @@ const getPublicBookings = asyncHandler(async (req, res) => {
     // Check booking horizon
     const today = new Date();
     const daysDifference = Math.ceil((targetDate - today) / (1000 * 60 * 60 * 24));
-    const bookingHorizon = user.UserSettings?.booking_horizon || 30; // Default 30 days
+    const bookingHorizon = user.UserSetting?.bookingHorizon || 30; // Default 30 days
     
     if (daysDifference > bookingHorizon) {
       throw validationError([{
@@ -388,8 +392,11 @@ const getPublicBookings = asyncHandler(async (req, res) => {
       }]);
     }
 
-    // Validate duration
-    const slotDuration = parseInt(duration, 10) || 60; // Default 60 minutes
+    // Use user's preferred meeting duration from settings, or duration query param, or default to 60 minutes
+    const userPreferredDuration = user.UserSetting?.meetingDuration;
+    const requestedDuration = parseInt(duration, 10);
+    const slotDuration = userPreferredDuration || requestedDuration || 60;
+    
     if (slotDuration < 15 || slotDuration > 240) {
       throw validationError([{
         field: 'duration',
@@ -421,11 +428,38 @@ const getPublicBookings = asyncHandler(async (req, res) => {
     const bookings = await Booking.findAll({
       where: {
         userId: userId,
-        start_time: { [Op.gte]: dayStart },
-        end_time: { [Op.lte]: dayEnd },
+        [Op.and]: [
+          {
+            startTime: { [Op.lt]: dayEnd }
+          },
+          {
+            endTime: { [Op.gt]: dayStart }
+          }
+        ],
         status: 'confirmed'
       }
     });
+
+    // Debug logging
+    logger.info(`Found ${bookings.length} bookings for user ${userId} on ${date}:`, {
+      dayStart: dayStart.toISOString(),
+      dayEnd: dayEnd.toISOString(),
+      bookings: bookings.map(b => ({
+        id: b.id,
+        start: b.startTime,
+        end: b.endTime,
+        status: b.status
+      }))
+    });
+
+    // Get busy times from integrated calendars
+    let calendarBusyTimes = [];
+    try {
+      calendarBusyTimes = await calendarService.getAllBusyTimes(userId, dayStart, dayEnd);
+    } catch (error) {
+      logger.warn(`Failed to fetch calendar busy times for user ${userId}:`, error);
+      // Continue without calendar integration - don't fail the request
+    }
 
     // Calculate available slots for each rule
     const allSlots = [];
@@ -455,28 +489,55 @@ const getPublicBookings = asyncHandler(async (req, res) => {
           end: slotEnd.toISOString()
         };
 
-        // Check if slot conflicts with any booking
-        const isConflict = bookings.some((booking) => {
-          const bookingStart = new Date(booking.start_time);
-          const bookingEnd = new Date(booking.end_time);
+        // Check if slot conflicts with any booking or calendar event
+        const isBookingConflict = bookings.some((booking) => {
+          const bookingStart = new Date(booking.startTime);
+          const bookingEnd = new Date(booking.endTime);
+          const slotStart = new Date(slot.start);
+          const slotEnd = new Date(slot.end);
+          
+          // Check if dates are valid
+          if (isNaN(bookingStart.getTime()) || isNaN(bookingEnd.getTime())) {
+            logger.error(`Invalid booking dates for ${booking.id}:`, {
+              startTime: booking.startTime,
+              endTime: booking.endTime
+            });
+            return false; // Skip invalid dates
+          }
 
-          // Check for overlap
+          // Check for overlap with buffer time
+          const slotStartWithBuffer = addMinutes(slotStart, -rule.buffer_minutes);
+          const slotEndWithBuffer = addMinutes(slotEnd, rule.buffer_minutes);
+          
+          const basicOverlap = (isBefore(slotStart, bookingEnd) && isAfter(slotEnd, bookingStart));
+          const bufferOverlap = (isBefore(slotStartWithBuffer, bookingEnd) && isAfter(slotEndWithBuffer, bookingStart));
+          
+          return basicOverlap || bufferOverlap;
+        });
+
+        // Check if slot conflicts with any calendar events
+        const isCalendarConflict = calendarBusyTimes.some((busyTime) => {
+          // Check for overlap with buffer time
           const slotStartWithBuffer = addMinutes(new Date(slot.start), -rule.buffer_minutes);
           const slotEndWithBuffer = addMinutes(new Date(slot.end), rule.buffer_minutes);
           
           return (
-            (isBefore(new Date(slot.start), bookingEnd) && isAfter(new Date(slot.end), bookingStart))
-            || (isBefore(slotStartWithBuffer, bookingEnd) && isAfter(slotEndWithBuffer, bookingStart))
+            (isBefore(new Date(slot.start), busyTime.end) && isAfter(new Date(slot.end), busyTime.start))
+            || (isBefore(slotStartWithBuffer, busyTime.end) && isAfter(slotEndWithBuffer, busyTime.start))
           );
         });
+
+        const isConflict = isBookingConflict || isCalendarConflict;
 
         // Add slot if no conflict
         if (!isConflict) {
           allSlots.push(slot);
         }
         
-        // Move to next slot
-        slotStart = slotEnd;
+        // Move to next slot with buffer time
+        // Get buffer time from user settings or availability rule
+        const bufferMinutes = user.UserSetting?.bufferMinutes || rule.buffer_minutes || 0;
+        slotStart = addMinutes(slotEnd, bufferMinutes);
       }
     });
 
@@ -491,10 +552,12 @@ const getPublicBookings = asyncHandler(async (req, res) => {
         username: user.username
       },
       settings: {
-        googleAnalyticsId: user.UserSettings?.google_analytics_id || null,
-        bookingPageTitle: user.UserSettings?.booking_page_title || null,
-        bookingPageDescription: user.UserSettings?.booking_page_description || null,
-        brandingColor: user.UserSettings?.branding_color || '#000000'
+        googleAnalyticsId: user.UserSetting?.googleAnalyticsId || null,
+        bookingPageTitle: user.UserSetting?.bookingPageTitle || null,
+        bookingPageDescription: user.UserSetting?.bookingPageDescription || null,
+        brandingColor: user.UserSetting?.brandingColor || '#000000',
+        meetingDuration: user.UserSetting?.meetingDuration || 60,
+        bufferMinutes: user.UserSetting?.bufferMinutes || 0
       },
       date,
       available_slots: allSlots
@@ -514,8 +577,10 @@ const createPublicBooking = asyncHandler(async (req, res) => {
     const {
       customer_name: customerName,
       customer_email: customerEmail,
+      customer_phone: customerPhone,
       start_time: startTime,
-      end_time: endTime
+      end_time: endTime,
+      notes
     } = req.body;
 
     // Find user by username
@@ -551,31 +616,17 @@ const createPublicBooking = asyncHandler(async (req, res) => {
       ]);
     }
 
-    // Check for overlapping bookings
+    // Check for overlapping confirmed bookings
     const overlappingBookings = await Booking.findOne({
       where: {
         userId: userId,
         status: 'confirmed',
-        [Op.or]: [
+        [Op.and]: [
           {
-            startTime: {
-              [Op.lt]: endTime,
-              [Op.gte]: startTime
-            }
+            startTime: { [Op.lt]: endTime }
           },
           {
-            endTime: {
-              [Op.lte]: endTime,
-              [Op.gt]: startTime
-            }
-          },
-          {
-            startTime: {
-              [Op.lte]: startTime
-            },
-            endTime: {
-              [Op.gte]: endTime
-            }
+            endTime: { [Op.gt]: startTime }
           }
         ]
       }
@@ -585,33 +636,57 @@ const createPublicBooking = asyncHandler(async (req, res) => {
       throw conflictError('Time slot is not available');
     }
 
-    // Create booking
-    const bookingId = uuidv4();
-    const booking = await Booking.create({
-      id: bookingId,
+    // Check for overlapping pending booking requests
+    const overlappingRequests = await BookingRequest.findOne({
+      where: {
+        userId: userId,
+        status: 'pending',
+        expiresAt: { [Op.gt]: new Date() },
+        [Op.and]: [
+          {
+            startTime: { [Op.lt]: endTime }
+          },
+          {
+            endTime: { [Op.gt]: startTime }
+          }
+        ]
+      }
+    });
+
+    if (overlappingRequests) {
+      throw conflictError('Time slot has a pending booking request. Please try another time.');
+    }
+
+    // Generate confirmation token
+    const confirmationToken = crypto.randomBytes(32).toString('hex');
+    
+    // Set expiration time (30 minutes from now)
+    const expiresAt = new Date();
+    expiresAt.setMinutes(expiresAt.getMinutes() + 30);
+
+    // Create booking request
+    const bookingRequestId = uuidv4();
+    const bookingRequest = await BookingRequest.create({
+      id: bookingRequestId,
       userId: userId,
       customerName: customerName,
       customerEmail: customerEmail,
+      customerPhone: customerPhone,
       startTime: startTime,
       endTime: endTime,
-      status: 'confirmed'
-    }, { transaction });
-
-    // Create email notifications for both user and customer
-    await Notification.create({
-      id: uuidv4(),
-      booking_id: bookingId,
-      type: 'email',
-      status: 'pending'
+      notes: notes,
+      confirmationToken: confirmationToken,
+      status: 'pending',
+      expiresAt: expiresAt
     }, { transaction });
 
     // Create audit log
     await AuditLog.create({
       id: uuidv4(),
       userId: userId,
-      action: 'booking.public.create',
+      action: 'booking.request.create',
       metadata: {
-        bookingId,
+        bookingRequestId,
         customer_name: customerName,
         customer_email: customerEmail,
         start_time: startTime,
@@ -622,27 +697,31 @@ const createPublicBooking = asyncHandler(async (req, res) => {
     // Commit transaction
     await transaction.commit();
 
-    // Log booking creation
-    logger.info(`Public booking created: ${bookingId}`);
+    // Log booking request creation
+    logger.info(`Public booking request created: ${bookingRequestId}`);
 
-    // Queue email notification jobs for both user and customer
-    await notificationService.queueNotification(bookingId, 'email');
-
-    // Create calendar event if user has calendar integration
+    // Send confirmation email to customer
+    const confirmationUrl = `${process.env.FRONTEND_URL}/booking/confirm/${confirmationToken}`;
+    
     try {
-      await calendarService.createCalendarEvent(booking);
-    } catch (calendarError) {
-      logger.error(`Failed to create calendar event for public booking ${bookingId}:`, calendarError);
-      // Non-critical error, don't fail the booking creation
+      await notificationService.sendBookingConfirmationRequest({
+        to: customerEmail,
+        customerName: customerName,
+        hostName: `${user.firstName} ${user.lastName}`,
+        startTime: startTime,
+        endTime: endTime,
+        confirmationUrl: confirmationUrl,
+        expiresAt: expiresAt
+      });
+    } catch (emailError) {
+      logger.error(`Failed to send confirmation email for booking request ${bookingRequestId}:`, emailError);
+      // Don't fail the request creation, but log the error
     }
 
     return successResponse(res, {
-      id: booking.id,
-      customer_name: booking.customer_name,
-      start_time: booking.start_time,
-      end_time: booking.end_time,
-      status: booking.status
-    }, 'Public booking created successfully', 201);
+      message: 'Booking request created. Please check your email to confirm your booking.',
+      expiresAt: expiresAt
+    }, 'Booking request created successfully', 201);
   } catch (error) {
     // Rollback transaction
     await transaction.rollback();
@@ -921,6 +1000,187 @@ const bulkCancelBookings = asyncHandler(async (req, res) => {
   }
 });
 
+/**
+ * Confirm booking request
+ * @param {Object} req - Express request object
+ * @param {Object} res - Express response object
+ */
+const confirmBookingRequest = asyncHandler(async (req, res) => {
+  const transaction = await sequelize.transaction();
+
+  try {
+    const { token } = req.params;
+
+    // Find the booking request by token
+    const bookingRequest = await BookingRequest.findOne({
+      where: {
+        confirmationToken: token,
+        status: 'pending'
+      },
+      include: [{
+        model: User,
+        attributes: ['id', 'firstName', 'lastName', 'email', 'timezone']
+      }]
+    });
+
+    if (!bookingRequest) {
+      throw notFoundError('Invalid or expired confirmation link');
+    }
+
+    // Check if request has expired
+    if (new Date() > new Date(bookingRequest.expiresAt)) {
+      // Update status to expired
+      bookingRequest.status = 'expired';
+      await bookingRequest.save({ transaction });
+      await transaction.commit();
+      
+      throw validationError([{
+        field: 'token',
+        message: 'This booking confirmation link has expired. Please request a new booking.'
+      }]);
+    }
+
+    // Check for race condition - another booking might have been confirmed for this time slot
+    const overlappingBookings = await Booking.findOne({
+      where: {
+        userId: bookingRequest.userId,
+        status: 'confirmed',
+        [Op.and]: [
+          {
+            startTime: { [Op.lt]: bookingRequest.endTime }
+          },
+          {
+            endTime: { [Op.gt]: bookingRequest.startTime }
+          }
+        ]
+      }
+    });
+
+    if (overlappingBookings) {
+      // Update status to cancelled due to conflict
+      bookingRequest.status = 'cancelled';
+      await bookingRequest.save({ transaction });
+      await transaction.commit();
+      
+      return res.status(409).json({
+        success: false,
+        error: {
+          code: 'time_slot_taken',
+          message: 'Sorry, this time slot is no longer available. Someone else has booked it.',
+          data: {
+            userId: bookingRequest.userId,
+            date: bookingRequest.startTime,
+            suggestAlternative: true
+          }
+        }
+      });
+    }
+
+    // Create the actual booking
+    const bookingId = uuidv4();
+    const booking = await Booking.create({
+      id: bookingId,
+      userId: bookingRequest.userId,
+      customerName: bookingRequest.customerName,
+      customerEmail: bookingRequest.customerEmail,
+      customerPhone: bookingRequest.customerPhone,
+      startTime: bookingRequest.startTime,
+      endTime: bookingRequest.endTime,
+      notes: bookingRequest.notes,
+      status: 'confirmed'
+    }, { transaction });
+
+    // Update booking request status
+    bookingRequest.status = 'confirmed';
+    bookingRequest.confirmedAt = new Date();
+    await bookingRequest.save({ transaction });
+
+    // Create notifications for both parties
+    const notifications = [
+      {
+        id: uuidv4(),
+        bookingId: bookingId,
+        type: 'email',
+        recipientType: 'host',
+        recipientEmail: bookingRequest.User.email,
+        status: 'pending'
+      },
+      {
+        id: uuidv4(),
+        bookingId: bookingId,
+        type: 'email',
+        recipientType: 'customer',
+        recipientEmail: bookingRequest.customerEmail,
+        status: 'pending'
+      }
+    ];
+
+    await Notification.bulkCreate(notifications, { transaction });
+
+    // Create audit log
+    await AuditLog.create({
+      id: uuidv4(),
+      userId: bookingRequest.userId,
+      action: 'booking.confirm',
+      metadata: {
+        bookingId,
+        bookingRequestId: bookingRequest.id,
+        customer_email: bookingRequest.customerEmail
+      }
+    }, { transaction });
+
+    // Commit transaction
+    await transaction.commit();
+
+    // Log booking confirmation
+    logger.info(`Booking confirmed: ${bookingId} from request ${bookingRequest.id}`);
+
+    // Send notification emails
+    try {
+      // Send confirmation to customer
+      await notificationService.sendBookingConfirmationToCustomer({
+        booking,
+        host: bookingRequest.User
+      });
+
+      // Send notification to host
+      await notificationService.sendBookingNotificationToHost({
+        booking,
+        host: bookingRequest.User
+      });
+    } catch (emailError) {
+      logger.error(`Failed to send confirmation emails for booking ${bookingId}:`, emailError);
+      // Don't fail the confirmation, emails can be retried
+    }
+
+    // Create calendar event if user has calendar integration
+    try {
+      await calendarService.createCalendarEvent(booking);
+    } catch (calendarError) {
+      logger.error(`Failed to create calendar event for confirmed booking ${bookingId}:`, calendarError);
+      // Non-critical error, don't fail the confirmation
+    }
+
+    return successResponse(res, {
+      booking: {
+        id: booking.id,
+        customerName: booking.customerName,
+        startTime: booking.startTime,
+        endTime: booking.endTime,
+        status: booking.status
+      },
+      host: {
+        name: `${bookingRequest.User.firstName} ${bookingRequest.User.lastName}`,
+        email: bookingRequest.User.email
+      }
+    }, 'Booking confirmed successfully');
+  } catch (error) {
+    // Rollback transaction
+    await transaction.rollback();
+    throw error;
+  }
+});
+
 module.exports = {
   getUserBookings,
   createBooking,
@@ -928,6 +1188,7 @@ module.exports = {
   cancelBooking,
   getPublicBookings,
   createPublicBooking,
+  confirmBookingRequest,
   rescheduleBooking,
   bulkCancelBookings
 };

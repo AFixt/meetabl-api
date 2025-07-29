@@ -10,6 +10,7 @@ const User = require('./user.model');
 const CalendarToken = require('./calendar-token.model');
 const AvailabilityRule = require('./availability-rule.model');
 const Booking = require('./booking.model');
+const BookingRequest = require('./bookingRequest.model');
 const Notification = require('./notification.model');
 const UserSettings = require('./user-settings.model');
 const AuditLog = require('./audit-log.model');
@@ -28,6 +29,7 @@ module.exports = {
   CalendarToken,
   AvailabilityRule,
   Booking,
+  BookingRequest,
   Notification,
   UserSettings,
   AuditLog,

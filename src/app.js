@@ -16,7 +16,7 @@ const cookieParser = require('cookie-parser');
 const logger = require('./config/logger');
 const { processNotifications } = require('./jobs/notification-processor');
 const { processDataRetention } = require('./jobs/data-retention-processor');
-const { initializeCsrf, protectCsrf, provideCsrfToken } = require('./middlewares/csrf');
+const { initializeCsrf, protectCsrf, protectCsrfConditional, provideCsrfToken } = require('./middlewares/csrf');
 const { initializeSession, sessionCleanup, sessionSecurity } = require('./config/session');
 const dbMonitor = require('./utils/db-monitor');
 const { errorHandler, notFoundError } = require('./utils/error-response');
@@ -332,7 +332,7 @@ const initializeApp = async () => {
     app.use('/api/users', protectCsrf, userRoutes);
     app.use('/api/account', protectCsrf, accountRoutes);
     app.use('/api/availability', protectCsrf, availabilityRoutes);
-    app.use('/api/bookings', protectCsrf, bookingRoutes);
+    app.use('/api/bookings', protectCsrfConditional, bookingRoutes);
     app.use('/api/calendar', protectCsrf, calendarRoutes);
     app.use('/api/notifications', protectCsrf, notificationRoutes);
     app.use('/api/analytics', protectCsrf, analyticsRoutes);

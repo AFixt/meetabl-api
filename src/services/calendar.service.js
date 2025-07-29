@@ -172,7 +172,7 @@ const refreshMicrosoftToken = async (token) => {
 const createCalendarEvent = async (booking) => {
   try {
     // Get user
-    const user = await User.findOne({ where: { id: booking.user_id } });
+    const user = await User.findOne({ where: { id: booking.userId } });
 
     if (!user || !user.calendar_provider || user.calendar_provider === 'none') {
       logger.info(`No calendar provider configured for user ${booking.user_id}`);
@@ -268,8 +268,119 @@ const createMicrosoftCalendarEvent = async (userId, eventDetails) => {
   }
 };
 
+/**
+ * Get busy times from Google Calendar
+ * @param {string} userId - User ID
+ * @param {Date} startTime - Start time for query
+ * @param {Date} endTime - End time for query
+ * @returns {Promise<Array>} Array of busy time intervals
+ */
+const getGoogleBusyTimes = async (userId, startTime, endTime) => {
+  try {
+    const auth = await getGoogleAuthClient(userId);
+    const calendar = google.calendar({ version: 'v3', auth });
+
+    // Get events for the date range
+    const response = await calendar.events.list({
+      calendarId: 'primary',
+      timeMin: formatISO(startTime),
+      timeMax: formatISO(endTime),
+      singleEvents: true,
+      orderBy: 'startTime'
+    });
+
+    // Convert events to busy time intervals
+    const busyTimes = response.data.items
+      .filter(event => event.start && event.end && event.status !== 'cancelled')
+      .map(event => ({
+        start: new Date(event.start.dateTime || event.start.date),
+        end: new Date(event.end.dateTime || event.end.date)
+      }));
+
+    return busyTimes;
+  } catch (error) {
+    logger.error(`Error getting Google busy times for user ${userId}:`, error);
+    throw error;
+  }
+};
+
+/**
+ * Get busy times from Microsoft Calendar
+ * @param {string} userId - User ID
+ * @param {Date} startTime - Start time for query
+ * @param {Date} endTime - End time for query
+ * @returns {Promise<Array>} Array of busy time intervals
+ */
+const getMicrosoftBusyTimes = async (userId, startTime, endTime) => {
+  try {
+    const client = await getMicrosoftGraphClient(userId);
+
+    // Get events for the date range
+    const response = await client
+      .api('/me/events')
+      .filter(`start/dateTime ge '${formatISO(startTime)}' and end/dateTime le '${formatISO(endTime)}'`)
+      .select('start,end,subject,isCancelled')
+      .get();
+
+    // Convert events to busy time intervals
+    const busyTimes = response.value
+      .filter(event => event.start && event.end && !event.isCancelled)
+      .map(event => ({
+        start: new Date(event.start.dateTime),
+        end: new Date(event.end.dateTime)
+      }));
+
+    return busyTimes;
+  } catch (error) {
+    logger.error(`Error getting Microsoft busy times for user ${userId}:`, error);
+    throw error;
+  }
+};
+
+/**
+ * Get all busy times from integrated calendars
+ * @param {string} userId - User ID
+ * @param {Date} startTime - Start time for query
+ * @param {Date} endTime - End time for query
+ * @returns {Promise<Array>} Array of busy time intervals from all calendars
+ */
+const getAllBusyTimes = async (userId, startTime, endTime) => {
+  try {
+    const allBusyTimes = [];
+
+    // Check which calendar providers are connected
+    const tokens = await CalendarToken.findAll({
+      where: { user_id: userId }
+    });
+
+    // Fetch busy times from each connected provider
+    for (const token of tokens) {
+      try {
+        if (token.provider === 'google') {
+          const googleBusyTimes = await getGoogleBusyTimes(userId, startTime, endTime);
+          allBusyTimes.push(...googleBusyTimes);
+        } else if (token.provider === 'microsoft') {
+          const microsoftBusyTimes = await getMicrosoftBusyTimes(userId, startTime, endTime);
+          allBusyTimes.push(...microsoftBusyTimes);
+        }
+      } catch (error) {
+        // Log error but don't fail the entire request if one calendar fails
+        logger.warn(`Error fetching ${token.provider} calendar for user ${userId}:`, error);
+      }
+    }
+
+    return allBusyTimes;
+  } catch (error) {
+    logger.error(`Error getting all busy times for user ${userId}:`, error);
+    throw error;
+  }
+};
+
 module.exports = {
   createCalendarEvent,
   getGoogleAuthClient,
-  getMicrosoftGraphClient
+  getMicrosoftGraphClient,
+  getGoogleBusyTimes,
+  getMicrosoftBusyTimes,
+  getAllBusyTimes
 };

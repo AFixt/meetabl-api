@@ -85,7 +85,7 @@ const UserSettings = sequelize.define('UserSettings', {
     }
   },
   googleAnalyticsId: {
-    type: DataTypes.STRING(20),
+    type: DataTypes.STRING(50),
     allowNull: true,
     field: 'google_analytics_id',
     validate: {
@@ -101,6 +101,26 @@ const UserSettings = sequelize.define('UserSettings', {
     type: DataTypes.STRING(255),
     allowNull: true,
     field: 'logo_alt_text'
+  },
+  meetingDuration: {
+    type: DataTypes.INTEGER,
+    allowNull: false,
+    defaultValue: 60,
+    field: 'meeting_duration',
+    validate: {
+      min: 15,
+      max: 240
+    }
+  },
+  bufferMinutes: {
+    type: DataTypes.INTEGER,
+    allowNull: false,
+    defaultValue: 0,
+    field: 'buffer_minutes',
+    validate: {
+      min: 0,
+      max: 60
+    }
   }
 }, {
   tableName: 'UserSettings',
