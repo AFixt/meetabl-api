@@ -407,7 +407,7 @@ const getPublicBookings = asyncHandler(async (req, res) => {
 
     // Get availability rules for this day of week
     const rules = await AvailabilityRule.findAll({
-      where: { userId: userId, day_of_week: dayOfWeek }
+      where: { userId: userId, dayOfWeek: dayOfWeek }
     });
 
     if (rules.length === 0) {
@@ -468,8 +468,8 @@ const getPublicBookings = asyncHandler(async (req, res) => {
     // Use forEach instead of for...of
     rules.forEach((rule) => {
       // Parse rule times
-      const ruleStartTime = parse(rule.start_time, 'HH:mm:ss', new Date());
-      const ruleEndTime = parse(rule.end_time, 'HH:mm:ss', new Date());
+      const ruleStartTime = parse(rule.startTime, 'HH:mm:ss', new Date());
+      const ruleEndTime = parse(rule.endTime, 'HH:mm:ss', new Date());
 
       // Create slots with specified duration
       let slotStart = set(targetDate, {
@@ -819,12 +819,12 @@ const rescheduleBooking = asyncHandler(async (req, res) => {
     }
 
     // Store old times for audit log
-    const oldStartTime = booking.start_time;
-    const oldEndTime = booking.end_time;
+    const oldStartTime = booking.startTime;
+    const oldEndTime = booking.endTime;
 
     // Update booking times
-    booking.start_time = startTime;
-    booking.end_time = endTime;
+    booking.startTime = startTime;
+    booking.endTime = endTime;
     await booking.save({ transaction });
 
     // Create reschedule notification

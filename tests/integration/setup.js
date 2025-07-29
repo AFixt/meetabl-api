@@ -95,8 +95,7 @@ const createTestUser = async (userData = {}) => {
       userId: user.id,
       dayOfWeek: day,
       startTime: '09:00',
-      endTime: '17:00',
-      isAvailable: true
+      endTime: '17:00'
     });
   }
 

@@ -26,32 +26,37 @@ const AvailabilityRule = sequelize.define('AvailabilityRule', {
       key: 'id'
     }
   },
-  day_of_week: {
+  dayOfWeek: {
     type: DataTypes.SMALLINT,
     allowNull: false,
+    field: 'day_of_week',
     validate: {
       min: 0,
       max: 6
     }
   },
-  start_time: {
+  startTime: {
     type: DataTypes.TIME,
-    allowNull: false
+    allowNull: false,
+    field: 'start_time'
   },
-  end_time: {
+  endTime: {
     type: DataTypes.TIME,
-    allowNull: false
+    allowNull: false,
+    field: 'end_time'
   },
-  buffer_minutes: {
+  bufferMinutes: {
     type: DataTypes.SMALLINT,
     defaultValue: 0,
+    field: 'buffer_minutes',
     validate: {
       min: 0
     }
   },
-  max_bookings_per_day: {
+  maxBookingsPerDay: {
     type: DataTypes.SMALLINT,
     allowNull: true,
+    field: 'max_bookings_per_day',
     validate: {
       min: 1
     }

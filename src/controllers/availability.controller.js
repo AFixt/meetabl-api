@@ -114,11 +114,11 @@ const createAvailabilityRule = async (req, res) => {
     const rule = await AvailabilityRule.create({
       id: uuidv4(),
       userId: userId,
-      day_of_week: ruleData.dayOfWeek,
-      start_time: ruleData.startTime,
-      end_time: ruleData.endTime,
-      buffer_minutes: ruleData.bufferMinutes || 0,
-      max_bookings_per_day: ruleData.maxBookingsPerDay || null
+      dayOfWeek: ruleData.dayOfWeek,
+      startTime: ruleData.startTime,
+      endTime: ruleData.endTime,
+      bufferMinutes: ruleData.bufferMinutes || 0,
+      maxBookingsPerDay: ruleData.maxBookingsPerDay || null
     });
 
     // Create audit log
@@ -259,11 +259,11 @@ const updateAvailabilityRule = async (req, res) => {
     }
 
     // Update fields
-    if (ruleData.dayOfWeek !== undefined) rule.day_of_week = ruleData.dayOfWeek;
-    if (ruleData.startTime !== undefined) rule.start_time = ruleData.startTime;
-    if (ruleData.endTime !== undefined) rule.end_time = ruleData.endTime;
-    if (ruleData.bufferMinutes !== undefined) rule.buffer_minutes = ruleData.bufferMinutes;
-    if (ruleData.maxBookingsPerDay !== undefined) rule.max_bookings_per_day = ruleData.maxBookingsPerDay;
+    if (ruleData.dayOfWeek !== undefined) rule.dayOfWeek = ruleData.dayOfWeek;
+    if (ruleData.startTime !== undefined) rule.startTime = ruleData.startTime;
+    if (ruleData.endTime !== undefined) rule.endTime = ruleData.endTime;
+    if (ruleData.bufferMinutes !== undefined) rule.bufferMinutes = ruleData.bufferMinutes;
+    if (ruleData.maxBookingsPerDay !== undefined) rule.maxBookingsPerDay = ruleData.maxBookingsPerDay;
 
     await rule.save();
 
@@ -403,7 +403,7 @@ const getAvailableTimeSlots = async (req, res) => {
 
     // Get availability rules for this day of week
     const rules = await AvailabilityRule.findAll({
-      where: { userId: userId, day_of_week: dayOfWeek }
+      where: { userId: userId, dayOfWeek: dayOfWeek }
     });
 
     if (rules.length === 0) {
@@ -429,8 +429,8 @@ const getAvailableTimeSlots = async (req, res) => {
     // Use forEach instead of for...of
     rules.forEach((rule) => {
       // Parse rule times
-      const startTime = parse(rule.start_time, 'HH:mm:ss', new Date());
-      const endTime = parse(rule.end_time, 'HH:mm:ss', new Date());
+      const startTime = parse(rule.startTime, 'HH:mm:ss', new Date());
+      const endTime = parse(rule.endTime, 'HH:mm:ss', new Date());
 
       // Create slots with specified duration
       let slotStart = setSeconds(setMinutes(setHours(targetDate, startTime.getHours()), startTime.getMinutes()), 0);
@@ -453,8 +453,8 @@ const getAvailableTimeSlots = async (req, res) => {
           const normalOverlap = isBefore(slotStartDate, bookingEnd)
             && isAfter(slotEndDate, bookingStart);
 
-          const bufferOverlap = isBefore(addMinutes(slotStartDate, rule.buffer_minutes), bookingEnd)
-            && isAfter(addMinutes(slotEndDate, -rule.buffer_minutes), bookingStart);
+          const bufferOverlap = isBefore(addMinutes(slotStartDate, rule.bufferMinutes), bookingEnd)
+            && isAfter(addMinutes(slotEndDate, -rule.bufferMinutes), bookingStart);
 
           return normalOverlap || bufferOverlap;
         });
