@@ -1,0 +1,699 @@
+name: Pull Request Tests
+
+on:
+  pull_request:
+    branches: [ main, develop ]
+    types: [opened, synchronize, reopened, ready_for_review]
+  pull_request_review:
+    types: [submitted]
+
+env:
+  NODE_VERSION: '22'
+  MYSQL_VERSION: '8.0'
+
+# Cancel previous runs when a new commit is pushed
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # Quick validation checks
+  quick-validation:
+    name: Quick Validation
+    runs-on: ubuntu-latest
+    if: github.event.pull_request.draft == false
+    outputs:
+      has-test-changes: ${{ steps.changes.outputs.tests }}
+      has-source-changes: ${{ steps.changes.outputs.src }}
+      has-config-changes: ${{ steps.changes.outputs.config }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Detect changes
+        uses: dorny/paths-filter@v3
+        id: changes
+        with:
+          filters: |
+            tests:
+              - 'tests/**'
+              - '**/*.test.js'
+              - '**/*.spec.js'
+            src:
+              - 'src/**'
+            config:
+              - 'package.json'
+              - 'package-lock.json'
+              - 'jest.config.js'
+              - '.env*'
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run JavaScript linting
+        run: npm run lint:js -- --max-warnings 0
+
+      - name: Run Markdown linting
+        run: npm run lint:md
+
+  # Security check for PRs
+  security-check:
+    name: Security Check
+    runs-on: ubuntu-latest
+    if: github.event.pull_request.draft == false
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Audit dependencies
+        run: npm audit --audit-level moderate
+
+      - name: Check for security issues
+        run: npm run security:check
+        continue-on-error: true
+
+  # Unit tests for PR changes
+  unit-tests:
+    name: Unit Tests
+    runs-on: ubuntu-latest
+    needs: quick-validation
+    if: github.event.pull_request.draft == false
+    strategy:
+      matrix:
+        test-suite: ['models', 'controllers', 'services', 'middlewares']
+    services:
+      mysql:
+        image: mysql:${{ env.MYSQL_VERSION }}
+        env:
+          MYSQL_ROOT_PASSWORD: test_password
+          MYSQL_DATABASE: meetabl_test
+          MYSQL_USER: meetabl_test
+          MYSQL_PASSWORD: meetabl_test
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=3
+
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Wait for services
+        run: |
+          for i in {1..30}; do
+            if mysqladmin ping -h 127.0.0.1 -P 3306 -u root -ptest_password && redis-cli -h 127.0.0.1 ping; then
+              echo "Services are ready"
+              break
+            fi
+            echo "Waiting for services... ($i/30)"
+            sleep 2
+          done
+
+      - name: Run database migrations
+        run: npm run db:migrate:test
+        env:
+          NODE_ENV: test
+          DB_HOST: localhost
+          DB_PORT: 3306
+          DB_NAME: meetabl_test
+          DB_USER: meetabl_test
+          DB_PASSWORD: meetabl_test
+          REDIS_URL: redis://localhost:6379
+
+      - name: Run unit tests for ${{ matrix.test-suite }}
+        run: npm run test:${{ matrix.test-suite }}
+        env:
+          NODE_ENV: test
+          DB_HOST: localhost
+          DB_PORT: 3306
+          DB_NAME: meetabl_test
+          DB_USER: meetabl_test
+          DB_PASSWORD: meetabl_test
+          REDIS_URL: redis://localhost:6379
+          JWT_SECRET: test_jwt_secret
+          ENCRYPTION_KEY: test_encryption_key_32_chars_long
+
+      - name: Upload test results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: pr-unit-test-${{ matrix.test-suite }}
+          path: test-results/
+          retention-days: 7
+
+  # Critical integration tests for PRs
+  critical-integration:
+    name: Critical Integration Tests
+    runs-on: ubuntu-latest
+    needs: [unit-tests]
+    if: github.event.pull_request.draft == false
+    strategy:
+      matrix:
+        test-suite: [auth, booking-critical, user-critical]
+    services:
+      mysql:
+        image: mysql:${{ env.MYSQL_VERSION }}
+        env:
+          MYSQL_ROOT_PASSWORD: test_password
+          MYSQL_DATABASE: meetabl_test
+          MYSQL_USER: meetabl_test
+          MYSQL_PASSWORD: meetabl_test
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=3
+
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Wait for services
+        run: |
+          for i in {1..30}; do
+            if mysqladmin ping -h 127.0.0.1 -P 3306 -u root -ptest_password && redis-cli -h 127.0.0.1 ping; then
+              echo "Services are ready"
+              break
+            fi
+            echo "Waiting for services... ($i/30)"
+            sleep 2
+          done
+
+      - name: Run database migrations
+        run: npm run db:migrate:test
+        env:
+          NODE_ENV: test
+          DB_HOST: localhost
+          DB_PORT: 3306
+          DB_NAME: meetabl_test
+          DB_USER: meetabl_test
+          DB_PASSWORD: meetabl_test
+          REDIS_URL: redis://localhost:6379
+
+      - name: Run database seeds
+        run: npm run db:seed
+        env:
+          NODE_ENV: test
+          DB_HOST: localhost
+          DB_PORT: 3306
+          DB_NAME: meetabl_test
+          DB_USER: meetabl_test
+          DB_PASSWORD: meetabl_test
+          REDIS_URL: redis://localhost:6379
+
+      - name: Run critical integration tests
+        run: |
+          case "${{ matrix.test-suite }}" in
+            "auth")
+              npx jest "tests/integration/auth.routes.integration.test.js" --forceExit
+              ;;
+            "booking-critical")
+              npx jest "tests/integration/booking.routes.integration.test.js" --forceExit
+              ;;
+            "user-critical")
+              npx jest "tests/integration/user.routes.integration.test.js" --forceExit
+              ;;
+          esac
+        env:
+          NODE_ENV: test
+          DB_HOST: localhost
+          DB_PORT: 3306
+          DB_NAME: meetabl_test
+          DB_USER: meetabl_test
+          DB_PASSWORD: meetabl_test
+          REDIS_URL: redis://localhost:6379
+          JWT_SECRET: test_jwt_secret
+          ENCRYPTION_KEY: test_encryption_key_32_chars_long
+          STRIPE_SECRET_KEY: sk_test_fake_key_for_testing
+          TWILIO_ACCOUNT_SID: test_twilio_sid
+          TWILIO_AUTH_TOKEN: test_twilio_token
+
+      - name: Upload integration test results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: pr-integration-${{ matrix.test-suite }}
+          path: test-results/
+          retention-days: 7
+
+  # Coverage check for source changes
+  coverage-check:
+    name: Coverage Check
+    runs-on: ubuntu-latest
+    needs: [unit-tests, critical-integration]
+    if: github.event.pull_request.draft == false && needs.quick-validation.outputs.has-source-changes == 'true'
+    services:
+      mysql:
+        image: mysql:${{ env.MYSQL_VERSION }}
+        env:
+          MYSQL_ROOT_PASSWORD: test_password
+          MYSQL_DATABASE: meetabl_test
+          MYSQL_USER: meetabl_test
+          MYSQL_PASSWORD: meetabl_test
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=3
+
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Wait for services
+        run: |
+          for i in {1..30}; do
+            if mysqladmin ping -h 127.0.0.1 -P 3306 -u root -ptest_password && redis-cli -h 127.0.0.1 ping; then
+              echo "Services are ready"
+              break
+            fi
+            echo "Waiting for services... ($i/30)"
+            sleep 2
+          done
+
+      - name: Run database migrations
+        run: npm run db:migrate:test
+        env:
+          NODE_ENV: test
+          DB_HOST: localhost
+          DB_PORT: 3306
+          DB_NAME: meetabl_test
+          DB_USER: meetabl_test
+          DB_PASSWORD: meetabl_test
+          REDIS_URL: redis://localhost:6379
+
+      - name: Run tests with coverage
+        run: npm run test:coverage
+        env:
+          NODE_ENV: test
+          DB_HOST: localhost
+          DB_PORT: 3306
+          DB_NAME: meetabl_test
+          DB_USER: meetabl_test
+          DB_PASSWORD: meetabl_test
+          REDIS_URL: redis://localhost:6379
+          JWT_SECRET: test_jwt_secret
+          ENCRYPTION_KEY: test_encryption_key_32_chars_long
+          STRIPE_SECRET_KEY: sk_test_fake_key_for_testing
+          TWILIO_ACCOUNT_SID: test_twilio_sid
+          TWILIO_AUTH_TOKEN: test_twilio_token
+
+      - name: Comment coverage on PR
+        uses: romeovs/lcov-reporter-action@v0.3.1
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          lcov-file: ./coverage/lcov.info
+          delete-old-comments: true
+
+      - name: Upload coverage results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: pr-coverage-results
+          path: coverage/
+          retention-days: 7
+
+  # Build check
+  build-check:
+    name: Build Check
+    runs-on: ubuntu-latest
+    needs: quick-validation
+    if: github.event.pull_request.draft == false
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci --only=production
+
+      - name: Create build package
+        run: |
+          mkdir -p build-pr
+          cp -r src/ build-pr/
+          cp package.json package-lock.json build-pr/
+          
+          # Create deployment package
+          cd build-pr
+          tar -czf ../meetabl-api-pr.tar.gz .
+          cd ..
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: pr-build
+          path: meetabl-api-pr.tar.gz
+          retention-days: 3
+
+  # API endpoint validation
+  api-validation:
+    name: API Endpoint Validation
+    runs-on: ubuntu-latest
+    needs: [build-check]
+    if: github.event.pull_request.draft == false
+    services:
+      mysql:
+        image: mysql:${{ env.MYSQL_VERSION }}
+        env:
+          MYSQL_ROOT_PASSWORD: test_password
+          MYSQL_DATABASE: meetabl_test
+          MYSQL_USER: meetabl_test
+          MYSQL_PASSWORD: meetabl_test
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=3
+
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Wait for services
+        run: |
+          for i in {1..30}; do
+            if mysqladmin ping -h 127.0.0.1 -P 3306 -u root -ptest_password && redis-cli -h 127.0.0.1 ping; then
+              echo "Services are ready"
+              break
+            fi
+            echo "Waiting for services... ($i/30)"
+            sleep 2
+          done
+
+      - name: Run database migrations
+        run: npm run db:migrate:test
+        env:
+          NODE_ENV: test
+          DB_HOST: localhost
+          DB_PORT: 3306
+          DB_NAME: meetabl_test
+          DB_USER: meetabl_test
+          DB_PASSWORD: meetabl_test
+          REDIS_URL: redis://localhost:6379
+
+      - name: Start API server
+        run: |
+          npm start &
+          sleep 10
+        env:
+          NODE_ENV: test
+          PORT: 3001
+          DB_HOST: localhost
+          DB_PORT: 3306
+          DB_NAME: meetabl_test
+          DB_USER: meetabl_test
+          DB_PASSWORD: meetabl_test
+          REDIS_URL: redis://localhost:6379
+          JWT_SECRET: test_jwt_secret
+          ENCRYPTION_KEY: test_encryption_key_32_chars_long
+
+      - name: Test API health endpoints
+        run: |
+          curl -f http://localhost:3001/api/health || exit 1
+          curl -f http://localhost:3001/api/status || exit 1
+
+      - name: Run API smoke tests
+        run: |
+          # Test basic auth endpoints
+          curl -X POST http://localhost:3001/api/auth/register \
+            -H "Content-Type: application/json" \
+            -d '{"email":"test@example.com","password":"TestPass123!","firstName":"Test","lastName":"User"}'
+        continue-on-error: true
+
+  # Test changes validation
+  test-validation:
+    name: Test Changes Validation
+    runs-on: ubuntu-latest
+    needs: quick-validation
+    if: github.event.pull_request.draft == false && needs.quick-validation.outputs.has-test-changes == 'true'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Validate new tests
+        run: |
+          # Run only the new/modified tests
+          npm run test:unit
+          
+          # Check if tests are properly structured
+          npx jest --listTests
+
+      - name: Check test coverage impact
+        run: npm run test:coverage
+        continue-on-error: true
+
+  # PR summary and status check
+  pr-summary:
+    name: PR Summary
+    runs-on: ubuntu-latest
+    needs: [
+      quick-validation,
+      security-check,
+      unit-tests,
+      critical-integration,
+      coverage-check,
+      build-check,
+      api-validation,
+      test-validation
+    ]
+    if: always() && github.event.pull_request.draft == false
+    steps:
+      - name: Generate PR summary
+        run: |
+          echo "## API PR Test Summary" > pr-summary.md
+          echo "" >> pr-summary.md
+          echo "### Test Results:" >> pr-summary.md
+          echo "" >> pr-summary.md
+          
+          # Check each job status
+          if [ "${{ needs.quick-validation.result }}" = "success" ]; then
+            echo "✅ Quick Validation: Passed" >> pr-summary.md
+          else
+            echo "❌ Quick Validation: Failed" >> pr-summary.md
+          fi
+          
+          if [ "${{ needs.security-check.result }}" = "success" ]; then
+            echo "✅ Security Check: Passed" >> pr-summary.md
+          else
+            echo "❌ Security Check: Failed" >> pr-summary.md
+          fi
+          
+          if [ "${{ needs.unit-tests.result }}" = "success" ]; then
+            echo "✅ Unit Tests: Passed" >> pr-summary.md
+          else
+            echo "❌ Unit Tests: Failed" >> pr-summary.md
+          fi
+          
+          if [ "${{ needs.critical-integration.result }}" = "success" ]; then
+            echo "✅ Critical Integration Tests: Passed" >> pr-summary.md
+          else
+            echo "❌ Critical Integration Tests: Failed" >> pr-summary.md
+          fi
+          
+          if [ "${{ needs.build-check.result }}" = "success" ]; then
+            echo "✅ Build Check: Passed" >> pr-summary.md
+          else
+            echo "❌ Build Check: Failed" >> pr-summary.md
+          fi
+          
+          if [ "${{ needs.api-validation.result }}" = "success" ]; then
+            echo "✅ API Validation: Passed" >> pr-summary.md
+          else
+            echo "❌ API Validation: Failed" >> pr-summary.md
+          fi
+          
+          # Conditional checks
+          if [ "${{ needs.coverage-check.result }}" != "skipped" ]; then
+            if [ "${{ needs.coverage-check.result }}" = "success" ]; then
+              echo "✅ Coverage Check: Passed" >> pr-summary.md
+            else
+              echo "❌ Coverage Check: Failed" >> pr-summary.md
+            fi
+          else
+            echo "⏭️ Coverage Check: Skipped (no source changes)" >> pr-summary.md
+          fi
+          
+          echo "" >> pr-summary.md
+          echo "### Change Detection:" >> pr-summary.md
+          echo "- Source Changes: ${{ needs.quick-validation.outputs.has-source-changes }}" >> pr-summary.md
+          echo "- Test Changes: ${{ needs.quick-validation.outputs.has-test-changes }}" >> pr-summary.md
+          echo "- Config Changes: ${{ needs.quick-validation.outputs.has-config-changes }}" >> pr-summary.md
+          echo "" >> pr-summary.md
+          echo "### Recommendations:" >> pr-summary.md
+          
+          # Generate recommendations based on results
+          if [ "${{ needs.unit-tests.result }}" = "failure" ]; then
+            echo "- ⚠️ Unit tests failed. Please fix failing tests before merging." >> pr-summary.md
+          fi
+          
+          if [ "${{ needs.critical-integration.result }}" = "failure" ]; then
+            echo "- ⚠️ Integration tests failed. Please check API functionality." >> pr-summary.md
+          fi
+          
+          if [ "${{ needs.coverage-check.result }}" = "failure" ]; then
+            echo "- ⚠️ Coverage check failed. Please ensure adequate test coverage." >> pr-summary.md
+          fi
+          
+          if [ "${{ needs.security-check.result }}" = "failure" ]; then
+            echo "- ⚠️ Security check failed. Please address security vulnerabilities." >> pr-summary.md
+          fi
+
+      - name: Comment PR summary
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const summary = fs.readFileSync('pr-summary.md', 'utf8');
+            
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: summary
+            });
+
+  # Auto-merge check for dependabot PRs
+  auto-merge-check:
+    name: Auto-merge Check
+    runs-on: ubuntu-latest
+    needs: [pr-summary]
+    if: |
+      github.actor == 'dependabot[bot]' &&
+      needs.quick-validation.result == 'success' &&
+      needs.security-check.result == 'success' &&
+      needs.unit-tests.result == 'success' &&
+      needs.critical-integration.result == 'success' &&
+      needs.build-check.result == 'success'
+    steps:
+      - name: Enable auto-merge for dependabot PRs
+        run: |
+          echo "All checks passed for dependabot PR. Ready for auto-merge."
+          # Auto-merge logic can be added here if needed
+
+      - name: Approve dependabot PR
+        uses: actions/github-script@v7
+        with:
+          script: |
+            github.rest.pulls.createReview({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: context.issue.number,
+              event: 'APPROVE',
+              body: 'Auto-approved: All automated tests passed for dependency update.'
+            });
