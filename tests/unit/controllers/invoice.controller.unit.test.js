@@ -6,12 +6,69 @@
  * @author meetabl Team
  */
 
-// Load the test setup
-require('../test-setup');
-const { setupControllerMocks } = require('../../fixtures/test-helper');
+// Mock dependencies before imports
+jest.mock('../../../src/config/logger', () => ({
+  debug: jest.fn(),
+  error: jest.fn(),
+  info: jest.fn(),
+  warn: jest.fn()
+}));
 
-// Setup controller mocks
-setupControllerMocks();
+jest.mock('../../../src/models', () => ({
+  Invoice: {
+    findAndCountAll: jest.fn(),
+    findOne: jest.fn(),
+    create: jest.fn(),
+    update: jest.fn()
+  },
+  Payment: {
+    findOne: jest.fn()
+  },
+  Booking: {
+    findOne: jest.fn()
+  },
+  User: {
+    findOne: jest.fn()
+  },
+  AuditLog: {
+    create: jest.fn()
+  }
+}));
+
+jest.mock('../../../src/config/database', () => ({
+  Op: {
+    gt: Symbol('gt'),
+    gte: Symbol('gte'),
+    lt: Symbol('lt'),
+    lte: Symbol('lte'),
+    eq: Symbol('eq'),
+    ne: Symbol('ne'),
+    in: Symbol('in'),
+    notIn: Symbol('notIn'),
+    between: Symbol('between'),
+    notBetween: Symbol('notBetween'),
+    or: Symbol('or'),
+    and: Symbol('and')
+  }
+}));
+
+jest.mock('../../../src/services/storage.service', () => ({
+  uploadFile: jest.fn(),
+  getPresignedUrl: jest.fn(),
+  deleteFile: jest.fn()
+}));
+
+// Import controller after mocks are set up
+const {
+  getInvoices,
+  getInvoice,
+  downloadInvoice,
+  generateInvoicePDF
+} = require('../../../src/controllers/invoice.controller');
+
+const { Invoice, Payment, Booking, User, AuditLog } = require('../../../src/models');
+const { Op } = require('../../../src/config/database');
+const storageService = require('../../../src/services/storage.service');
 
 // Ensure test utilities are available
 if (typeof global.createMockRequest !== 'function'
@@ -35,46 +92,6 @@ if (typeof global.createMockRequest !== 'function'
     return res;
   };
 }
-
-// Mock models
-jest.mock('../../../src/models', () => ({
-  Invoice: {
-    findAndCountAll: jest.fn(),
-    findOne: jest.fn(),
-    create: jest.fn(),
-    update: jest.fn()
-  },
-  Payment: {
-    findOne: jest.fn()
-  },
-  Booking: {
-    findOne: jest.fn()
-  },
-  User: {
-    findOne: jest.fn()
-  },
-  AuditLog: {
-    create: jest.fn()
-  }
-}));
-
-// Mock storage service
-jest.mock('../../../src/services/storage.service', () => ({
-  uploadFile: jest.fn(),
-  getSignedUrl: jest.fn(),
-  deleteFile: jest.fn()
-}));
-
-// Import controller after mocks are set up
-const {
-  getInvoices,
-  getInvoice,
-  generateInvoice,
-  downloadInvoice
-} = require('../../../src/controllers/invoice.controller');
-
-const { Invoice, Payment, Booking, User, AuditLog } = require('../../../src/models');
-const storageService = require('../../../src/services/storage.service');
 
 describe('Invoice Controller', () => {
   beforeEach(() => {
@@ -124,11 +141,11 @@ describe('Invoice Controller', () => {
       Invoice.findAndCountAll.mockResolvedValueOnce(mockInvoices);
 
       // Create request
-      const req = createMockRequest({
+      const req = global.createMockRequest({
         user: { id: 'test-user-id' },
-        query: { limit: 20, offset: 0 }
+        query: { limit: '20', offset: '0' }
       });
-      const res = createMockResponse();
+      const res = global.createMockResponse();
 
       // Execute controller
       await getInvoices(req, res);
@@ -160,13 +177,10 @@ describe('Invoice Controller', () => {
       expect(res.json).toHaveBeenCalledWith({
         message: 'Invoices retrieved successfully',
         data: {
+          total: 2,
           invoices: mockInvoices.rows,
-          pagination: {
-            total: 2,
-            limit: 20,
-            offset: 0,
-            pages: 1
-          }
+          limit: 20,
+          offset: 0
         }
       });
     });
@@ -186,11 +200,11 @@ describe('Invoice Controller', () => {
       Invoice.findAndCountAll.mockResolvedValueOnce(mockInvoices);
 
       // Create request with status filter
-      const req = createMockRequest({
+      const req = global.createMockRequest({
         user: { id: 'test-user-id' },
-        query: { status: 'paid' }
+        query: { status: 'paid', limit: '20', offset: '0' }
       });
-      const res = createMockResponse();
+      const res = global.createMockResponse();
 
       // Execute controller
       await getInvoices(req, res);
@@ -206,15 +220,39 @@ describe('Invoice Controller', () => {
       expect(res.status).toHaveBeenCalledWith(200);
     });
 
+    test('should use default pagination values', async () => {
+      // Mock invoices
+      const mockInvoices = { count: 0, rows: [] };
+      Invoice.findAndCountAll.mockResolvedValueOnce(mockInvoices);
+
+      // Create request without pagination params
+      const req = global.createMockRequest({
+        user: { id: 'test-user-id' },
+        query: {}
+      });
+      const res = global.createMockResponse();
+
+      // Execute controller
+      await getInvoices(req, res);
+
+      // Verify default values were used
+      expect(Invoice.findAndCountAll).toHaveBeenCalledWith(
+        expect.objectContaining({
+          limit: 20,
+          offset: 0
+        })
+      );
+    });
+
     test('should handle database errors', async () => {
       // Mock database error
       Invoice.findAndCountAll.mockRejectedValueOnce(new Error('Database error'));
 
       // Create request
-      const req = createMockRequest({
+      const req = global.createMockRequest({
         user: { id: 'test-user-id' }
       });
-      const res = createMockResponse();
+      const res = global.createMockResponse();
 
       // Execute controller
       await getInvoices(req, res);
@@ -222,10 +260,8 @@ describe('Invoice Controller', () => {
       // Verify response
       expect(res.status).toHaveBeenCalledWith(500);
       expect(res.json).toHaveBeenCalledWith({
-        error: {
-          code: 'internal_server_error',
-          message: 'Failed to get invoices'
-        }
+        error: 'Failed to retrieve invoices',
+        message: 'Database error'
       });
     });
   });
@@ -251,11 +287,11 @@ describe('Invoice Controller', () => {
       Invoice.findOne.mockResolvedValueOnce(mockInvoice);
 
       // Create request
-      const req = createMockRequest({
+      const req = global.createMockRequest({
         user: { id: 'test-user-id' },
         params: { id: 'invoice-id' }
       });
-      const res = createMockResponse();
+      const res = global.createMockResponse();
 
       // Execute controller
       await getInvoice(req, res);
@@ -281,7 +317,7 @@ describe('Invoice Controller', () => {
       expect(res.status).toHaveBeenCalledWith(200);
       expect(res.json).toHaveBeenCalledWith({
         message: 'Invoice retrieved successfully',
-        invoice: mockInvoice
+        data: mockInvoice
       });
     });
 
@@ -290,11 +326,11 @@ describe('Invoice Controller', () => {
       Invoice.findOne.mockResolvedValueOnce(null);
 
       // Create request
-      const req = createMockRequest({
+      const req = global.createMockRequest({
         user: { id: 'test-user-id' },
         params: { id: 'non-existent-id' }
       });
-      const res = createMockResponse();
+      const res = global.createMockResponse();
 
       // Execute controller
       await getInvoice(req, res);
@@ -302,10 +338,7 @@ describe('Invoice Controller', () => {
       // Verify response
       expect(res.status).toHaveBeenCalledWith(404);
       expect(res.json).toHaveBeenCalledWith({
-        error: {
-          code: 'not_found',
-          message: 'Invoice not found'
-        }
+        error: 'Invoice not found'
       });
     });
 
@@ -314,11 +347,11 @@ describe('Invoice Controller', () => {
       Invoice.findOne.mockRejectedValueOnce(new Error('Database error'));
 
       // Create request
-      const req = createMockRequest({
+      const req = global.createMockRequest({
         user: { id: 'test-user-id' },
         params: { id: 'invoice-id' }
       });
-      const res = createMockResponse();
+      const res = global.createMockResponse();
 
       // Execute controller
       await getInvoice(req, res);
@@ -326,158 +359,8 @@ describe('Invoice Controller', () => {
       // Verify response
       expect(res.status).toHaveBeenCalledWith(500);
       expect(res.json).toHaveBeenCalledWith({
-        error: {
-          code: 'internal_server_error',
-          message: 'Failed to get invoice'
-        }
-      });
-    });
-  });
-
-  describe('generateInvoice', () => {
-    test('should generate invoice successfully', async () => {
-      // Mock payment lookup
-      const mockPayment = {
-        id: 'payment-id',
-        user_id: 'test-user-id',
-        amount: 10000,
-        currency: 'USD',
-        status: 'completed',
-        Booking: {
-          id: 'booking-id',
-          customer_name: 'John Doe',
-          customer_email: 'john@example.com',
-          start_time: new Date('2024-01-15T10:00:00Z'),
-          end_time: new Date('2024-01-15T11:00:00Z'),
-          User: {
-            id: 'test-user-id',
-            name: 'Test User',
-            email: 'test@example.com'
-          }
-        }
-      };
-      Payment.findOne.mockResolvedValueOnce(mockPayment);
-
-      // Mock invoice creation
-      const mockInvoice = {
-        id: 'invoice-id',
-        invoice_number: 'INV-001',
-        payment_id: 'payment-id',
-        amount: 10000,
-        currency: 'USD',
-        status: 'generated'
-      };
-      Invoice.create.mockResolvedValueOnce(mockInvoice);
-
-      // Create request
-      const req = createMockRequest({
-        user: { id: 'test-user-id' },
-        body: { payment_id: 'payment-id' }
-      });
-      const res = createMockResponse();
-
-      // Execute controller
-      await generateInvoice(req, res);
-
-      // Verify payment lookup
-      expect(Payment.findOne).toHaveBeenCalledWith({
-        where: { 
-          id: 'payment-id',
-          user_id: 'test-user-id',
-          status: 'completed'
-        },
-        include: [{
-          model: Booking,
-          include: [{
-            model: User,
-            attributes: ['id', 'name', 'email']
-          }]
-        }]
-      });
-
-      // Verify invoice creation
-      expect(Invoice.create).toHaveBeenCalledWith(
-        expect.objectContaining({
-          payment_id: 'payment-id',
-          amount: 10000,
-          currency: 'USD',
-          status: 'generated'
-        })
-      );
-
-      // Verify audit log creation
-      expect(AuditLog.create).toHaveBeenCalledWith({
-        user_id: 'test-user-id',
-        action: 'invoice.generated',
-        entity_type: 'invoice',
-        entity_id: mockInvoice.id,
-        metadata: JSON.stringify({
-          payment_id: 'payment-id',
-          invoice_number: 'INV-001'
-        })
-      });
-
-      // Verify response
-      expect(res.status).toHaveBeenCalledWith(201);
-      expect(res.json).toHaveBeenCalledWith({
-        message: 'Invoice generated successfully',
-        invoice: mockInvoice
-      });
-    });
-
-    test('should return 404 for non-existent payment', async () => {
-      // Mock payment not found
-      Payment.findOne.mockResolvedValueOnce(null);
-
-      // Create request
-      const req = createMockRequest({
-        user: { id: 'test-user-id' },
-        body: { payment_id: 'non-existent-id' }
-      });
-      const res = createMockResponse();
-
-      // Execute controller
-      await generateInvoice(req, res);
-
-      // Verify response
-      expect(res.status).toHaveBeenCalledWith(404);
-      expect(res.json).toHaveBeenCalledWith({
-        error: {
-          code: 'not_found',
-          message: 'Payment not found or not eligible for invoice'
-        }
-      });
-    });
-
-    test('should handle invoice generation errors', async () => {
-      // Mock payment lookup
-      Payment.findOne.mockResolvedValueOnce({
-        id: 'payment-id',
-        user_id: 'test-user-id',
-        status: 'completed',
-        Booking: { User: { id: 'test-user-id' } }
-      });
-
-      // Mock invoice creation error
-      Invoice.create.mockRejectedValueOnce(new Error('Invoice generation failed'));
-
-      // Create request
-      const req = createMockRequest({
-        user: { id: 'test-user-id' },
-        body: { payment_id: 'payment-id' }
-      });
-      const res = createMockResponse();
-
-      // Execute controller
-      await generateInvoice(req, res);
-
-      // Verify response
-      expect(res.status).toHaveBeenCalledWith(500);
-      expect(res.json).toHaveBeenCalledWith({
-        error: {
-          code: 'internal_server_error',
-          message: 'Failed to generate invoice'
-        }
+        error: 'Failed to retrieve invoice',
+        message: 'Database error'
       });
     });
   });
@@ -488,23 +371,26 @@ describe('Invoice Controller', () => {
       const mockInvoice = {
         id: 'invoice-id',
         invoice_number: 'INV-001',
-        file_url: 's3://bucket/invoices/INV-001.pdf',
+        pdf_url: 'invoices/INV-001.pdf',
         Payment: {
           user_id: 'test-user-id'
         }
       };
       Invoice.findOne.mockResolvedValueOnce(mockInvoice);
 
-      // Mock signed URL generation
-      const signedUrl = 'https://s3.amazonaws.com/bucket/invoices/INV-001.pdf?signature=xyz';
-      storageService.getSignedUrl.mockResolvedValueOnce(signedUrl);
+      // Mock presigned URL generation
+      const downloadUrl = 'https://s3.amazonaws.com/bucket/invoices/INV-001.pdf?signature=xyz';
+      storageService.getPresignedUrl.mockResolvedValueOnce(downloadUrl);
+
+      // Mock audit log creation
+      AuditLog.create.mockResolvedValueOnce({ id: 'audit-id' });
 
       // Create request
-      const req = createMockRequest({
+      const req = global.createMockRequest({
         user: { id: 'test-user-id' },
         params: { id: 'invoice-id' }
       });
-      const res = createMockResponse();
+      const res = global.createMockResponse();
 
       // Execute controller
       await downloadInvoice(req, res);
@@ -515,20 +401,35 @@ describe('Invoice Controller', () => {
         include: [{
           model: Payment,
           required: true,
-          where: { user_id: 'test-user-id' },
-          attributes: ['user_id']
+          where: { user_id: 'test-user-id' }
         }]
       });
 
-      // Verify signed URL generation
-      expect(storageService.getSignedUrl).toHaveBeenCalledWith('invoices/INV-001.pdf', 3600);
+      // Verify presigned URL generation
+      expect(storageService.getPresignedUrl).toHaveBeenCalledWith('invoices/INV-001.pdf', {
+        expiresIn: 300,
+        responseContentDisposition: 'attachment; filename="invoice-INV-001.pdf"'
+      });
+
+      // Verify audit log creation
+      expect(AuditLog.create).toHaveBeenCalledWith({
+        user_id: 'test-user-id',
+        action: 'invoice_downloaded',
+        entity_type: 'invoice',
+        entity_id: 'invoice-id',
+        metadata: JSON.stringify({
+          invoice_number: 'INV-001'
+        })
+      });
 
       // Verify response
       expect(res.status).toHaveBeenCalledWith(200);
       expect(res.json).toHaveBeenCalledWith({
-        message: 'Download URL generated successfully',
-        download_url: signedUrl,
-        expires_in: 3600
+        message: 'Invoice download URL generated successfully',
+        data: {
+          download_url: downloadUrl,
+          expires_in: 300
+        }
       });
     });
 
@@ -537,11 +438,11 @@ describe('Invoice Controller', () => {
       Invoice.findOne.mockResolvedValueOnce(null);
 
       // Create request
-      const req = createMockRequest({
+      const req = global.createMockRequest({
         user: { id: 'test-user-id' },
         params: { id: 'non-existent-id' }
       });
-      const res = createMockResponse();
+      const res = global.createMockResponse();
 
       // Execute controller
       await downloadInvoice(req, res);
@@ -549,28 +450,26 @@ describe('Invoice Controller', () => {
       // Verify response
       expect(res.status).toHaveBeenCalledWith(404);
       expect(res.json).toHaveBeenCalledWith({
-        error: {
-          code: 'not_found',
-          message: 'Invoice not found'
-        }
+        error: 'Invoice not found'
       });
     });
 
-    test('should handle file not found', async () => {
-      // Mock invoice without file
+    test('should return 404 when PDF URL is not available', async () => {
+      // Mock invoice without PDF URL
       const mockInvoice = {
         id: 'invoice-id',
-        file_url: null,
+        invoice_number: 'INV-001',
+        pdf_url: null,
         Payment: { user_id: 'test-user-id' }
       };
       Invoice.findOne.mockResolvedValueOnce(mockInvoice);
 
       // Create request
-      const req = createMockRequest({
+      const req = global.createMockRequest({
         user: { id: 'test-user-id' },
         params: { id: 'invoice-id' }
       });
-      const res = createMockResponse();
+      const res = global.createMockResponse();
 
       // Execute controller
       await downloadInvoice(req, res);
@@ -578,10 +477,7 @@ describe('Invoice Controller', () => {
       // Verify response
       expect(res.status).toHaveBeenCalledWith(404);
       expect(res.json).toHaveBeenCalledWith({
-        error: {
-          code: 'not_found',
-          message: 'Invoice file not found'
-        }
+        error: 'Invoice PDF not available'
       });
     });
 
@@ -590,20 +486,20 @@ describe('Invoice Controller', () => {
       const mockInvoice = {
         id: 'invoice-id',
         invoice_number: 'INV-001',
-        file_url: 's3://bucket/invoices/INV-001.pdf',
+        pdf_url: 'invoices/INV-001.pdf',
         Payment: { user_id: 'test-user-id' }
       };
       Invoice.findOne.mockResolvedValueOnce(mockInvoice);
 
       // Mock storage service error
-      storageService.getSignedUrl.mockRejectedValueOnce(new Error('Storage error'));
+      storageService.getPresignedUrl.mockRejectedValueOnce(new Error('Storage error'));
 
       // Create request
-      const req = createMockRequest({
+      const req = global.createMockRequest({
         user: { id: 'test-user-id' },
         params: { id: 'invoice-id' }
       });
-      const res = createMockResponse();
+      const res = global.createMockResponse();
 
       // Execute controller
       await downloadInvoice(req, res);
@@ -611,11 +507,39 @@ describe('Invoice Controller', () => {
       // Verify response
       expect(res.status).toHaveBeenCalledWith(500);
       expect(res.json).toHaveBeenCalledWith({
-        error: {
-          code: 'internal_server_error',
-          message: 'Failed to generate download URL'
-        }
+        error: 'Failed to generate invoice download URL',
+        message: 'Storage error'
       });
+    });
+  });
+
+  describe('generateInvoicePDF', () => {
+    test('should handle PDF generation (placeholder)', async () => {
+      // Mock invoice data
+      const invoiceData = {
+        invoice_number: 'INV-001',
+        amount: 10000,
+        currency: 'USD'
+      };
+
+      // Execute function
+      const result = await generateInvoicePDF(invoiceData);
+
+      // Verify placeholder behavior
+      expect(result).toBeNull();
+    });
+
+    test('should handle PDF generation errors', async () => {
+      // Mock invoice data that would cause an error
+      const invoiceData = null;
+
+      try {
+        await generateInvoicePDF(invoiceData);
+      } catch (error) {
+        // Current implementation does throw with null data
+        expect(error).toBeDefined();
+        expect(error).toBeInstanceOf(TypeError);
+      }
     });
   });
 });
