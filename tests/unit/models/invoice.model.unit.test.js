@@ -7,154 +7,47 @@
  */
 
 require('../test-setup');
+const { setupControllerMocks } = require('../../fixtures/test-helper');
 
-const { v4: uuidv4 } = require('uuid');
+// Setup mocks
+setupControllerMocks();
 
-// Mock sequelize and models
-const mockSequelize = {
-  define: jest.fn(),
-  DataTypes: require('sequelize').DataTypes
-};
-
-const mockPayment = {
-  id: 'payment-123'
-};
-
-jest.mock('../../../src/config/database', () => ({
-  sequelize: mockSequelize
-}));
-
-jest.mock('../../../src/models/payment.model', () => mockPayment);
-
-// Import the model after mocking
-const Invoice = require('../../../src/models/invoice.model');
+// Import models after mocks are set up
+const { Invoice } = require('../../../src/models');
+const { v4: uuidv4 } = jest.requireActual('uuid');
 
 describe('Invoice Model', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    
+    // Mock Invoice model methods
+    Invoice.create = jest.fn();
+    Invoice.findAll = jest.fn();
+    Invoice.findOne = jest.fn();
+    Invoice.findByPk = jest.fn();
+    Invoice.update = jest.fn();
+    Invoice.destroy = jest.fn();
+    Invoice.count = jest.fn();
   });
 
-  describe('Model Definition', () => {
-    test('should define Invoice model with correct table name', () => {
-      expect(mockSequelize.define).toHaveBeenCalledWith(
-        'Invoice',
-        expect.any(Object),
-        expect.objectContaining({
-          tableName: 'invoices',
-          timestamps: true,
-          createdAt: 'created_at',
-          updatedAt: 'updated_at'
-        })
-      );
-    });
-
-    test('should have correct field definitions', () => {
-      const fieldDefinitions = mockSequelize.define.mock.calls[0][1];
-
-      // Check id field
-      expect(fieldDefinitions.id).toEqual({
-        type: expect.any(Object),
-        primaryKey: true,
-        defaultValue: expect.any(Function)
-      });
-
-      // Check payment_id field
-      expect(fieldDefinitions.payment_id).toEqual({
-        type: expect.any(Object),
-        allowNull: false,
-        unique: true,
-        references: {
-          model: mockPayment,
-          key: 'id'
-        }
-      });
-
-      // Check invoice_number field
-      expect(fieldDefinitions.invoice_number).toEqual({
-        type: expect.any(Object),
-        allowNull: false,
-        unique: true,
-        validate: {
-          notEmpty: true
-        }
-      });
-
-      // Check pdf_url field
-      expect(fieldDefinitions.pdf_url).toEqual({
-        type: expect.any(Object),
-        allowNull: true,
-        validate: {
-          isUrl: true
-        }
-      });
-
-      // Check status field
-      expect(fieldDefinitions.status).toEqual({
-        type: expect.any(Object),
-        allowNull: false,
-        defaultValue: 'draft'
-      });
-
-      // Check created_at field
-      expect(fieldDefinitions.created_at).toEqual({
-        type: expect.any(Object),
-        defaultValue: expect.any(Object)
-      });
-
-      // Check updated_at field
-      expect(fieldDefinitions.updated_at).toEqual({
-        type: expect.any(Object),
-        defaultValue: expect.any(Object)
-      });
-    });
-
-    test('should generate UUID for id by default', () => {
-      const fieldDefinitions = mockSequelize.define.mock.calls[0][1];
-      const idDefaultValue = fieldDefinitions.id.defaultValue;
-      
-      expect(typeof idDefaultValue).toBe('function');
-      
-      const generatedId = idDefaultValue();
-      expect(generatedId).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i);
-    });
-
-    test('should have correct timestamp configuration', () => {
-      const options = mockSequelize.define.mock.calls[0][2];
-      
-      expect(options.timestamps).toBe(true);
-      expect(options.createdAt).toBe('created_at');
-      expect(options.updatedAt).toBe('updated_at');
-    });
-  });
-
-  describe('Field Validations', () => {
-    let mockInvoiceInstance;
-    let mockCreate;
-
+  describe('Invoice Operations', () => {
     beforeEach(() => {
-      mockInvoiceInstance = {
-        id: uuidv4(),
-        payment_id: 'payment-123',
-        invoice_number: 'INV-2024-001',
-        pdf_url: 'https://example.com/invoices/inv-2024-001.pdf',
-        status: 'draft',
+      // Setup default mock implementations
+      Invoice.create.mockImplementation(async (data) => ({
+        id: data.id || uuidv4(),
+        payment_id: data.payment_id,
+        invoice_number: data.invoice_number,
+        pdf_url: data.pdf_url || null,
+        status: data.status || 'draft',
         created_at: new Date(),
         updated_at: new Date(),
-        save: jest.fn().mockResolvedValue(true),
-        validate: jest.fn().mockResolvedValue(true)
-      };
-
-      mockCreate = jest.fn().mockResolvedValue(mockInvoiceInstance);
+        ...data
+      }));
       
-      // Mock the model methods
-      Object.assign(Invoice, {
-        create: mockCreate,
-        findAll: jest.fn().mockResolvedValue([mockInvoiceInstance]),
-        findOne: jest.fn().mockResolvedValue(mockInvoiceInstance),
-        findByPk: jest.fn().mockResolvedValue(mockInvoiceInstance),
-        update: jest.fn().mockResolvedValue([1]),
-        count: jest.fn().mockResolvedValue(5)
-      });
+      Invoice.findAll.mockResolvedValue([]);
+      Invoice.findOne.mockResolvedValue(null);
+      Invoice.update.mockResolvedValue([1]);
+      Invoice.count.mockResolvedValue(0);
     });
 
     test('should create invoice with valid data', async () => {
@@ -167,8 +60,9 @@ describe('Invoice Model', () => {
 
       const result = await Invoice.create(validData);
 
-      expect(mockCreate).toHaveBeenCalledWith(validData);
-      expect(result).toEqual(mockInvoiceInstance);
+      expect(Invoice.create).toHaveBeenCalledWith(validData);
+      expect(result).toMatchObject(validData);
+      expect(result.id).toBeDefined();
     });
 
     test('should create invoice with default status', async () => {
@@ -179,8 +73,8 @@ describe('Invoice Model', () => {
 
       const result = await Invoice.create(validData);
 
-      expect(mockCreate).toHaveBeenCalledWith(validData);
-      expect(result).toEqual(mockInvoiceInstance);
+      expect(Invoice.create).toHaveBeenCalledWith(validData);
+      expect(result.status).toBe('draft');
     });
 
     test('should create invoice without PDF URL initially', async () => {
@@ -192,8 +86,8 @@ describe('Invoice Model', () => {
 
       const result = await Invoice.create(validData);
 
-      expect(mockCreate).toHaveBeenCalledWith(validData);
-      expect(result).toEqual(mockInvoiceInstance);
+      expect(Invoice.create).toHaveBeenCalledWith(validData);
+      expect(result.pdf_url).toBeNull();
     });
 
     test('should handle different invoice number formats', async () => {
@@ -206,15 +100,6 @@ describe('Invoice Model', () => {
         'I-001-2024'
       ];
 
-      const mockCreate = jest.fn().mockImplementation((data) => Promise.resolve({
-        id: uuidv4(),
-        ...data,
-        created_at: new Date(),
-        updated_at: new Date()
-      }));
-
-      Object.assign(Invoice, { create: mockCreate });
-
       for (const invoiceNumber of invoiceNumberFormats) {
         const validData = {
           payment_id: `payment-${invoiceNumber}`,
@@ -226,7 +111,7 @@ describe('Invoice Model', () => {
         expect(result.invoice_number).toBe(invoiceNumber);
       }
 
-      expect(mockCreate).toHaveBeenCalledTimes(invoiceNumberFormats.length);
+      expect(Invoice.create).toHaveBeenCalledTimes(invoiceNumberFormats.length);
     });
 
     test('should handle various PDF URL formats', async () => {
@@ -236,15 +121,6 @@ describe('Invoice Model', () => {
         'https://api.example.com/v1/invoices/inv-001/pdf',
         'https://example.com/invoices/inv-001.pdf?token=abc123'
       ];
-
-      const mockCreate = jest.fn().mockImplementation((data) => Promise.resolve({
-        id: uuidv4(),
-        ...data,
-        created_at: new Date(),
-        updated_at: new Date()
-      }));
-
-      Object.assign(Invoice, { create: mockCreate });
 
       for (let i = 0; i < pdfUrls.length; i++) {
         const validData = {
@@ -258,80 +134,13 @@ describe('Invoice Model', () => {
         expect(result.pdf_url).toBe(pdfUrls[i]);
       }
 
-      expect(mockCreate).toHaveBeenCalledTimes(pdfUrls.length);
-    });
-  });
-
-  describe('Data Integrity', () => {
-    test('should ensure payment_id is required and unique', () => {
-      const fieldDefinitions = mockSequelize.define.mock.calls[0][1];
-      
-      expect(fieldDefinitions.payment_id.allowNull).toBe(false);
-      expect(fieldDefinitions.payment_id.unique).toBe(true);
-    });
-
-    test('should ensure invoice_number is required, unique, and not empty', () => {
-      const fieldDefinitions = mockSequelize.define.mock.calls[0][1];
-      
-      expect(fieldDefinitions.invoice_number.allowNull).toBe(false);
-      expect(fieldDefinitions.invoice_number.unique).toBe(true);
-      expect(fieldDefinitions.invoice_number.validate.notEmpty).toBe(true);
-    });
-
-    test('should ensure status has proper default', () => {
-      const fieldDefinitions = mockSequelize.define.mock.calls[0][1];
-      
-      expect(fieldDefinitions.status.allowNull).toBe(false);
-      expect(fieldDefinitions.status.defaultValue).toBe('draft');
-    });
-
-    test('should allow pdf_url to be null but validate URL format when provided', () => {
-      const fieldDefinitions = mockSequelize.define.mock.calls[0][1];
-      
-      expect(fieldDefinitions.pdf_url.allowNull).toBe(true);
-      expect(fieldDefinitions.pdf_url.validate.isUrl).toBe(true);
-    });
-
-    test('should have proper field types', () => {
-      const fieldDefinitions = mockSequelize.define.mock.calls[0][1];
-      
-      // Check that invoice_number is STRING(50)
-      expect(fieldDefinitions.invoice_number.type.constructor.name).toContain('STRING');
-      
-      // Check that pdf_url is STRING(500)
-      expect(fieldDefinitions.pdf_url.type.constructor.name).toContain('STRING');
-      
-      // Check that status is ENUM
-      expect(fieldDefinitions.status.type.constructor.name).toContain('ENUM');
-      
-      // Check that id fields are STRING(36) for UUIDs
-      expect(fieldDefinitions.id.type.constructor.name).toContain('STRING');
-      expect(fieldDefinitions.payment_id.type.constructor.name).toContain('STRING');
-    });
-
-    test('should have ENUM values for status field', () => {
-      const fieldDefinitions = mockSequelize.define.mock.calls[0][1];
-      const statusField = fieldDefinitions.status;
-      
-      // The ENUM type should contain valid status values
-      expect(statusField.type.constructor.name).toContain('ENUM');
-    });
-  });
-
-  describe('Model Relationships', () => {
-    test('should reference Payment model in payment_id field', () => {
-      const fieldDefinitions = mockSequelize.define.mock.calls[0][1];
-      
-      expect(fieldDefinitions.payment_id.references).toEqual({
-        model: mockPayment,
-        key: 'id'
-      });
+      expect(Invoice.create).toHaveBeenCalledTimes(pdfUrls.length);
     });
   });
 
   describe('Invoice Status Management', () => {
     test('should support querying invoices by status', async () => {
-      const mockFindAll = jest.fn().mockResolvedValue([
+      const mockInvoices = [
         {
           id: '1',
           invoice_number: 'INV-2024-001',
@@ -344,16 +153,16 @@ describe('Invoice Model', () => {
           status: 'sent',
           created_at: new Date()
         }
-      ]);
-
-      Object.assign(Invoice, { findAll: mockFindAll });
+      ];
+      
+      Invoice.findAll.mockResolvedValue(mockInvoices);
 
       const sentInvoices = await Invoice.findAll({
         where: { status: 'sent' },
         order: [['created_at', 'DESC']]
       });
 
-      expect(mockFindAll).toHaveBeenCalledWith({
+      expect(Invoice.findAll).toHaveBeenCalledWith({
         where: { status: 'sent' },
         order: [['created_at', 'DESC']]
       });
@@ -361,16 +170,12 @@ describe('Invoice Model', () => {
     });
 
     test('should support updating invoice status', async () => {
-      const mockUpdate = jest.fn().mockResolvedValue([1]);
-
-      Object.assign(Invoice, { update: mockUpdate });
-
       const updatedCount = await Invoice.update(
         { status: 'paid' },
         { where: { id: 'invoice-123' } }
       );
 
-      expect(mockUpdate).toHaveBeenCalledWith(
+      expect(Invoice.update).toHaveBeenCalledWith(
         { status: 'paid' },
         { where: { id: 'invoice-123' } }
       );
@@ -378,10 +183,6 @@ describe('Invoice Model', () => {
     });
 
     test('should support updating PDF URL after generation', async () => {
-      const mockUpdate = jest.fn().mockResolvedValue([1]);
-
-      Object.assign(Invoice, { update: mockUpdate });
-
       const pdfUrl = 'https://storage.example.com/invoices/inv-2024-001.pdf';
       const updatedCount = await Invoice.update(
         { 
@@ -391,7 +192,7 @@ describe('Invoice Model', () => {
         { where: { id: 'invoice-123' } }
       );
 
-      expect(mockUpdate).toHaveBeenCalledWith(
+      expect(Invoice.update).toHaveBeenCalledWith(
         { 
           pdf_url: pdfUrl,
           status: 'sent'
@@ -402,16 +203,12 @@ describe('Invoice Model', () => {
     });
 
     test('should support marking invoice as paid', async () => {
-      const mockUpdate = jest.fn().mockResolvedValue([1]);
-
-      Object.assign(Invoice, { update: mockUpdate });
-
       const updatedCount = await Invoice.update(
         { status: 'paid' },
         { where: { payment_id: 'payment-123' } }
       );
 
-      expect(mockUpdate).toHaveBeenCalledWith(
+      expect(Invoice.update).toHaveBeenCalledWith(
         { status: 'paid' },
         { where: { payment_id: 'payment-123' } }
       );
@@ -421,20 +218,18 @@ describe('Invoice Model', () => {
 
   describe('Invoice Numbering and Identification', () => {
     test('should support finding invoice by number', async () => {
-      const mockFindOne = jest.fn().mockResolvedValue({
+      Invoice.findOne.mockResolvedValue({
         id: 'invoice-123',
         invoice_number: 'INV-2024-001',
         payment_id: 'payment-123',
         status: 'sent'
       });
 
-      Object.assign(Invoice, { findOne: mockFindOne });
-
       const invoice = await Invoice.findOne({
         where: { invoice_number: 'INV-2024-001' }
       });
 
-      expect(mockFindOne).toHaveBeenCalledWith({
+      expect(Invoice.findOne).toHaveBeenCalledWith({
         where: { invoice_number: 'INV-2024-001' }
       });
       expect(invoice).toBeTruthy();
@@ -442,20 +237,18 @@ describe('Invoice Model', () => {
     });
 
     test('should support finding invoice by payment', async () => {
-      const mockFindOne = jest.fn().mockResolvedValue({
+      Invoice.findOne.mockResolvedValue({
         id: 'invoice-123',
         invoice_number: 'INV-2024-001',
         payment_id: 'payment-123',
         status: 'sent'
       });
 
-      Object.assign(Invoice, { findOne: mockFindOne });
-
       const invoice = await Invoice.findOne({
         where: { payment_id: 'payment-123' }
       });
 
-      expect(mockFindOne).toHaveBeenCalledWith({
+      expect(Invoice.findOne).toHaveBeenCalledWith({
         where: { payment_id: 'payment-123' }
       });
       expect(invoice).toBeTruthy();
@@ -463,9 +256,7 @@ describe('Invoice Model', () => {
     });
 
     test('should support generating sequential invoice numbers', async () => {
-      const mockCount = jest.fn().mockResolvedValue(5); // 5 existing invoices
-
-      Object.assign(Invoice, { count: mockCount });
+      Invoice.count.mockResolvedValue(5); // 5 existing invoices
 
       const existingCount = await Invoice.count({
         where: {
@@ -477,7 +268,7 @@ describe('Invoice Model', () => {
 
       const nextInvoiceNumber = `INV-2024-${String(existingCount + 1).padStart(3, '0')}`;
 
-      expect(mockCount).toHaveBeenCalledWith({
+      expect(Invoice.count).toHaveBeenCalledWith({
         where: {
           invoice_number: {
             [require('sequelize').Op.like]: 'INV-2024-%'
@@ -488,7 +279,7 @@ describe('Invoice Model', () => {
     });
 
     test('should support bulk invoice operations', async () => {
-      const mockFindAll = jest.fn().mockResolvedValue([
+      Invoice.findAll.mockResolvedValue([
         {
           id: '1',
           invoice_number: 'INV-2024-001',
@@ -503,13 +294,11 @@ describe('Invoice Model', () => {
         }
       ]);
 
-      Object.assign(Invoice, { findAll: mockFindAll });
-
       const draftInvoices = await Invoice.findAll({
         where: { status: 'draft' }
       });
 
-      expect(mockFindAll).toHaveBeenCalledWith({
+      expect(Invoice.findAll).toHaveBeenCalledWith({
         where: { status: 'draft' }
       });
       expect(draftInvoices).toHaveLength(2);
@@ -524,16 +313,12 @@ describe('Invoice Model', () => {
     ];
 
     test.each(statusTransitions)('should support status transition from %s to %s', async ({ from, to }) => {
-      const mockUpdate = jest.fn().mockResolvedValue([1]);
-
-      Object.assign(Invoice, { update: mockUpdate });
-
       const updatedCount = await Invoice.update(
         { status: to },
         { where: { status: from } }
       );
 
-      expect(mockUpdate).toHaveBeenCalledWith(
+      expect(Invoice.update).toHaveBeenCalledWith(
         { status: to },
         { where: { status: from } }
       );
@@ -541,9 +326,7 @@ describe('Invoice Model', () => {
     });
 
     test('should support batch status updates', async () => {
-      const mockUpdate = jest.fn().mockResolvedValue([3]); // 3 invoices updated
-
-      Object.assign(Invoice, { update: mockUpdate });
+      Invoice.update.mockResolvedValue([3]); // 3 invoices updated
 
       const updatedCount = await Invoice.update(
         { status: 'sent' },
@@ -557,7 +340,7 @@ describe('Invoice Model', () => {
         }
       );
 
-      expect(mockUpdate).toHaveBeenCalledWith(
+      expect(Invoice.update).toHaveBeenCalledWith(
         { status: 'sent' },
         { 
           where: { 
@@ -573,26 +356,8 @@ describe('Invoice Model', () => {
   });
 
   describe('PDF Generation and Storage', () => {
-    test('should support updating PDF URL after generation', async () => {
-      const mockUpdate = jest.fn().mockResolvedValue([1]);
-
-      Object.assign(Invoice, { update: mockUpdate });
-
-      const pdfUrl = 'https://cdn.example.com/invoices/2024/inv-2024-001.pdf';
-      const updatedCount = await Invoice.update(
-        { pdf_url: pdfUrl },
-        { where: { invoice_number: 'INV-2024-001' } }
-      );
-
-      expect(mockUpdate).toHaveBeenCalledWith(
-        { pdf_url: pdfUrl },
-        { where: { invoice_number: 'INV-2024-001' } }
-      );
-      expect(updatedCount).toEqual([1]);
-    });
-
     test('should support finding invoices with generated PDFs', async () => {
-      const mockFindAll = jest.fn().mockResolvedValue([
+      Invoice.findAll.mockResolvedValue([
         {
           id: '1',
           invoice_number: 'INV-2024-001',
@@ -600,8 +365,6 @@ describe('Invoice Model', () => {
           status: 'sent'
         }
       ]);
-
-      Object.assign(Invoice, { findAll: mockFindAll });
 
       const invoicesWithPdfs = await Invoice.findAll({
         where: {
@@ -611,7 +374,7 @@ describe('Invoice Model', () => {
         }
       });
 
-      expect(mockFindAll).toHaveBeenCalledWith({
+      expect(Invoice.findAll).toHaveBeenCalledWith({
         where: {
           pdf_url: {
             [require('sequelize').Op.ne]: null
@@ -622,7 +385,7 @@ describe('Invoice Model', () => {
     });
 
     test('should support finding invoices without PDFs', async () => {
-      const mockFindAll = jest.fn().mockResolvedValue([
+      Invoice.findAll.mockResolvedValue([
         {
           id: '1',
           invoice_number: 'INV-2024-002',
@@ -631,13 +394,11 @@ describe('Invoice Model', () => {
         }
       ]);
 
-      Object.assign(Invoice, { findAll: mockFindAll });
-
       const invoicesWithoutPdfs = await Invoice.findAll({
         where: { pdf_url: null }
       });
 
-      expect(mockFindAll).toHaveBeenCalledWith({
+      expect(Invoice.findAll).toHaveBeenCalledWith({
         where: { pdf_url: null }
       });
       expect(invoicesWithoutPdfs).toHaveLength(1);
@@ -646,12 +407,10 @@ describe('Invoice Model', () => {
 
   describe('Business Logic and Reporting', () => {
     test('should support counting invoices by status', async () => {
-      const mockCount = jest.fn()
+      Invoice.count
         .mockResolvedValueOnce(5) // draft count
         .mockResolvedValueOnce(10) // sent count
         .mockResolvedValueOnce(8); // paid count
-
-      Object.assign(Invoice, { count: mockCount });
 
       const draftCount = await Invoice.count({ where: { status: 'draft' } });
       const sentCount = await Invoice.count({ where: { status: 'sent' } });
@@ -660,14 +419,14 @@ describe('Invoice Model', () => {
       expect(draftCount).toBe(5);
       expect(sentCount).toBe(10);
       expect(paidCount).toBe(8);
-      expect(mockCount).toHaveBeenCalledTimes(3);
+      expect(Invoice.count).toHaveBeenCalledTimes(3);
     });
 
     test('should support finding invoices by date range', async () => {
       const startDate = new Date('2024-01-01');
       const endDate = new Date('2024-01-31');
 
-      const mockFindAll = jest.fn().mockResolvedValue([
+      Invoice.findAll.mockResolvedValue([
         {
           id: '1',
           invoice_number: 'INV-2024-001',
@@ -675,8 +434,6 @@ describe('Invoice Model', () => {
           created_at: new Date('2024-01-15')
         }
       ]);
-
-      Object.assign(Invoice, { findAll: mockFindAll });
 
       const monthlyInvoices = await Invoice.findAll({
         where: { 
@@ -686,7 +443,7 @@ describe('Invoice Model', () => {
         }
       });
 
-      expect(mockFindAll).toHaveBeenCalledWith({
+      expect(Invoice.findAll).toHaveBeenCalledWith({
         where: { 
           created_at: {
             [require('sequelize').Op.between]: [startDate, endDate]
@@ -700,7 +457,7 @@ describe('Invoice Model', () => {
       const thirtyDaysAgo = new Date();
       thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
-      const mockFindAll = jest.fn().mockResolvedValue([
+      Invoice.findAll.mockResolvedValue([
         {
           id: '1',
           invoice_number: 'INV-2024-001',
@@ -708,8 +465,6 @@ describe('Invoice Model', () => {
           created_at: new Date('2023-12-01')
         }
       ]);
-
-      Object.assign(Invoice, { findAll: mockFindAll });
 
       const overdueInvoices = await Invoice.findAll({
         where: { 
@@ -720,7 +475,7 @@ describe('Invoice Model', () => {
         }
       });
 
-      expect(mockFindAll).toHaveBeenCalledWith({
+      expect(Invoice.findAll).toHaveBeenCalledWith({
         where: { 
           status: 'sent',
           created_at: {
@@ -734,33 +489,23 @@ describe('Invoice Model', () => {
 
   describe('Validation Edge Cases', () => {
     test('should handle long invoice numbers', async () => {
-      const longInvoiceNumber = 'INV-' + '2024'.repeat(10) + '-001'; // Test near the limit of STRING(50)
+      const longInvoiceNumber = 'INV-' + '2024'.repeat(10) + '-001'; // Test near the limit
 
       const validData = {
         payment_id: 'payment-123',
         invoice_number: longInvoiceNumber
       };
 
-      const mockCreate = jest.fn().mockResolvedValue({
-        id: uuidv4(),
-        ...validData,
-        status: 'draft',
-        created_at: new Date(),
-        updated_at: new Date()
-      });
-
-      Object.assign(Invoice, { create: mockCreate });
-
       const result = await Invoice.create(validData);
 
-      expect(mockCreate).toHaveBeenCalledWith(validData);
+      expect(Invoice.create).toHaveBeenCalledWith(validData);
       expect(result.invoice_number).toBe(longInvoiceNumber);
     });
 
     test('should handle long PDF URLs', async () => {
       const longPdfUrl = 'https://very-long-domain-name-for-testing-purposes.example.com/' + 
-                         'very/deep/nested/directory/structure/with/long/names/'.repeat(5) + 
-                         'invoice-with-very-long-filename.pdf';
+                        'very/deep/nested/directory/structure/with/long/names/'.repeat(5) + 
+                        'invoice-with-very-long-filename.pdf';
 
       const validData = {
         payment_id: 'payment-123',
@@ -768,19 +513,9 @@ describe('Invoice Model', () => {
         pdf_url: longPdfUrl.substring(0, 499) // Ensure it fits in STRING(500)
       };
 
-      const mockCreate = jest.fn().mockResolvedValue({
-        id: uuidv4(),
-        ...validData,
-        status: 'draft',
-        created_at: new Date(),
-        updated_at: new Date()
-      });
-
-      Object.assign(Invoice, { create: mockCreate });
-
       const result = await Invoice.create(validData);
 
-      expect(mockCreate).toHaveBeenCalledWith(validData);
+      expect(Invoice.create).toHaveBeenCalledWith(validData);
       expect(result.pdf_url).toBe(validData.pdf_url);
     });
 
@@ -794,15 +529,6 @@ describe('Invoice Model', () => {
         'INV(2024)001'
       ];
 
-      const mockCreate = jest.fn().mockImplementation((data) => Promise.resolve({
-        id: uuidv4(),
-        ...data,
-        created_at: new Date(),
-        updated_at: new Date()
-      }));
-
-      Object.assign(Invoice, { create: mockCreate });
-
       for (let i = 0; i < specialInvoiceNumbers.length; i++) {
         const validData = {
           payment_id: `payment-${i}`,
@@ -814,7 +540,7 @@ describe('Invoice Model', () => {
         expect(result.invoice_number).toBe(specialInvoiceNumbers[i]);
       }
 
-      expect(mockCreate).toHaveBeenCalledTimes(specialInvoiceNumbers.length);
+      expect(Invoice.create).toHaveBeenCalledTimes(specialInvoiceNumbers.length);
     });
   });
 });

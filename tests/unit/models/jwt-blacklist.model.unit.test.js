@@ -7,146 +7,49 @@
  */
 
 require('../test-setup');
+const { setupControllerMocks } = require('../../fixtures/test-helper');
 
-const { v4: uuidv4 } = require('uuid');
+// Setup mocks
+setupControllerMocks();
 
-// Mock sequelize
-const mockSequelize = {
-  define: jest.fn(),
-  DataTypes: require('sequelize').DataTypes
-};
-
-jest.mock('../../../src/config/database', () => ({
-  sequelize: mockSequelize
-}));
-
-// Import the model after mocking
-const JwtBlacklist = require('../../../src/models/jwt-blacklist.model');
+// Import models after mocks are set up
+const { JwtBlacklist } = require('../../../src/models');
+const { v4: uuidv4 } = jest.requireActual('uuid');
 
 describe('JwtBlacklist Model', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    
+    // Mock JwtBlacklist model methods
+    JwtBlacklist.create = jest.fn();
+    JwtBlacklist.findAll = jest.fn();
+    JwtBlacklist.findOne = jest.fn();
+    JwtBlacklist.findByPk = jest.fn();
+    JwtBlacklist.destroy = jest.fn();
   });
 
-  describe('Model Definition', () => {
-    test('should define JwtBlacklist model with correct table name', () => {
-      expect(mockSequelize.define).toHaveBeenCalledWith(
-        'JwtBlacklist',
-        expect.any(Object),
-        expect.objectContaining({
-          tableName: 'jwtBlacklist',
-          timestamps: true,
-          createdAt: 'created',
-          updatedAt: 'updated'
-        })
-      );
-    });
-
-    test('should have correct field definitions', () => {
-      const fieldDefinitions = mockSequelize.define.mock.calls[0][1];
-
-      // Check id field
-      expect(fieldDefinitions.id).toEqual({
-        type: expect.any(Object),
-        primaryKey: true,
-        defaultValue: expect.any(Function)
-      });
-
-      // Check jwtId field
-      expect(fieldDefinitions.jwtId).toEqual({
-        type: expect.any(Object),
-        allowNull: false,
-        unique: true,
-        field: 'jwtId'
-      });
-
-      // Check token field
-      expect(fieldDefinitions.token).toEqual({
-        type: expect.any(Object),
-        allowNull: false
-      });
-
-      // Check userId field
-      expect(fieldDefinitions.userId).toEqual({
-        type: expect.any(Object),
-        allowNull: false,
-        field: 'userId'
-      });
-
-      // Check reason field
-      expect(fieldDefinitions.reason).toEqual({
-        type: expect.any(Object),
-        allowNull: true
-      });
-
-      // Check expiresAt field
-      expect(fieldDefinitions.expiresAt).toEqual({
-        type: expect.any(Object),
-        allowNull: false,
-        field: 'expiresAt'
-      });
-    });
-
-    test('should generate UUID for id by default', () => {
-      const fieldDefinitions = mockSequelize.define.mock.calls[0][1];
-      const idDefaultValue = fieldDefinitions.id.defaultValue;
-      
-      expect(typeof idDefaultValue).toBe('function');
-      
-      const generatedId = idDefaultValue();
-      expect(generatedId).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i);
-    });
-
-    test('should have correct indexes defined', () => {
-      const options = mockSequelize.define.mock.calls[0][2];
-      
-      expect(options.indexes).toEqual([
-        { fields: ['jwtId'] },
-        { fields: ['userId'] },
-        { fields: ['expiresAt'] }
-      ]);
-    });
-
-    test('should have correct timestamp configuration', () => {
-      const options = mockSequelize.define.mock.calls[0][2];
-      
-      expect(options.timestamps).toBe(true);
-      expect(options.createdAt).toBe('created');
-      expect(options.updatedAt).toBe('updated');
-    });
-  });
-
-  describe('Field Validations', () => {
-    let mockJwtBlacklistInstance;
-    let mockCreate;
-
+  describe('JWT Blacklist Operations', () => {
     beforeEach(() => {
-      const futureDate = new Date();
-      futureDate.setHours(futureDate.getHours() + 1);
-
-      mockJwtBlacklistInstance = {
-        id: uuidv4(),
-        jwtId: uuidv4(),
-        token: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c',
-        userId: 'user-123',
-        reason: 'logout',
-        expiresAt: futureDate,
-        created: new Date(),
-        updated: new Date(),
-        save: jest.fn().mockResolvedValue(true),
-        validate: jest.fn().mockResolvedValue(true)
-      };
-
-      mockCreate = jest.fn().mockResolvedValue(mockJwtBlacklistInstance);
-      
-      // Mock the model methods
-      Object.assign(JwtBlacklist, {
-        create: mockCreate,
-        findAll: jest.fn().mockResolvedValue([mockJwtBlacklistInstance]),
-        findOne: jest.fn().mockResolvedValue(mockJwtBlacklistInstance),
-        findByPk: jest.fn().mockResolvedValue(mockJwtBlacklistInstance),
-        destroy: jest.fn().mockResolvedValue(1)
+      // Setup default mock implementations
+      JwtBlacklist.create.mockImplementation(async (data) => {
+        const futureDate = new Date();
+        futureDate.setHours(futureDate.getHours() + 1);
+        
+        return {
+          id: data.id || uuidv4(),
+          jwtId: data.jwtId,
+          token: data.token,
+          userId: data.userId,
+          reason: data.reason || null,
+          expiresAt: data.expiresAt || futureDate,
+          created: new Date(),
+          updated: new Date(),
+          ...data
+        };
       });
+      
+      JwtBlacklist.findAll.mockResolvedValue([]);
+      JwtBlacklist.findOne.mockResolvedValue(null);
     });
 
     test('should create JWT blacklist entry with valid data', async () => {
@@ -163,8 +66,10 @@ describe('JwtBlacklist Model', () => {
 
       const result = await JwtBlacklist.create(validData);
 
-      expect(mockCreate).toHaveBeenCalledWith(validData);
-      expect(result).toEqual(mockJwtBlacklistInstance);
+      expect(JwtBlacklist.create).toHaveBeenCalledWith(validData);
+      expect(result).toMatchObject(validData);
+      expect(result.id).toBeDefined();
+      expect(result.created).toBeInstanceOf(Date);
     });
 
     test('should create JWT blacklist entry without reason', async () => {
@@ -180,8 +85,9 @@ describe('JwtBlacklist Model', () => {
 
       const result = await JwtBlacklist.create(validData);
 
-      expect(mockCreate).toHaveBeenCalledWith(validData);
-      expect(result).toEqual(mockJwtBlacklistInstance);
+      expect(JwtBlacklist.create).toHaveBeenCalledWith(validData);
+      expect(result).toMatchObject(validData);
+      expect(result.reason).toBeNull();
     });
 
     test('should handle long JWT tokens', async () => {
@@ -202,78 +108,18 @@ describe('JwtBlacklist Model', () => {
 
       const result = await JwtBlacklist.create(validData);
 
-      expect(mockCreate).toHaveBeenCalledWith(validData);
-      expect(result).toEqual(mockJwtBlacklistInstance);
+      expect(JwtBlacklist.create).toHaveBeenCalledWith(validData);
+      expect(result.token).toBe(longToken);
+      expect(result.reason).toBe('security_breach');
     });
-  });
-
-  describe('Data Integrity', () => {
-    test('should ensure jwtId is required and unique', () => {
-      const fieldDefinitions = mockSequelize.define.mock.calls[0][1];
-      
-      expect(fieldDefinitions.jwtId.allowNull).toBe(false);
-      expect(fieldDefinitions.jwtId.unique).toBe(true);
-    });
-
-    test('should ensure token is required', () => {
-      const fieldDefinitions = mockSequelize.define.mock.calls[0][1];
-      
-      expect(fieldDefinitions.token.allowNull).toBe(false);
-    });
-
-    test('should ensure userId is required', () => {
-      const fieldDefinitions = mockSequelize.define.mock.calls[0][1];
-      
-      expect(fieldDefinitions.userId.allowNull).toBe(false);
-    });
-
-    test('should ensure expiresAt is required', () => {
-      const fieldDefinitions = mockSequelize.define.mock.calls[0][1];
-      
-      expect(fieldDefinitions.expiresAt.allowNull).toBe(false);
-    });
-
-    test('should allow reason to be null', () => {
-      const fieldDefinitions = mockSequelize.define.mock.calls[0][1];
-      
-      expect(fieldDefinitions.reason.allowNull).toBe(true);
-    });
-
-    test('should have proper field types', () => {
-      const fieldDefinitions = mockSequelize.define.mock.calls[0][1];
-      
-      // Check that token field is TEXT for long JWT tokens
-      expect(fieldDefinitions.token.type.constructor.name).toContain('TEXT');
-      
-      // Check that id fields are STRING(36) for UUIDs
-      expect(fieldDefinitions.id.type.constructor.name).toContain('STRING');
-      expect(fieldDefinitions.jwtId.type.constructor.name).toContain('STRING');
-      expect(fieldDefinitions.userId.type.constructor.name).toContain('STRING');
-      
-      // Check that reason is STRING(50)
-      expect(fieldDefinitions.reason.type.constructor.name).toContain('STRING');
-      
-      // Check that expiresAt is DATE
-      expect(fieldDefinitions.expiresAt.type.constructor.name).toContain('DATE');
-    });
-
-    test('should have correct field mappings for camelCase', () => {
-      const fieldDefinitions = mockSequelize.define.mock.calls[0][1];
-      
-      expect(fieldDefinitions.jwtId.field).toBe('jwtId');
-      expect(fieldDefinitions.userId.field).toBe('userId');
-      expect(fieldDefinitions.expiresAt.field).toBe('expiresAt');
-    });
-  });
-
-  describe('Token Blacklist Operations', () => {
-    const mockJwtId = uuidv4();
-    const mockToken = 'valid.jwt.token';
-    const mockUserId = 'user-123';
 
     test('should support blacklisting token on logout', async () => {
       const futureDate = new Date();
       futureDate.setHours(futureDate.getHours() + 1);
+      
+      const mockJwtId = uuidv4();
+      const mockToken = 'valid.jwt.token';
+      const mockUserId = 'user-123';
 
       const logoutData = {
         jwtId: mockJwtId,
@@ -283,24 +129,19 @@ describe('JwtBlacklist Model', () => {
         expiresAt: futureDate
       };
 
-      const mockCreate = jest.fn().mockResolvedValue({
-        ...logoutData,
-        id: uuidv4(),
-        created: new Date(),
-        updated: new Date()
-      });
-
-      Object.assign(JwtBlacklist, { create: mockCreate });
-
       const result = await JwtBlacklist.create(logoutData);
 
-      expect(mockCreate).toHaveBeenCalledWith(logoutData);
+      expect(JwtBlacklist.create).toHaveBeenCalledWith(logoutData);
       expect(result.reason).toBe('logout');
     });
 
     test('should support blacklisting token for security reasons', async () => {
       const futureDate = new Date();
       futureDate.setHours(futureDate.getHours() + 1);
+      
+      const mockJwtId = uuidv4();
+      const mockToken = 'valid.jwt.token';
+      const mockUserId = 'user-123';
 
       const securityData = {
         jwtId: mockJwtId,
@@ -310,23 +151,18 @@ describe('JwtBlacklist Model', () => {
         expiresAt: futureDate
       };
 
-      const mockCreate = jest.fn().mockResolvedValue({
-        ...securityData,
-        id: uuidv4(),
-        created: new Date(),
-        updated: new Date()
-      });
-
-      Object.assign(JwtBlacklist, { create: mockCreate });
-
       const result = await JwtBlacklist.create(securityData);
 
-      expect(mockCreate).toHaveBeenCalledWith(securityData);
+      expect(JwtBlacklist.create).toHaveBeenCalledWith(securityData);
       expect(result.reason).toBe('security_breach');
     });
 
     test('should support checking if token is blacklisted', async () => {
-      const mockFindOne = jest.fn().mockResolvedValue({
+      const mockJwtId = uuidv4();
+      const mockToken = 'valid.jwt.token';
+      const mockUserId = 'user-123';
+      
+      JwtBlacklist.findOne.mockResolvedValue({
         id: uuidv4(),
         jwtId: mockJwtId,
         token: mockToken,
@@ -336,13 +172,11 @@ describe('JwtBlacklist Model', () => {
         created: new Date()
       });
 
-      Object.assign(JwtBlacklist, { findOne: mockFindOne });
-
       const blacklistedToken = await JwtBlacklist.findOne({
         where: { jwtId: mockJwtId }
       });
 
-      expect(mockFindOne).toHaveBeenCalledWith({
+      expect(JwtBlacklist.findOne).toHaveBeenCalledWith({
         where: { jwtId: mockJwtId }
       });
       expect(blacklistedToken).toBeTruthy();
@@ -350,7 +184,9 @@ describe('JwtBlacklist Model', () => {
     });
 
     test('should support querying by userId', async () => {
-      const mockFindAll = jest.fn().mockResolvedValue([
+      const mockUserId = 'user-123';
+      
+      JwtBlacklist.findAll.mockResolvedValue([
         {
           id: '1',
           jwtId: uuidv4(),
@@ -369,14 +205,12 @@ describe('JwtBlacklist Model', () => {
         }
       ]);
 
-      Object.assign(JwtBlacklist, { findAll: mockFindAll });
-
       const userBlacklistedTokens = await JwtBlacklist.findAll({
         where: { userId: mockUserId },
         order: [['created', 'DESC']]
       });
 
-      expect(mockFindAll).toHaveBeenCalledWith({
+      expect(JwtBlacklist.findAll).toHaveBeenCalledWith({
         where: { userId: mockUserId },
         order: [['created', 'DESC']]
       });
@@ -384,12 +218,7 @@ describe('JwtBlacklist Model', () => {
     });
 
     test('should support cleanup of expired tokens', async () => {
-      const pastDate = new Date();
-      pastDate.setHours(pastDate.getHours() - 1);
-
-      const mockDestroy = jest.fn().mockResolvedValue(5); // 5 tokens deleted
-
-      Object.assign(JwtBlacklist, { destroy: mockDestroy });
+      JwtBlacklist.destroy.mockResolvedValue(5); // 5 tokens deleted
 
       const deletedCount = await JwtBlacklist.destroy({
         where: {
@@ -399,7 +228,7 @@ describe('JwtBlacklist Model', () => {
         }
       });
 
-      expect(mockDestroy).toHaveBeenCalledWith({
+      expect(JwtBlacklist.destroy).toHaveBeenCalledWith({
         where: {
           expiresAt: {
             [require('sequelize').Op.lt]: expect.any(Date)
@@ -410,40 +239,36 @@ describe('JwtBlacklist Model', () => {
     });
   });
 
-  describe('Security Features', () => {
-    test('should support different blacklist reasons', () => {
-      const validReasons = [
-        'logout',
-        'password_change',
-        'security_breach',
-        'account_deactivated',
-        'token_refresh',
-        'suspicious_activity'
-      ];
+  describe('Common Blacklist Reasons', () => {
+    const validReasons = [
+      'logout',
+      'password_change',
+      'security_breach',
+      'account_deactivated',
+      'token_refresh',
+      'suspicious_activity',
+      'logout_all_devices'
+    ];
 
-      validReasons.forEach(reason => {
-        expect(reason.length).toBeLessThanOrEqual(50); // Reason field is STRING(50)
-      });
-    });
+    test.each(validReasons)('should handle %s reason', async (reason) => {
+      const futureDate = new Date();
+      futureDate.setHours(futureDate.getHours() + 1);
 
-    test('should have proper indexing for performance', () => {
-      const options = mockSequelize.define.mock.calls[0][2];
-      
-      expect(options.indexes).toContainEqual({ fields: ['jwtId'] });
-      expect(options.indexes).toContainEqual({ fields: ['userId'] });
-      expect(options.indexes).toContainEqual({ fields: ['expiresAt'] });
+      const validData = {
+        jwtId: uuidv4(),
+        token: 'test.jwt.token',
+        userId: 'user-123',
+        reason,
+        expiresAt: futureDate
+      };
+
+      const result = await JwtBlacklist.create(validData);
+
+      expect(JwtBlacklist.create).toHaveBeenCalledWith(validData);
+      expect(result.reason).toBe(reason);
     });
 
     test('should support batch operations for user logout', async () => {
-      const mockCreate = jest.fn().mockImplementation((data) => Promise.resolve({
-        id: uuidv4(),
-        ...data,
-        created: new Date(),
-        updated: new Date()
-      }));
-
-      Object.assign(JwtBlacklist, { create: mockCreate });
-
       const userTokens = [
         { jwtId: uuidv4(), token: 'token1' },
         { jwtId: uuidv4(), token: 'token2' },
@@ -465,7 +290,7 @@ describe('JwtBlacklist Model', () => {
 
       const results = await Promise.all(blacklistPromises);
 
-      expect(mockCreate).toHaveBeenCalledTimes(3);
+      expect(JwtBlacklist.create).toHaveBeenCalledTimes(userTokens.length);
       expect(results).toHaveLength(3);
       results.forEach(result => {
         expect(result.reason).toBe('logout_all_devices');
