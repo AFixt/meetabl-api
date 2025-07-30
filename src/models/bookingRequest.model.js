@@ -94,11 +94,6 @@ const BookingRequest = sequelize.define('BookingRequest', {
   updatedAt: 'updatedAt'
 });
 
-// Define relationships
-// Import User after model definition to avoid circular dependency
-setTimeout(() => {
-  const User = require('./user.model');
-  BookingRequest.belongsTo(User, { foreignKey: 'userId' });
-}, 0);
+// Relationships are defined in associations.js to avoid circular dependencies
 
 module.exports = BookingRequest;

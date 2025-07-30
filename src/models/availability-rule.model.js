@@ -66,8 +66,6 @@ const AvailabilityRule = sequelize.define('AvailabilityRule', {
   timestamps: false
 });
 
-// Define relationships
-User.hasMany(AvailabilityRule, { foreignKey: 'userId', onDelete: 'CASCADE' });
-AvailabilityRule.belongsTo(User, { foreignKey: 'userId' });
+// Relationships are defined in associations.js to avoid circular dependencies
 
 module.exports = AvailabilityRule;

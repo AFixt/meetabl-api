@@ -62,8 +62,6 @@ const Invoice = sequelize.define('Invoice', {
   updatedAt: 'updated_at'
 });
 
-// Define relationships
-Invoice.belongsTo(Payment, { foreignKey: 'payment_id' });
-Payment.hasOne(Invoice, { foreignKey: 'payment_id' });
+// Relationships are defined in associations.js to avoid circular dependencies
 
 module.exports = Invoice;

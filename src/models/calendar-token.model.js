@@ -55,8 +55,6 @@ const CalendarToken = sequelize.define('CalendarToken', {
   timestamps: false
 });
 
-// Define relationships
-User.hasMany(CalendarToken, { foreignKey: 'userId', onDelete: 'CASCADE' });
-CalendarToken.belongsTo(User, { foreignKey: 'userId' });
+// Relationships are defined in associations.js to avoid circular dependencies
 
 module.exports = CalendarToken;

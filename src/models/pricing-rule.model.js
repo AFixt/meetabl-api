@@ -73,8 +73,6 @@ const PricingRule = sequelize.define('PricingRule', {
   updatedAt: 'updated_at'
 });
 
-// Define relationships
-PricingRule.belongsTo(User, { foreignKey: 'user_id' });
-User.hasMany(PricingRule, { foreignKey: 'user_id' });
+// Relationships are defined in associations.js to avoid circular dependencies
 
 module.exports = PricingRule;

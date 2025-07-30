@@ -21,8 +21,9 @@ const Payment = require('./payment.model');
 const PricingRule = require('./pricing-rule.model');
 const Invoice = require('./invoice.model');
 
-// Note: Relationships are defined in individual model files
-// This ensures proper loading order regardless of import order
+// Initialize associations after all models are loaded
+const { defineAssociations } = require('./associations');
+defineAssociations();
 
 module.exports = {
   User,

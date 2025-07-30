@@ -127,8 +127,6 @@ const UserSettings = sequelize.define('UserSettings', {
   timestamps: false
 });
 
-// Define relationships
-User.hasOne(UserSettings, { foreignKey: 'userId', onDelete: 'CASCADE' });
-UserSettings.belongsTo(User, { foreignKey: 'userId' });
+// Relationships are defined in associations.js to avoid circular dependencies
 
 module.exports = UserSettings;

@@ -46,8 +46,6 @@ const AuditLog = sequelize.define('AuditLog', {
   updatedAt: false
 });
 
-// Define relationships
-User.hasMany(AuditLog, { foreignKey: 'userId', onDelete: 'CASCADE' });
-AuditLog.belongsTo(User, { foreignKey: 'userId' });
+// Relationships are defined in associations.js to avoid circular dependencies
 
 module.exports = AuditLog;

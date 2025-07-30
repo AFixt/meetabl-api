@@ -52,8 +52,6 @@ const Team = sequelize.define('Team', {
   updatedAt: 'updated'
 });
 
-// Define relationships
-User.hasMany(Team, { foreignKey: 'owner_id', as: 'ownedTeams' });
-Team.belongsTo(User, { foreignKey: 'owner_id', as: 'owner' });
+// Relationships are defined in associations.js to avoid circular dependencies
 
 module.exports = Team;

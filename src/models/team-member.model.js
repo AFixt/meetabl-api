@@ -66,25 +66,6 @@ const TeamMember = sequelize.define('TeamMember', {
   ]
 });
 
-// Define relationships
-Team.hasMany(TeamMember, { foreignKey: 'team_id', as: 'members', onDelete: 'CASCADE' });
-TeamMember.belongsTo(Team, { foreignKey: 'team_id' });
-
-User.hasMany(TeamMember, { foreignKey: 'user_id', as: 'teamMemberships', onDelete: 'CASCADE' });
-TeamMember.belongsTo(User, { foreignKey: 'user_id' });
-
-// Additional association for easy access to teams through users
-Team.belongsToMany(User, {
-  through: TeamMember,
-  foreignKey: 'team_id',
-  otherKey: 'user_id',
-  as: 'teamMembers'
-});
-User.belongsToMany(Team, {
-  through: TeamMember,
-  foreignKey: 'user_id',
-  otherKey: 'team_id',
-  as: 'teams'
-});
+// Relationships are defined in associations.js to avoid circular dependencies
 
 module.exports = TeamMember;

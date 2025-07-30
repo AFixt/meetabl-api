@@ -47,8 +47,6 @@ const Notification = sequelize.define('Notification', {
   timestamps: false
 });
 
-// Define relationships
-Booking.hasMany(Notification, { foreignKey: 'bookingId', onDelete: 'CASCADE' });
-Notification.belongsTo(Booking, { foreignKey: 'bookingId' });
+// Relationships are defined in associations.js to avoid circular dependencies
 
 module.exports = Notification;
