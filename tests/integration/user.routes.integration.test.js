@@ -4,15 +4,18 @@
  */
 
 const request = require('supertest');
-const app = require('../../src/app');
+const { getTestApp } = require('./test-app');
 const { User } = require('../../src/models');
 const { v4: uuidv4 } = require('uuid');
 
 describe('User Routes Integration Tests', () => {
+  let app;
   let authToken;
   let testUser;
 
   beforeAll(async () => {
+    // Initialize app
+    app = await getTestApp();
     // Create test user
     testUser = await User.create({
       id: uuidv4(),

@@ -1,6 +1,10 @@
 /**
  * Database configuration
- * Exports the MySQL configuration
+ * Exports the appropriate database configuration based on environment
  */
 
-module.exports = require('./database-mysql');
+if (process.env.NODE_ENV === 'test') {
+  module.exports = require('./database-test');
+} else {
+  module.exports = require('./database-mysql');
+}

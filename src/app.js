@@ -79,11 +79,15 @@ function validateEnvironment() {
 validateEnvironment();
 
 // Use appropriate database configuration based on environment
-const { initializeDatabase } = process.env.NODE_ENV === 'test'
-  ? require('./models/test-models')
-  : process.env.AWS_LAMBDA_FUNCTION_NAME 
-    ? require('./config/database-serverless')
-    : require('./config/database');
+let initializeDatabase;
+if (process.env.NODE_ENV === 'test') {
+  const { initializeTestDatabase } = require('./models/test-models');
+  initializeDatabase = initializeTestDatabase;
+} else if (process.env.AWS_LAMBDA_FUNCTION_NAME) {
+  ({ initializeDatabase } = require('./config/database-serverless'));
+} else {
+  ({ initializeDatabase } = require('./config/database'));
+}
 
 // Create Express app
 const app = express();

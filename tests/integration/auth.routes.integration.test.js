@@ -4,16 +4,20 @@
  */
 
 const request = require('supertest');
-const app = require('../../src/app');
+const { getTestApp } = require('./test-app');
 const { User, RefreshToken } = require('../../src/models');
-const bcrypt = require('bcryptjs');
+const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const { v4: uuidv4 } = require('uuid');
 
 describe('Auth Routes Integration Tests', () => {
+  let app;
   let testUser;
-  
+
   beforeAll(async () => {
+    // Initialize app
+    app = await getTestApp();
+    
     // Clean up any existing test data
     await User.destroy({ where: { email: 'auth-test@meetabl.com' } });
   });
@@ -42,18 +46,16 @@ describe('Auth Routes Integration Tests', () => {
 
       expect(response.body).toMatchObject({
         success: true,
-        message: 'User registered successfully',
+        message: 'User registered successfully. Please check your email to verify your account.',
         data: {
-          user: {
-            email: userData.email,
-            firstName: userData.firstName,
-            lastName: userData.lastName
-          }
+          email: userData.email,
+          first_name: userData.firstName,
+          last_name: userData.lastName,
+          email_verified: false
         }
       });
 
-      expect(response.body.data.accessToken).toBeDefined();
-      expect(response.body.data.refreshToken).toBeDefined();
+      expect(response.body.data.id).toBeDefined();
 
       // Store user for cleanup
       testUser = await User.findOne({ where: { email: userData.email } });

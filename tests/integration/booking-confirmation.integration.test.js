@@ -12,7 +12,7 @@ const { request, sequelize, utils } = setup;
 const { resetDatabase, createTestUser, cleanup, uuidv4 } = utils;
 
 // Import app and additional models
-const app = require('../../src/app');
+const { app } = require('../../src/app');
 const { User, Booking, BookingRequest, Notification, AuditLog } = require('../../src/models');
 const { generateBookingConfirmationToken } = require('../../src/utils/crypto');
 
