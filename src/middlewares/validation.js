@@ -28,7 +28,7 @@ const validateRequest = (req, res, next) => {
 
   // Format errors to match API error response format
   const formattedErrors = errors.array().map((error) => ({
-    param: error.param,
+    param: error.path,
     message: error.msg
   }));
 

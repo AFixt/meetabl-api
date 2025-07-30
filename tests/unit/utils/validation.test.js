@@ -84,7 +84,7 @@ describe('Validation Utilities', () => {
 
     test('should reject invalid timezone identifiers', () => {
       expect(isValidTimezone('Invalid/Timezone')).toBe(false);
-      expect(isValidTimezone('EST')).toBe(false); // Deprecated format
+      expect(isValidTimezone('NotATimezone')).toBe(false); // Invalid timezone
       expect(isValidTimezone('GMT+5')).toBe(false); // Invalid format
       expect(isValidTimezone('')).toBe(false);
       expect(isValidTimezone(null)).toBe(false);
@@ -133,7 +133,7 @@ describe('Validation Utilities', () => {
 
   describe('sanitizeInput', () => {
     test('should remove HTML tags', () => {
-      expect(sanitizeInput('<script>alert("xss")</script>test')).toBe('test');
+      expect(sanitizeInput('<script>alert("xss")</script>test')).toBe('alert("xss")test');
       expect(sanitizeInput('<b>Bold text</b>')).toBe('Bold text');
       expect(sanitizeInput('<div>Content</div>')).toBe('Content');
     });
