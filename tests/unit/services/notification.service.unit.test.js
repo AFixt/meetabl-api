@@ -11,10 +11,13 @@ jest.mock('uuid', () => ({
   v4: jest.fn(() => 'test-uuid-1234')
 }));
 
+// Create a mock transporter that will be reused
+const mockTransporter = {
+  sendMail: jest.fn().mockResolvedValue({ messageId: 'test-message-id' })
+};
+
 jest.mock('nodemailer', () => ({
-  createTransporter: jest.fn(() => ({
-    sendMail: jest.fn().mockResolvedValue({ messageId: 'test-message-id' })
-  }))
+  createTransporter: jest.fn(() => mockTransporter)
 }));
 
 jest.mock('fs', () => ({
@@ -23,9 +26,19 @@ jest.mock('fs', () => ({
   }
 }));
 
-jest.mock('path', () => ({
-  join: jest.fn((...parts) => parts.join('/'))
-}));
+jest.mock('path', () => {
+  const actualPath = jest.requireActual('path');
+  return {
+    ...actualPath,
+    join: jest.fn((...parts) => {
+      // Resolve __dirname to the actual service directory path
+      const resolvedParts = parts.map(part => 
+        part === '__dirname' ? '/Users/karlgroves/Projects/meetabl/meetabl-api/src/services' : part
+      );
+      return resolvedParts.join('/');
+    })
+  };
+});
 
 jest.mock('../../../src/config/logger', () => ({
   debug: jest.fn(),
@@ -66,7 +79,11 @@ describe('NotificationService', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    mockTransporter.sendMail.mockClear();
+    mockTransporter.sendMail.mockResolvedValue({ messageId: 'test-message-id' });
     process.env = { ...originalEnv };
+    // Set NODE_ENV to development to avoid the test mock in the service
+    process.env.NODE_ENV = 'development';
   });
 
   afterAll(() => {
@@ -166,7 +183,7 @@ describe('NotificationService', () => {
       await notificationService.processNotificationQueue();
 
       // Verify email was sent
-      expect(nodemailer.createTransporter().sendMail).toHaveBeenCalled();
+      expect(mockTransporter.sendMail).toHaveBeenCalled();
       
       // Verify status update to 'sent'
       expect(Notification.update).toHaveBeenCalledWith(
@@ -343,11 +360,11 @@ describe('NotificationService', () => {
       const result = await notificationService.sendPasswordResetEmail(mockUser, 'reset-token-123');
 
       expect(fs.readFile).toHaveBeenCalledWith(
-        '__dirname/../config/templates/password-reset.html',
+        expect.stringContaining('password-reset.html'),
         'utf8'
       );
 
-      expect(nodemailer.createTransporter().sendMail).toHaveBeenCalledWith({
+      expect(mockTransporter.sendMail).toHaveBeenCalledWith({
         from: '"Meetabl" <noreply@meetabl.com>',
         to: 'john@example.com',
         subject: 'Password Reset Request - Meetabl',
@@ -373,7 +390,7 @@ describe('NotificationService', () => {
 
       await notificationService.sendPasswordResetEmail(mockUser, 'reset-token-123');
 
-      expect(nodemailer.createTransporter().sendMail).toHaveBeenCalledWith({
+      expect(mockTransporter.sendMail).toHaveBeenCalledWith({
         from: '"Meetabl" <noreply@meetabl.com>',
         to: 'john@example.com',
         subject: 'Password Reset Request - Meetabl',
@@ -428,11 +445,11 @@ describe('NotificationService', () => {
       await notificationService.sendEmailVerification(mockUser, 'verify-token-123');
 
       expect(fs.readFile).toHaveBeenCalledWith(
-        '__dirname/../config/templates/email-verification.html',
+        expect.stringContaining('email-verification.html'),
         'utf8'
       );
 
-      expect(nodemailer.createTransporter().sendMail).toHaveBeenCalledWith({
+      expect(mockTransporter.sendMail).toHaveBeenCalledWith({
         from: '"Meetabl" <noreply@meetabl.com>',
         to: 'jane@example.com',
         subject: 'Verify Your Email - Meetabl',

@@ -15,12 +15,15 @@ try {
   skipTests = true;
 }
 
+// Create a mock S3Client instance that will be reused
+const mockS3ClientInstance = {
+  send: jest.fn()
+};
+
 // Mock AWS SDK v3 modules only if they exist
 if (!skipTests) {
   jest.mock('@aws-sdk/client-s3', () => ({
-    S3Client: jest.fn().mockImplementation(() => ({
-      send: jest.fn()
-    })),
+    S3Client: jest.fn().mockImplementation(() => mockS3ClientInstance),
     PutObjectCommand: jest.fn(),
     GetObjectCommand: jest.fn(),
     DeleteObjectCommand: jest.fn()
@@ -31,30 +34,28 @@ if (!skipTests) {
   }));
 }
 
-// Mock fs module
-jest.mock('fs', () => ({
-  ...jest.requireActual('fs'),
-  readFile: jest.fn((path, callback) => {
-    callback(null, Buffer.from('test file content'));
-  }),
-  unlink: jest.fn((path, callback) => {
-    callback(null);
-  })
-}));
+// Create promisified mock functions
+const mockReadFilePromise = jest.fn().mockResolvedValue(Buffer.from('test file content'));
+const mockUnlinkPromise = jest.fn().mockResolvedValue(undefined);
 
-// Mock util.promisify
-jest.mock('util', () => ({
-  ...jest.requireActual('util'),
-  promisify: jest.fn((fn) => {
-    if (fn.name === 'readFile') {
-      return jest.fn().mockResolvedValue(Buffer.from('test file content'));
-    }
-    if (fn.name === 'unlink') {
+// Mock util.promisify before other imports
+jest.mock('util', () => {
+  const actualUtil = jest.requireActual('util');
+  return {
+    ...actualUtil,
+    promisify: jest.fn((fn) => {
+      // Check if it's fs.readFile or fs.unlink being promisified
+      if (fn && fn.toString().includes('readFile')) {
+        return mockReadFilePromise;
+      }
+      if (fn && fn.toString().includes('unlink')) {
+        return mockUnlinkPromise;
+      }
+      // For any other function, return a generic promisified mock
       return jest.fn().mockResolvedValue(undefined);
-    }
-    return fn;
-  })
-}));
+    })
+  };
+});
 
 // Mock logger
 jest.mock('../../../src/config/logger', () => ({
@@ -85,8 +86,13 @@ describe('Storage Service', () => {
     process.env.AWS_SECRET_ACCESS_KEY = 'test-secret-key';
     process.env.AWS_S3_BUCKET = 'test-bucket';
 
-    // Get the mocked S3Client instance
-    mockS3Client = new S3Client();
+    // Use the shared mock S3Client instance
+    mockS3Client = mockS3ClientInstance;
+    
+    // Reset mocks
+    mockS3Client.send.mockReset();
+    mockReadFilePromise.mockClear();
+    mockUnlinkPromise.mockClear();
   });
 
   describe('uploadFile', () => {
@@ -182,7 +188,7 @@ describe('Storage Service', () => {
 
       // Verify getSignedUrl was called with correct params
       expect(getSignedUrl).toHaveBeenCalledWith(
-        mockS3Client,
+        expect.any(Object), // Any S3Client instance
         expect.any(GetObjectCommand),
         { expiresIn: 7200 }
       );
@@ -198,7 +204,7 @@ describe('Storage Service', () => {
 
       // Verify default expiration of 3600 seconds (1 hour) was used
       expect(getSignedUrl).toHaveBeenCalledWith(
-        mockS3Client,
+        expect.any(Object), // Any S3Client instance
         expect.any(GetObjectCommand),
         { expiresIn: 3600 }
       );

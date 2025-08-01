@@ -16,8 +16,12 @@ function isValidEmail(email) {
     return false;
   }
 
-  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  return emailRegex.test(email);
+  // More strict email validation - requires at least one dot after @ and proper domain
+  // Also check for consecutive dots which are invalid
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+  const hasConsecutiveDots = /\.\./.test(email);
+  
+  return emailRegex.test(email) && !hasConsecutiveDots;
 }
 
 /**
@@ -144,9 +148,9 @@ function validateBookingTime(dateTime, requireBusinessHours = false) {
     return false;
   }
 
-  // Check business hours if required (9 AM to 6 PM)
+  // Check business hours if required (9 AM to 6 PM UTC)
   if (requireBusinessHours) {
-    const hour = bookingDate.getHours();
+    const hour = bookingDate.getUTCHours();
     if (hour < 9 || hour >= 18) {
       return false;
     }

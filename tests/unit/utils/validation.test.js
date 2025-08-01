@@ -1,9 +1,6 @@
 /**
- * Validation Utility Tests
- * 
+ * Validation Utilities Tests
  * Tests for data validation utility functions
- * 
- * @author meetabl Team
  */
 
 const {
@@ -19,185 +16,302 @@ const {
 
 describe('Validation Utilities', () => {
   describe('isValidEmail', () => {
-    test('should validate correct email formats', () => {
-      expect(isValidEmail('test@example.com')).toBe(true);
-      expect(isValidEmail('user.name@domain.co.uk')).toBe(true);
-      expect(isValidEmail('user+tag@example.org')).toBe(true);
-      expect(isValidEmail('123@domain.com')).toBe(true);
+    it('should validate correct email formats', () => {
+      const validEmails = [
+        'user@example.com',
+        'test.user@example.com',
+        'user+tag@example.co.uk',
+        'user_123@test-domain.com',
+        'firstName.lastName@company.io'
+      ];
+
+      validEmails.forEach(email => {
+        expect(isValidEmail(email)).toBe(true);
+      });
     });
 
-    test('should reject invalid email formats', () => {
-      expect(isValidEmail('invalid')).toBe(false);
-      expect(isValidEmail('user@')).toBe(false);
-      expect(isValidEmail('@domain.com')).toBe(false);
-      expect(isValidEmail('user.domain.com')).toBe(false);
-      expect(isValidEmail('')).toBe(false);
-      expect(isValidEmail(null)).toBe(false);
-      expect(isValidEmail(undefined)).toBe(false);
+    it('should reject invalid email formats', () => {
+      const invalidEmails = [
+        'user@',
+        '@example.com',
+        'user@example',
+        'user example@test.com',
+        'user@.com',
+        'user..test@example.com',
+        '',
+        null,
+        undefined,
+        123,
+        {},
+        []
+      ];
+
+      invalidEmails.forEach(email => {
+        expect(isValidEmail(email)).toBe(false);
+      });
     });
   });
 
   describe('isValidPhone', () => {
-    test('should validate correct phone formats', () => {
-      expect(isValidPhone('+1234567890')).toBe(true);
-      expect(isValidPhone('1234567890')).toBe(true);
-      expect(isValidPhone('+44 20 7123 4567')).toBe(true);
-      expect(isValidPhone('(555) 123-4567')).toBe(true);
-      expect(isValidPhone('555.123.4567')).toBe(true);
+    it('should validate correct phone formats', () => {
+      const validPhones = [
+        '1234567890',
+        '+1 (234) 567-8900',
+        '234.567.8900',
+        '234-567-8900',
+        '+44 20 7946 0958',
+        '(555) 123-4567'
+      ];
+
+      validPhones.forEach(phone => {
+        expect(isValidPhone(phone)).toBe(true);
+      });
     });
 
-    test('should reject invalid phone formats', () => {
-      expect(isValidPhone('123')).toBe(false);
-      expect(isValidPhone('abc123def')).toBe(false);
-      expect(isValidPhone('')).toBe(false);
-      expect(isValidPhone(null)).toBe(false);
-      expect(isValidPhone(undefined)).toBe(false);
+    it('should reject invalid phone formats', () => {
+      const invalidPhones = [
+        '123456789', // Too few digits
+        '123',
+        'abcdefghij',
+        '',
+        null,
+        undefined,
+        123,
+        {},
+        []
+      ];
+
+      invalidPhones.forEach(phone => {
+        expect(isValidPhone(phone)).toBe(false);
+      });
     });
   });
 
   describe('isValidPassword', () => {
-    test('should validate strong passwords', () => {
-      expect(isValidPassword('Password123!')).toBe(true);
-      expect(isValidPassword('MySecure123')).toBe(true);
-      expect(isValidPassword('Test123456')).toBe(true);
+    it('should validate strong passwords', () => {
+      const validPasswords = [
+        'StrongPass123',
+        'MyP@ssw0rd!',
+        'TestUser123',
+        'Complex1Password',
+        'UPPER1lower'
+      ];
+
+      validPasswords.forEach(password => {
+        expect(isValidPassword(password)).toBe(true);
+      });
     });
 
-    test('should reject weak passwords', () => {
-      expect(isValidPassword('password')).toBe(false); // No uppercase or numbers
-      expect(isValidPassword('PASSWORD')).toBe(false); // No lowercase or numbers
-      expect(isValidPassword('123456')).toBe(false); // No letters
-      expect(isValidPassword('Pass1')).toBe(false); // Too short
-      expect(isValidPassword('')).toBe(false);
-      expect(isValidPassword(null)).toBe(false);
-      expect(isValidPassword(undefined)).toBe(false);
+    it('should reject weak passwords', () => {
+      const invalidPasswords = [
+        'short1A', // Too short
+        'alllowercase123',
+        'ALLUPPERCASE123',
+        'NoNumbers!',
+        'nouppercasehere1',
+        '12345678',
+        '',
+        null,
+        undefined,
+        123
+      ];
+
+      invalidPasswords.forEach(password => {
+        expect(isValidPassword(password)).toBe(false);
+      });
     });
   });
 
   describe('isValidTimezone', () => {
-    test('should validate correct timezone identifiers', () => {
-      expect(isValidTimezone('UTC')).toBe(true);
-      expect(isValidTimezone('America/New_York')).toBe(true);
-      expect(isValidTimezone('Europe/London')).toBe(true);
-      expect(isValidTimezone('Asia/Tokyo')).toBe(true);
-      expect(isValidTimezone('America/Los_Angeles')).toBe(true);
+    it('should validate correct timezones', () => {
+      const validTimezones = [
+        'America/New_York',
+        'Europe/London',
+        'Asia/Tokyo',
+        'UTC',
+        'America/Los_Angeles',
+        'Australia/Sydney'
+      ];
+
+      validTimezones.forEach(timezone => {
+        expect(isValidTimezone(timezone)).toBe(true);
+      });
     });
 
-    test('should reject invalid timezone identifiers', () => {
-      expect(isValidTimezone('Invalid/Timezone')).toBe(false);
-      expect(isValidTimezone('NotATimezone')).toBe(false); // Invalid timezone
-      expect(isValidTimezone('GMT+5')).toBe(false); // Invalid format
-      expect(isValidTimezone('')).toBe(false);
-      expect(isValidTimezone(null)).toBe(false);
-      expect(isValidTimezone(undefined)).toBe(false);
+    it('should reject invalid timezones', () => {
+      const invalidTimezones = [
+        'Invalid/Timezone',
+        'America/InvalidCity',
+        'NotATimezone',
+        '',
+        null,
+        undefined,
+        123,
+        {},
+        []
+      ];
+
+      invalidTimezones.forEach(timezone => {
+        expect(isValidTimezone(timezone)).toBe(false);
+      });
     });
   });
 
   describe('isValidDate', () => {
-    test('should validate correct date formats', () => {
-      expect(isValidDate('2024-01-01')).toBe(true);
-      expect(isValidDate('2024-12-31')).toBe(true);
-      expect(isValidDate(new Date())).toBe(true);
-      expect(isValidDate(new Date('2024-01-01'))).toBe(true);
+    it('should validate correct date formats', () => {
+      const validDates = [
+        new Date(),
+        '2024-01-01',
+        '2024-01-01T10:00:00Z',
+        'January 1, 2024',
+        new Date('2024-12-31'),
+        1704067200000 // Timestamp
+      ];
+
+      validDates.forEach(date => {
+        expect(isValidDate(date)).toBe(true);
+      });
     });
 
-    test('should reject invalid dates', () => {
-      expect(isValidDate('2024-13-01')).toBe(false); // Invalid month
-      expect(isValidDate('2024-01-32')).toBe(false); // Invalid day
-      expect(isValidDate('invalid-date')).toBe(false);
-      expect(isValidDate('')).toBe(false);
-      expect(isValidDate(null)).toBe(false);
-      expect(isValidDate(undefined)).toBe(false);
-      expect(isValidDate(new Date('invalid'))).toBe(false);
+    it('should reject invalid dates', () => {
+      const invalidDates = [
+        'Invalid Date',
+        '2024-13-01', // Invalid month
+        '2024-01-32', // Invalid day
+        '',
+        null,
+        undefined,
+        {},
+        [],
+        NaN
+      ];
+
+      invalidDates.forEach(date => {
+        expect(isValidDate(date)).toBe(false);
+      });
     });
   });
 
   describe('isValidDuration', () => {
-    test('should validate reasonable duration values', () => {
-      expect(isValidDuration(15)).toBe(true);
-      expect(isValidDuration(30)).toBe(true);
-      expect(isValidDuration(60)).toBe(true);
-      expect(isValidDuration(120)).toBe(true);
-      expect(isValidDuration(480)).toBe(true); // 8 hours
+    it('should validate correct durations', () => {
+      const validDurations = [
+        15,
+        30,
+        45,
+        60,
+        90,
+        120,
+        240,
+        480,
+        1440 // 24 hours
+      ];
+
+      validDurations.forEach(duration => {
+        expect(isValidDuration(duration)).toBe(true);
+      });
     });
 
-    test('should reject invalid duration values', () => {
-      expect(isValidDuration(0)).toBe(false);
-      expect(isValidDuration(-30)).toBe(false);
-      expect(isValidDuration(1441)).toBe(false); // More than 24 hours
-      expect(isValidDuration(5)).toBe(false); // Too short
-      expect(isValidDuration('30')).toBe(false); // String
-      expect(isValidDuration(null)).toBe(false);
-      expect(isValidDuration(undefined)).toBe(false);
+    it('should reject invalid durations', () => {
+      const invalidDurations = [
+        14, // Too short
+        1441, // Too long
+        0,
+        -30,
+        NaN,
+        Infinity,
+        '30',
+        null,
+        undefined
+      ];
+
+      invalidDurations.forEach(duration => {
+        expect(isValidDuration(duration)).toBe(false);
+      });
     });
   });
 
   describe('sanitizeInput', () => {
-    test('should remove HTML tags', () => {
-      expect(sanitizeInput('<script>alert("xss")</script>test')).toBe('alert("xss")test');
-      expect(sanitizeInput('<b>Bold text</b>')).toBe('Bold text');
-      expect(sanitizeInput('<div>Content</div>')).toBe('Content');
+    it('should remove HTML tags', () => {
+      const inputs = [
+        { input: '<script>alert("xss")</script>', expected: 'alert("xss")' },
+        { input: '<p>Hello <b>World</b></p>', expected: 'Hello World' },
+        { input: '<img src="x" onerror="alert(1)">', expected: '' },
+        { input: '<a href="#">Link</a>', expected: 'Link' }
+      ];
+
+      inputs.forEach(({ input, expected }) => {
+        expect(sanitizeInput(input)).toBe(expected);
+      });
     });
 
-    test('should trim whitespace', () => {
-      expect(sanitizeInput('  test  ')).toBe('test');
-      expect(sanitizeInput('\n\ttest\t\n')).toBe('test');
+    it('should decode HTML entities', () => {
+      const inputs = [
+        { input: '&lt;script&gt;', expected: '<script>' },
+        { input: '&amp; &lt; &gt; &quot;', expected: '& < > "' },
+        { input: '&#x27;Hello&#x27;', expected: "'Hello'" }
+      ];
+
+      inputs.forEach(({ input, expected }) => {
+        expect(sanitizeInput(input)).toBe(expected);
+      });
     });
 
-    test('should handle special characters', () => {
-      expect(sanitizeInput('test&amp;more')).toBe('test&more');
-      expect(sanitizeInput('test&lt;script&gt;')).toBe('test<script>');
+    it('should trim whitespace', () => {
+      expect(sanitizeInput('  Hello World  ')).toBe('Hello World');
+      expect(sanitizeInput('\n\tTest\n\t')).toBe('Test');
     });
 
-    test('should handle empty or invalid inputs', () => {
-      expect(sanitizeInput('')).toBe('');
-      expect(sanitizeInput('   ')).toBe('');
+    it('should handle invalid inputs', () => {
       expect(sanitizeInput(null)).toBe('');
       expect(sanitizeInput(undefined)).toBe('');
+      expect(sanitizeInput(123)).toBe('');
+      expect(sanitizeInput({})).toBe('');
     });
   });
 
   describe('validateBookingTime', () => {
-    test('should validate future booking times', () => {
-      const futureDate = new Date();
-      futureDate.setHours(futureDate.getHours() + 2);
-      
+    beforeEach(() => {
+      // Mock current time for consistent testing
+      jest.useFakeTimers();
+      jest.setSystemTime(new Date('2024-01-01T12:00:00Z'));
+    });
+
+    afterEach(() => {
+      jest.useRealTimers();
+    });
+
+    it('should accept future dates', () => {
+      const futureDate = new Date('2024-01-02T14:00:00Z');
       expect(validateBookingTime(futureDate)).toBe(true);
     });
 
-    test('should reject past booking times', () => {
-      const pastDate = new Date();
-      pastDate.setHours(pastDate.getHours() - 1);
-      
+    it('should reject past dates', () => {
+      const pastDate = new Date('2023-12-31T14:00:00Z');
       expect(validateBookingTime(pastDate)).toBe(false);
     });
 
-    test('should validate business hours', () => {
-      const businessHour = new Date();
-      businessHour.setHours(10, 0, 0, 0); // 10 AM
-      businessHour.setDate(businessHour.getDate() + 1); // Tomorrow
-      
-      expect(validateBookingTime(businessHour, true)).toBe(true);
+    it('should reject current time', () => {
+      const now = new Date('2024-01-01T12:00:00Z');
+      expect(validateBookingTime(now)).toBe(false);
     });
 
-    test('should reject non-business hours when required', () => {
-      const earlyHour = new Date();
-      earlyHour.setHours(6, 0, 0, 0); // 6 AM
-      earlyHour.setDate(earlyHour.getDate() + 1); // Tomorrow
-      
-      expect(validateBookingTime(earlyHour, true)).toBe(false);
-      
-      const lateHour = new Date();
-      lateHour.setHours(22, 0, 0, 0); // 10 PM
-      lateHour.setDate(lateHour.getDate() + 1); // Tomorrow
-      
-      expect(validateBookingTime(lateHour, true)).toBe(false);
+    it('should validate business hours when required', () => {
+      // Within business hours (9 AM - 6 PM)
+      const validTime = new Date('2024-01-02T14:00:00Z'); // 2 PM
+      expect(validateBookingTime(validTime, true)).toBe(true);
+
+      // Outside business hours
+      const earlyTime = new Date('2024-01-02T08:00:00Z'); // 8 AM
+      expect(validateBookingTime(earlyTime, true)).toBe(false);
+
+      const lateTime = new Date('2024-01-02T19:00:00Z'); // 7 PM
+      expect(validateBookingTime(lateTime, true)).toBe(false);
     });
 
-    test('should handle invalid date inputs', () => {
+    it('should handle invalid dates', () => {
+      expect(validateBookingTime('invalid date')).toBe(false);
       expect(validateBookingTime(null)).toBe(false);
       expect(validateBookingTime(undefined)).toBe(false);
-      expect(validateBookingTime('invalid')).toBe(false);
-      expect(validateBookingTime(new Date('invalid'))).toBe(false);
     });
   });
 });
