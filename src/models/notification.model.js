@@ -10,7 +10,6 @@
 const { DataTypes } = require('sequelize');
 const { v4: uuidv4 } = require('uuid');
 const { sequelize } = require('../config/database');
-const Booking = require('./booking.model');
 
 const Notification = sequelize.define('Notification', {
   id: {
@@ -22,7 +21,7 @@ const Notification = sequelize.define('Notification', {
     type: DataTypes.STRING(36),
     allowNull: false,
     references: {
-      model: Booking,
+      model: 'bookings',
       key: 'id'
     }
   },
@@ -43,7 +42,7 @@ const Notification = sequelize.define('Notification', {
     allowNull: true
   }
 }, {
-  tableName: 'Notifications',
+  tableName: 'notifications',
   timestamps: false
 });
 

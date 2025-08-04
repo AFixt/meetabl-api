@@ -144,6 +144,10 @@ describe('Payment Model', () => {
   });
 
   describe('Payment Status Management', () => {
+    beforeEach(() => {
+      Payment.update.mockResolvedValue([1]);
+    });
+
     test('should support querying payments by status', async () => {
       const mockPayments = [
         {
@@ -298,6 +302,10 @@ describe('Payment Model', () => {
   });
 
   describe('Stripe Integration', () => {
+    beforeEach(() => {
+      Payment.update.mockResolvedValue([1]);
+    });
+
     test('should support finding payment by Stripe payment intent ID', async () => {
       Payment.findOne.mockResolvedValue({
         id: 'payment-123',
@@ -352,6 +360,21 @@ describe('Payment Model', () => {
   });
 
   describe('Currency Support', () => {
+    beforeEach(() => {
+      Payment.create.mockImplementation(async (data) => ({
+        id: data.id || uuidv4(),
+        user_id: data.user_id,
+        booking_id: data.booking_id,
+        amount: data.amount,
+        currency: data.currency || 'USD',
+        status: data.status || 'pending',
+        stripe_payment_intent_id: data.stripe_payment_intent_id || null,
+        created_at: new Date(),
+        updated_at: new Date(),
+        ...data
+      }));
+    });
+
     const supportedCurrencies = [
       'USD', 'EUR', 'GBP', 'CAD', 'AUD', 'JPY', 'CHF', 'CNY', 'INR', 'BRL'
     ];
@@ -396,6 +419,10 @@ describe('Payment Model', () => {
   });
 
   describe('Payment Status Transitions', () => {
+    beforeEach(() => {
+      Payment.update.mockResolvedValue([1]);
+    });
+
     const statusTransitions = [
       { from: 'pending', to: 'completed' },
       { from: 'pending', to: 'failed' },
@@ -447,6 +474,21 @@ describe('Payment Model', () => {
   });
 
   describe('Business Logic Edge Cases', () => {
+    beforeEach(() => {
+      Payment.create.mockImplementation(async (data) => ({
+        id: data.id || uuidv4(),
+        user_id: data.user_id,
+        booking_id: data.booking_id,
+        amount: data.amount,
+        currency: data.currency || 'USD',
+        status: data.status || 'pending',
+        stripe_payment_intent_id: data.stripe_payment_intent_id || null,
+        created_at: new Date(),
+        updated_at: new Date(),
+        ...data
+      }));
+    });
+
     test('should handle large payment amounts', async () => {
       const validData = {
         user_id: 'user-123',

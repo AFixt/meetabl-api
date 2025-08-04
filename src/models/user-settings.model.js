@@ -10,7 +10,6 @@
 const { DataTypes } = require('sequelize');
 const { v4: uuidv4 } = require('uuid');
 const { sequelize } = require('../config/database');
-const User = require('./user.model');
 
 const UserSettings = sequelize.define('UserSettings', {
   id: {
@@ -23,7 +22,7 @@ const UserSettings = sequelize.define('UserSettings', {
     allowNull: false,
     field: 'user_id',
     references: {
-      model: User,
+      model: 'users',
       key: 'id'
     }
   },
@@ -123,7 +122,7 @@ const UserSettings = sequelize.define('UserSettings', {
     }
   }
 }, {
-  tableName: 'UserSettings',
+  tableName: 'user_settings',
   timestamps: false
 });
 

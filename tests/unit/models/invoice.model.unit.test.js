@@ -170,6 +170,8 @@ describe('Invoice Model', () => {
     });
 
     test('should support updating invoice status', async () => {
+      Invoice.update.mockResolvedValue([1]);
+      
       const updatedCount = await Invoice.update(
         { status: 'paid' },
         { where: { id: 'invoice-123' } }
@@ -183,6 +185,8 @@ describe('Invoice Model', () => {
     });
 
     test('should support updating PDF URL after generation', async () => {
+      Invoice.update.mockResolvedValue([1]);
+      
       const pdfUrl = 'https://storage.example.com/invoices/inv-2024-001.pdf';
       const updatedCount = await Invoice.update(
         { 
@@ -203,6 +207,8 @@ describe('Invoice Model', () => {
     });
 
     test('should support marking invoice as paid', async () => {
+      Invoice.update.mockResolvedValue([1]);
+      
       const updatedCount = await Invoice.update(
         { status: 'paid' },
         { where: { payment_id: 'payment-123' } }
@@ -313,6 +319,8 @@ describe('Invoice Model', () => {
     ];
 
     test.each(statusTransitions)('should support status transition from %s to %s', async ({ from, to }) => {
+      Invoice.update.mockResolvedValue([1]);
+      
       const updatedCount = await Invoice.update(
         { status: to },
         { where: { status: from } }
@@ -488,6 +496,20 @@ describe('Invoice Model', () => {
   });
 
   describe('Validation Edge Cases', () => {
+    beforeEach(() => {
+      // Setup default mock implementation for create
+      Invoice.create.mockImplementation(async (data) => ({
+        id: data.id || uuidv4(),
+        payment_id: data.payment_id,
+        invoice_number: data.invoice_number,
+        pdf_url: data.pdf_url || null,
+        status: data.status || 'draft',
+        created_at: new Date(),
+        updated_at: new Date(),
+        ...data
+      }));
+    });
+
     test('should handle long invoice numbers', async () => {
       const longInvoiceNumber = 'INV-' + '2024'.repeat(10) + '-001'; // Test near the limit
 
@@ -534,6 +556,15 @@ describe('Invoice Model', () => {
           payment_id: `payment-${i}`,
           invoice_number: specialInvoiceNumbers[i]
         };
+
+        Invoice.create.mockResolvedValueOnce({
+          ...validData,
+          id: uuidv4(),
+          pdf_url: null,
+          status: 'draft',
+          created_at: new Date(),
+          updated_at: new Date()
+        });
 
         const result = await Invoice.create(validData);
 

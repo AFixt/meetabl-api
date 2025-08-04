@@ -14,9 +14,9 @@ describe('Booking Model Isolated', () => {
     Booking = require('../../../src/models/booking.model');
   });
 
-  test('should export a model object', () => {
+  test('should export a model function', () => {
     expect(Booking).toBeDefined();
-    expect(typeof Booking).toBe('object');
+    expect(typeof Booking).toBe('function');
   });
 
   test('should have model properties', () => {

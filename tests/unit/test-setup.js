@@ -12,9 +12,13 @@ process.env.JWT_SECRET = 'test-jwt-secret';
 process.env.JWT_EXPIRES_IN = '1h';
 process.env.JWT_REFRESH_EXPIRES_IN = '7d';
 
-// Configure SQLite for testing
-process.env.DB_DIALECT = 'sqlite';
-process.env.DB_STORAGE = ':memory:';
+// Configure MySQL for testing (as per CLAUDE.md - NEVER use SQLite)
+process.env.DB_DIALECT = 'mysql';
+process.env.DB_HOST = 'localhost';
+process.env.DB_PORT = '3306';
+process.env.DB_NAME = 'meetabl_test';
+process.env.DB_USER = 'meetabl_user';
+process.env.DB_PASSWORD = 'meetabl_password';
 
 // Mock logger
 jest.mock('../../src/config/logger', () => ({
@@ -108,6 +112,7 @@ global.createMockResponse = () => {
   res.json = jest.fn().mockReturnValue(res);
   res.send = jest.fn().mockReturnValue(res);
   res.set = jest.fn().mockReturnValue(res);
+  res.setHeader = jest.fn().mockReturnValue(res);
   res.redirect = jest.fn().mockImplementation(() => res);
   res.end = jest.fn().mockReturnValue(res);
   return res;

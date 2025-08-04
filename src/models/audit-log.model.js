@@ -10,7 +10,6 @@
 const { DataTypes } = require('sequelize');
 const { v4: uuidv4 } = require('uuid');
 const { sequelize } = require('../config/database');
-const User = require('./user.model');
 
 const AuditLog = sequelize.define('AuditLog', {
   id: {
@@ -23,7 +22,7 @@ const AuditLog = sequelize.define('AuditLog', {
     allowNull: false,
     field: 'user_id',
     references: {
-      model: User,
+      model: 'users',
       key: 'id'
     }
   },
@@ -40,7 +39,7 @@ const AuditLog = sequelize.define('AuditLog', {
     defaultValue: DataTypes.NOW
   }
 }, {
-  tableName: 'AuditLogs',
+  tableName: 'audit_logs',
   timestamps: true,
   createdAt: 'created',
   updatedAt: false

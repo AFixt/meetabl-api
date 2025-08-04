@@ -4,6 +4,17 @@
  * @author meetabl Team
  */
 
+// Set JWT_SECRET before imports
+process.env.JWT_SECRET = 'test-secret';
+
+// Mock logger
+jest.mock('../../../src/config/logger', () => ({
+  debug: jest.fn(),
+  error: jest.fn(),
+  info: jest.fn(),
+  warn: jest.fn()
+}));
+
 const { authenticateJWT } = require('../../../src/middlewares/auth');
 // Mock models and JWT
 jest.mock('../../../src/models', () => ({
@@ -11,11 +22,14 @@ jest.mock('../../../src/models', () => ({
     findOne: jest.fn().mockImplementation(({ where }) => {
       // For the valid user test
       if (where && where.id === 'test-user-id') {
-        return Promise.resolve({ id: 'test-user-id', name: 'Test User' });
+        return Promise.resolve({ id: 'test-user-id', name: 'Test User', status: 'active' });
       }
       // For the non-existent user test
       return Promise.resolve(null);
     })
+  },
+  JwtBlacklist: {
+    findOne: jest.fn().mockResolvedValue(null)
   }
 }));
 

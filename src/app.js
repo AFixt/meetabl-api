@@ -106,6 +106,11 @@ initializePWA(app);
 // Serve static files (for PWA assets)
 app.use(express.static(path.join(__dirname, '../public')));
 
+// Serve uploaded files in development
+if (!process.env.AWS_ACCESS_KEY_ID || !process.env.AWS_SECRET_ACCESS_KEY || !process.env.AWS_S3_BUCKET) {
+  app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
+}
+
 // Status monitor configuration
 const statusMonitorConfig = {
   title: 'meetabl API Status',
@@ -198,7 +203,7 @@ app.use(cors({
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'Accept', 'Cookie'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'Accept', 'Cookie', 'X-CSRF-Token'],
   exposedHeaders: ['X-Total-Count', 'Set-Cookie'],
   optionsSuccessStatus: 200
 }));
@@ -302,6 +307,7 @@ const stripeWebhookRoutes = require('./routes/stripe-webhook.routes');
 const stripeElementsRoutes = require('./routes/stripe-elements.routes');
 const twoFactorAuthRoutes = require('./routes/two-factor-auth.routes');
 const testRoutes = require('./routes/test.routes');
+const eventTypeRoutes = require('./routes/event-type.routes');
 
 // Database monitoring endpoint (only in development/staging)
 if (process.env.NODE_ENV !== 'production') {
@@ -349,6 +355,7 @@ const initializeApp = async () => {
     app.use('/api/stripe/webhook', stripeWebhookRoutes);
     app.use('/api/stripe/elements', protectCsrf, stripeElementsRoutes);
     app.use('/api/2fa', protectCsrf, twoFactorAuthRoutes);
+    app.use('/api/event-types', protectCsrf, eventTypeRoutes);
     
     // Test routes (only in test/development environments)
     if (process.env.NODE_ENV === 'test' || process.env.NODE_ENV === 'development') {

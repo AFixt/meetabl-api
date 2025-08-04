@@ -38,6 +38,7 @@ const mockRequest = (overrides = {}) => {
     query: {},
     params: {},
     headers: {},
+    cookies: {},
     ...overrides
   };
   return req;

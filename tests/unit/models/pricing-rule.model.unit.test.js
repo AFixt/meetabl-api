@@ -198,6 +198,21 @@ describe('PricingRule Model', () => {
   });
 
   describe('Currency Support', () => {
+    beforeEach(() => {
+      PricingRule.create.mockImplementation(async (data) => ({
+        id: data.id || uuidv4(),
+        user_id: data.user_id,
+        name: data.name,
+        description: data.description || null,
+        price_per_slot: data.price_per_slot,
+        currency: data.currency || 'USD',
+        is_active: data.is_active !== undefined ? data.is_active : true,
+        created_at: new Date(),
+        updated_at: new Date(),
+        ...data
+      }));
+    });
+
     const supportedCurrencies = [
       'USD', 'EUR', 'GBP', 'CAD', 'AUD', 'JPY', 'CHF', 'CNY', 'INR', 'BRL'
     ];
@@ -218,6 +233,21 @@ describe('PricingRule Model', () => {
   });
 
   describe('Price Tier Management', () => {
+    beforeEach(() => {
+      PricingRule.create.mockImplementation(async (data) => ({
+        id: data.id || uuidv4(),
+        user_id: data.user_id,
+        name: data.name,
+        description: data.description || null,
+        price_per_slot: data.price_per_slot,
+        currency: data.currency || 'USD',
+        is_active: data.is_active !== undefined ? data.is_active : true,
+        created_at: new Date(),
+        updated_at: new Date(),
+        ...data
+      }));
+    });
+
     test('should support different price tiers', async () => {
       const priceTiers = [
         { name: 'Basic', price: 50.00 },

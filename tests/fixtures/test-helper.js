@@ -52,7 +52,7 @@ const mockModels = () => {
   });
 
   // Create all models
-  return {
+  const models = {
     User: {
       ...createMockModel('User'),
       // Override findOne for password validation
@@ -74,8 +74,20 @@ const mockModels = () => {
     Booking: createMockModel('Booking'),
     Notification: createMockModel('Notification'),
     CalendarToken: createMockModel('CalendarToken'),
-    AuditLog: createMockModel('AuditLog')
+    AuditLog: createMockModel('AuditLog'),
+    BookingRequest: createMockModel('BookingRequest'),
+    JwtBlacklist: createMockModel('JwtBlacklist'),
+    Team: createMockModel('Team'),
+    TeamMember: createMockModel('TeamMember'),
+    Payment: createMockModel('Payment'),
+    PricingRule: createMockModel('PricingRule'),
+    Invoice: createMockModel('Invoice')
   };
+  
+  // Add sequelize to the models object
+  models.sequelize = mockSequelize();
+  
+  return models;
 };
 
 /**
@@ -102,7 +114,12 @@ const mockSequelize = () => ({
     and: Symbol('and')
   },
   fn: jest.fn((fnName, col) => `${fnName}(${col})`),
-  col: jest.fn((colName) => colName)
+  col: jest.fn((colName) => colName),
+  literal: jest.fn((literal) => literal),
+  QueryTypes: {
+    SELECT: 'SELECT'
+  },
+  query: jest.fn().mockResolvedValue([])
 });
 
 /**
@@ -196,7 +213,12 @@ const setupControllerMocks = () => {
         and: Symbol('and')
       },
       fn: jest.fn((fnName, col) => `${fnName}(${col})`),
-      col: jest.fn((colName) => colName)
+      col: jest.fn((colName) => colName),
+      literal: jest.fn((literal) => literal),
+      QueryTypes: {
+        SELECT: 'SELECT'
+      },
+      query: jest.fn().mockResolvedValue([])
     };
     return {
       sequelize: mockSeq,

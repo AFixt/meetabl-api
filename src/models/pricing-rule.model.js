@@ -10,7 +10,6 @@
 const { DataTypes } = require('sequelize');
 const { v4: uuidv4 } = require('uuid');
 const { sequelize } = require('../config/database');
-const User = require('./user.model');
 
 const PricingRule = sequelize.define('PricingRule', {
   id: {
@@ -22,7 +21,7 @@ const PricingRule = sequelize.define('PricingRule', {
     type: DataTypes.STRING(36),
     allowNull: false,
     references: {
-      model: User,
+      model: 'Users',
       key: 'id'
     }
   },

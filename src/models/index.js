@@ -20,6 +20,7 @@ const TeamMember = require('./team-member.model');
 const Payment = require('./payment.model');
 const PricingRule = require('./pricing-rule.model');
 const Invoice = require('./invoice.model');
+const EventType = require('./event-type.model');
 
 // Initialize associations after all models are loaded
 const { defineAssociations } = require('./associations');
@@ -39,5 +40,6 @@ module.exports = {
   TeamMember,
   Payment,
   PricingRule,
-  Invoice
+  Invoice,
+  EventType
 };

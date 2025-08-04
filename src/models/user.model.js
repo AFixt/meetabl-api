@@ -51,7 +51,8 @@ const User = sequelize.define('User', {
   },
   password: {
     type: DataTypes.STRING(255),
-    allowNull: false
+    allowNull: false,
+    field: 'password_hash'
   },
   subscription_plan: {
     type: DataTypes.STRING(100),
@@ -89,6 +90,11 @@ const User = sequelize.define('User', {
     type: DataTypes.STRING(20),
     allowNull: true,
     field: 'phone_number'
+  },
+  avatarUrl: {
+    type: DataTypes.STRING(512),
+    allowNull: true,
+    field: 'avatar_url'
   },
   calendar_provider: {
     type: DataTypes.ENUM('none', 'google', 'microsoft'),
@@ -139,7 +145,7 @@ const User = sequelize.define('User', {
   },
   // Plan limit fields
   plan_type: {
-    type: DataTypes.ENUM('free', 'paid'),
+    type: DataTypes.ENUM('free', 'basic', 'professional'),
     allowNull: false,
     defaultValue: 'free'
   },
@@ -154,6 +160,26 @@ const User = sequelize.define('User', {
     defaultValue: 1
   },
   integrations_enabled: {
+    type: DataTypes.BOOLEAN,
+    allowNull: false,
+    defaultValue: true // All plans now have integrations
+  },
+  can_remove_branding: {
+    type: DataTypes.BOOLEAN,
+    allowNull: false,
+    defaultValue: false
+  },
+  can_customize_avatar: {
+    type: DataTypes.BOOLEAN,
+    allowNull: false,
+    defaultValue: false
+  },
+  can_customize_booking_page: {
+    type: DataTypes.BOOLEAN,
+    allowNull: false,
+    defaultValue: false
+  },
+  can_use_meeting_polls: {
     type: DataTypes.BOOLEAN,
     allowNull: false,
     defaultValue: false
@@ -190,7 +216,7 @@ const User = sequelize.define('User', {
     defaultValue: DataTypes.NOW
   }
 }, {
-  tableName: 'Users',
+  tableName: 'users',
   timestamps: true,
   createdAt: 'created',
   updatedAt: 'updated'
@@ -210,7 +236,7 @@ User.prototype.validatePassword = async function (password) {
  * @returns {boolean} Whether user has paid subscription
  */
 User.prototype.hasPaidSubscription = function () {
-  return this.plan_type === 'paid' && 
+  return (this.plan_type === 'basic' || this.plan_type === 'professional') && 
          this.stripe_subscription_status === 'active';
 };
 
@@ -241,6 +267,58 @@ User.prototype.canUseIntegrations = function () {
 };
 
 /**
+ * Gets plan limits based on plan type
+ * @returns {object} Plan limits and features
+ */
+User.prototype.getPlanLimits = function () {
+  const limits = {
+    free: {
+      max_event_types: 1,
+      max_calendars: 1,
+      can_remove_branding: false,
+      can_customize_avatar: false,
+      can_customize_booking_page: false,
+      can_use_meeting_polls: false,
+      price_monthly: 0
+    },
+    basic: {
+      max_event_types: 999, // unlimited
+      max_calendars: 5,
+      can_remove_branding: true,
+      can_customize_avatar: true,
+      can_customize_booking_page: true,
+      can_use_meeting_polls: false,
+      price_monthly: 9
+    },
+    professional: {
+      max_event_types: 999, // unlimited
+      max_calendars: 999, // unlimited
+      can_remove_branding: true,
+      can_customize_avatar: true,
+      can_customize_booking_page: true,
+      can_use_meeting_polls: true,
+      price_monthly: 17
+    }
+  };
+  
+  return limits[this.plan_type] || limits.free;
+};
+
+/**
+ * Apply plan limits when plan changes
+ */
+User.prototype.applyPlanLimits = function () {
+  const limits = this.getPlanLimits();
+  
+  this.max_event_types = limits.max_event_types;
+  this.max_calendars = limits.max_calendars;
+  this.can_remove_branding = limits.can_remove_branding;
+  this.can_customize_avatar = limits.can_customize_avatar;
+  this.can_customize_booking_page = limits.can_customize_booking_page;
+  this.can_use_meeting_polls = limits.can_use_meeting_polls;
+};
+
+/**
  * Set up hooks for password hashing
  */
 const hashPassword = async (user) => {
@@ -254,5 +332,12 @@ const hashPassword = async (user) => {
 // Add hooks directly to the model
 User.beforeCreate(hashPassword);
 User.beforeUpdate(hashPassword);
+
+// Apply plan limits when plan type changes
+User.beforeUpdate(async (user) => {
+  if (user.changed('plan_type')) {
+    user.applyPlanLimits();
+  }
+});
 
 module.exports = User;

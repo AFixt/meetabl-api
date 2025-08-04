@@ -14,7 +14,14 @@ const logger = require('../config/logger');
 const { User, UserSettings, AuditLog } = require('../models');
 const { sequelize } = require('../config/database');
 const { asyncHandler, successResponse, notFoundError, validationError, unauthorizedError } = require('../utils/error-response');
-const { uploadFile, deleteFile } = require('../services/storage.service');
+// Use local storage if AWS credentials are not configured
+let uploadFile, deleteFile;
+if (process.env.AWS_ACCESS_KEY_ID && process.env.AWS_SECRET_ACCESS_KEY && process.env.AWS_S3_BUCKET) {
+  ({ uploadFile, deleteFile } = require('../services/storage.service'));
+} else {
+  logger.warn('AWS credentials not configured, using local storage for file uploads');
+  ({ uploadFile, deleteFile } = require('../services/local-storage.service'));
+}
 
 // Configure multer for file uploads
 const upload = multer({
@@ -162,6 +169,123 @@ const deleteLogo = asyncHandler(async (req, res) => {
 });
 
 /**
+ * Upload avatar image
+ * @param {Object} req - Express request object
+ * @param {Object} res - Express response object
+ */
+const uploadAvatar = asyncHandler(async (req, res) => {
+  try {
+    const userId = req.user.id || req.user.dataValues?.id;
+
+    if (!req.file) {
+      throw validationError([{ field: 'avatar', message: 'Avatar image is required' }]);
+    }
+
+    // Additional image validation
+    const allowedExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.webp'];
+    const fileExtension = path.extname(req.file.originalname).toLowerCase();
+    
+    if (!allowedExtensions.includes(fileExtension)) {
+      throw validationError([{ field: 'avatar', message: 'Invalid file type. Only JPEG, PNG, GIF, and WebP images are allowed' }]);
+    }
+
+    // Upload to S3
+    const uploadResult = await uploadFile(req.file, 'avatars');
+
+    // Find user
+    const user = await User.findByPk(userId);
+    
+    if (!user) {
+      throw notFoundError('User not found');
+    }
+
+    // Delete old avatar if exists
+    if (user.avatarUrl) {
+      try {
+        // Extract S3 key from URL
+        const urlParts = user.avatarUrl.split('/');
+        const oldKey = urlParts.slice(-2).join('/'); // Get 'avatars/filename.ext'
+        await deleteFile(oldKey);
+      } catch (deleteError) {
+        logger.warn(`Failed to delete old avatar: ${deleteError.message}`);
+      }
+    }
+
+    // Update user with new avatar
+    user.avatarUrl = uploadResult.url;
+    await user.save();
+
+    // Create audit log
+    await AuditLog.create({
+      id: uuidv4(),
+      userId: userId,
+      action: 'user.avatar.upload',
+      metadata: {
+        fileName: req.file.originalname,
+        fileSize: req.file.size,
+        mimeType: req.file.mimetype,
+        url: uploadResult.url
+      }
+    });
+
+    logger.info(`Avatar uploaded for user: ${userId}`);
+
+    return successResponse(res, {
+      avatarUrl: uploadResult.url
+    }, 'Avatar uploaded successfully');
+  } catch (error) {
+    throw error;
+  }
+});
+
+/**
+ * Delete avatar image
+ * @param {Object} req - Express request object
+ * @param {Object} res - Express response object
+ */
+const deleteAvatar = asyncHandler(async (req, res) => {
+  try {
+    const userId = req.user.id || req.user.dataValues?.id;
+
+    // Find user
+    const user = await User.findByPk(userId);
+    
+    if (!user || !user.avatarUrl) {
+      throw notFoundError('Avatar not found');
+    }
+
+    // Delete from S3
+    try {
+      const urlParts = user.avatarUrl.split('/');
+      const key = urlParts.slice(-2).join('/'); // Get 'avatars/filename.ext'
+      await deleteFile(key);
+    } catch (deleteError) {
+      logger.warn(`Failed to delete avatar from S3: ${deleteError.message}`);
+    }
+
+    // Update user
+    user.avatarUrl = null;
+    await user.save();
+
+    // Create audit log
+    await AuditLog.create({
+      id: uuidv4(),
+      userId: userId,
+      action: 'user.avatar.delete',
+      metadata: {
+        deletedAt: new Date()
+      }
+    });
+
+    logger.info(`Avatar deleted for user: ${userId}`);
+
+    return successResponse(res, null, 'Avatar deleted successfully');
+  } catch (error) {
+    throw error;
+  }
+});
+
+/**
  * Get current user profile
  * @param {Object} req - Express request object
  * @param {Object} res - Express response object
@@ -173,7 +297,7 @@ const getCurrentUser = asyncHandler(async (req, res) => {
     // Find user with settings
     const user = await User.findOne({
       where: { id: userId },
-      include: [{ model: UserSettings }],
+      include: [{ model: UserSettings, as: 'settings' }],
       attributes: { exclude: ['password_hash'] }
     });
 
@@ -521,11 +645,11 @@ const getPublicProfile = async (req, res) => {
   try {
     const { username } = req.params;
 
-    // Find user by username (using email as username for now)
+    // Find user by username
     const user = await User.findOne({
-      where: { email: username },
-      include: [{ model: UserSettings }],
-      attributes: { exclude: ['password_hash'] }
+      where: { username },
+      include: [{ model: UserSettings, as: 'settings' }],
+      attributes: { exclude: ['password', 'password_hash'] }
     });
 
     if (!user) {
@@ -539,14 +663,23 @@ const getPublicProfile = async (req, res) => {
 
     // Return public profile data
     const publicProfile = {
-      name: user.name,
+      id: user.id,
+      firstName: user.firstName,
+      lastName: user.lastName,
+      username: user.username,
       timezone: user.timezone,
-      branding_color: user.UserSetting?.branding_color || '#007bff',
-      accessibility_mode: user.UserSetting?.accessibility_mode || false,
-      alt_text_enabled: user.UserSetting?.alt_text_enabled || false
+      settings: {
+        brandingColor: user.settings?.brandingColor || '#007bff',
+        googleAnalyticsId: user.settings?.googleAnalyticsId || null,
+        bookingPageTitle: user.settings?.bookingPageTitle || null,
+        bookingPageDescription: user.settings?.bookingPageDescription || null
+      }
     };
 
-    return res.status(200).json(publicProfile);
+    return res.status(200).json({
+      success: true,
+      data: publicProfile
+    });
   } catch (error) {
     logger.error('Error getting public profile:', error);
 
@@ -641,5 +774,7 @@ module.exports = {
   updatePublicProfile,
   uploadLogo,
   deleteLogo,
+  uploadAvatar,
+  deleteAvatar,
   upload
 };

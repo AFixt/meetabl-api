@@ -22,6 +22,11 @@ const BookingRequest = sequelize.define('BookingRequest', {
     allowNull: false,
     field: 'user_id'
   },
+  eventTypeId: {
+    type: DataTypes.STRING(36),
+    allowNull: true,
+    field: 'event_type_id'
+  },
   customerName: {
     type: DataTypes.STRING(100),
     allowNull: false,

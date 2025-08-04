@@ -22,6 +22,7 @@ const TeamMember = require('./team-member.model');
 const Payment = require('./payment.model');
 const PricingRule = require('./pricing-rule.model');
 const Invoice = require('./invoice.model');
+const EventType = require('./event-type.model');
 
 /**
  * Define all model associations
@@ -32,7 +33,8 @@ function defineAssociations() {
   User.hasMany(BookingRequest, { foreignKey: 'userId', as: 'bookingRequests' });
   User.hasMany(CalendarToken, { foreignKey: 'userId', as: 'calendarTokens' });
   User.hasMany(AvailabilityRule, { foreignKey: 'userId', as: 'availabilityRules' });
-  User.hasMany(Notification, { foreignKey: 'userId', as: 'notifications' });
+  User.hasMany(EventType, { foreignKey: 'userId', as: 'eventTypes' });
+  // Notifications are linked to users through bookings, not directly
   User.hasOne(UserSettings, { foreignKey: 'userId', as: 'settings' });
   User.hasMany(AuditLog, { foreignKey: 'userId', as: 'auditLogs' });
   User.hasMany(TeamMember, { foreignKey: 'user_id', as: 'memberships' }); // Fixed field name and alias
@@ -41,6 +43,7 @@ function defineAssociations() {
 
   // Booking associations
   Booking.belongsTo(User, { foreignKey: 'userId', as: 'user' });
+  Booking.hasMany(Notification, { foreignKey: 'bookingId', as: 'notifications' });
 
   // BookingRequest associations
   BookingRequest.belongsTo(User, { foreignKey: 'userId', as: 'user' });
@@ -52,7 +55,8 @@ function defineAssociations() {
   AvailabilityRule.belongsTo(User, { foreignKey: 'userId', as: 'user' });
 
   // Notification associations
-  Notification.belongsTo(User, { foreignKey: 'userId', as: 'user' });
+  // Notifications are linked to users through bookings, not directly
+  Notification.belongsTo(Booking, { foreignKey: 'bookingId', as: 'booking' });
 
   // UserSettings associations
   UserSettings.belongsTo(User, { foreignKey: 'userId', as: 'user' });
@@ -76,6 +80,9 @@ function defineAssociations() {
 
   // Invoice associations
   Invoice.belongsTo(Payment, { foreignKey: 'paymentId', as: 'payment' });
+
+  // EventType associations
+  EventType.belongsTo(User, { foreignKey: 'userId', as: 'user' });
 }
 
 module.exports = {

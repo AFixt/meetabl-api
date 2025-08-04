@@ -187,6 +187,11 @@ const bookingPerformanceWrapper = (originalFunction, operationType) => {
  */
 const memoryMonitor = {
   start() {
+    // Skip monitoring in test environment to avoid hanging tests
+    if (process.env.NODE_ENV === 'test') {
+      return;
+    }
+    
     // Monitor memory usage every 30 seconds
     this.interval = setInterval(() => {
       const memUsage = process.memoryUsage();
@@ -219,6 +224,11 @@ const memoryMonitor = {
  */
 const eventLoopMonitor = {
   start() {
+    // Skip monitoring in test environment to avoid hanging tests
+    if (process.env.NODE_ENV === 'test') {
+      return;
+    }
+    
     let lastTime = process.hrtime();
     
     this.interval = setInterval(() => {

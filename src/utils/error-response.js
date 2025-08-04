@@ -170,12 +170,12 @@ const errorHandler = (error, req, res, next) => {
   } else if (error.name === 'TokenExpiredError') {
     // JWT expiration
     apiError = createError('AUTHENTICATION_ERROR', 'Token expired');
-  } else if (error.status && error.statusCode) {
+  } else if (error.status || error.statusCode) {
     // Express errors with status codes
     apiError = new ApiError(
       error.message,
       error.status || error.statusCode,
-      error.code,
+      error.code || error.errorCode,
       error.details
     );
   } else {

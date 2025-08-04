@@ -76,22 +76,27 @@ describe('Auth Middleware', () => {
       status: 'active'
     });
     
-    // JwtBlacklist might not be mocked by setupControllerMocks
-    if (models.JwtBlacklist && models.JwtBlacklist.findOne) {
-      models.JwtBlacklist.findOne.mockResolvedValue(null);
-    }
+    // Ensure JwtBlacklist is properly mocked
+    models.JwtBlacklist.findOne.mockResolvedValue(null);
 
     // Create mock request, response and next
     const req = createMockRequest({
       headers: {
         authorization: 'Bearer valid-token'
-      }
+      },
+      cookies: {}  // Ensure cookies object exists
     });
     const res = createMockResponse();
     const next = createMockNext();
 
     // Call middleware
     await authenticateJWT(req, res, next);
+
+    // Debug: Check if there was an error
+    if (!next.mock.calls.length) {
+      console.log('Auth failed. Response:', res.json.mock.calls);
+      console.log('JWT verify calls:', jwt.verify.mock.calls);
+    }
 
     // Verify next was called (successful authentication)
     expect(next).toHaveBeenCalled();

@@ -182,6 +182,18 @@ describe('Team Model', () => {
   });
 
   describe('Team Types and Use Cases', () => {
+    beforeEach(() => {
+      Team.create.mockImplementation(async (data) => ({
+        id: data.id || uuidv4(),
+        owner_id: data.owner_id,
+        name: data.name,
+        description: data.description || null,
+        created_at: new Date(),
+        updated_at: new Date(),
+        ...data
+      }));
+    });
+
     const teamTypes = [
       { name: 'Development Team', description: 'Software development and engineering' },
       { name: 'Marketing Team', description: 'Marketing, PR, and customer outreach' },
@@ -272,6 +284,18 @@ describe('Team Model', () => {
   });
 
   describe('Special Characters and Unicode', () => {
+    beforeEach(() => {
+      Team.create.mockImplementation(async (data) => ({
+        id: data.id || uuidv4(),
+        owner_id: data.owner_id,
+        name: data.name,
+        description: data.description || null,
+        created_at: new Date(),
+        updated_at: new Date(),
+        ...data
+      }));
+    });
+
     test('should handle special characters in team names', async () => {
       const specialNames = [
         'R&D Team',

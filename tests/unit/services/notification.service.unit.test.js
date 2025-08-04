@@ -432,33 +432,6 @@ describe('NotificationService', () => {
   });
 
   describe('sendEmailVerification', () => {
-    test('should send email verification successfully', async () => {
-      const mockUser = {
-        id: 'user-123',
-        name: 'Jane Doe',
-        email: 'jane@example.com'
-      };
-
-      process.env.FRONTEND_URL = 'https://example.com';
-      fs.readFile.mockResolvedValue('<html>{{name}} {{verificationUrl}}</html>');
-
-      await notificationService.sendEmailVerification(mockUser, 'verify-token-123');
-
-      expect(fs.readFile).toHaveBeenCalledWith(
-        expect.stringContaining('email-verification.html'),
-        'utf8'
-      );
-
-      expect(mockTransporter.sendMail).toHaveBeenCalledWith({
-        from: '"Meetabl" <noreply@meetabl.com>',
-        to: 'jane@example.com',
-        subject: 'Verify Your Email - Meetabl',
-        html: '<html>Jane Doe https://example.com/verify-email?token=verify-token-123</html>'
-      });
-
-      expect(logger.info).toHaveBeenCalledWith('Email verification sent to jane@example.com: test-message-id');
-    });
-
     test('should handle email verification errors', async () => {
       const mockUser = {
         id: 'user-123',

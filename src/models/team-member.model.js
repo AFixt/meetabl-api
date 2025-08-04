@@ -10,8 +10,6 @@
 const { DataTypes } = require('sequelize');
 const { v4: uuidv4 } = require('uuid');
 const { sequelize } = require('../config/database');
-const User = require('./user.model');
-const Team = require('./team.model');
 
 const TeamMember = sequelize.define('TeamMember', {
   id: {
@@ -23,7 +21,7 @@ const TeamMember = sequelize.define('TeamMember', {
     type: DataTypes.STRING(36),
     allowNull: false,
     references: {
-      model: Team,
+      model: 'Teams',
       key: 'id'
     }
   },
@@ -31,7 +29,7 @@ const TeamMember = sequelize.define('TeamMember', {
     type: DataTypes.STRING(36),
     allowNull: false,
     references: {
-      model: User,
+      model: 'Users',
       key: 'id'
     }
   },

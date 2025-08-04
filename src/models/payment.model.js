@@ -10,8 +10,6 @@
 const { DataTypes } = require('sequelize');
 const { v4: uuidv4 } = require('uuid');
 const { sequelize } = require('../config/database');
-const User = require('./user.model');
-const Booking = require('./booking.model');
 
 const Payment = sequelize.define('Payment', {
   id: {
@@ -23,7 +21,7 @@ const Payment = sequelize.define('Payment', {
     type: DataTypes.STRING(36),
     allowNull: false,
     references: {
-      model: User,
+      model: 'Users',
       key: 'id'
     }
   },
@@ -31,7 +29,7 @@ const Payment = sequelize.define('Payment', {
     type: DataTypes.STRING(36),
     allowNull: false,
     references: {
-      model: Booking,
+      model: 'Bookings',
       key: 'id'
     }
   },

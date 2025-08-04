@@ -10,7 +10,6 @@
 const { DataTypes } = require('sequelize');
 const { v4: uuidv4 } = require('uuid');
 const { sequelize } = require('../config/database');
-const Payment = require('./payment.model');
 
 const Invoice = sequelize.define('Invoice', {
   id: {
@@ -23,7 +22,7 @@ const Invoice = sequelize.define('Invoice', {
     allowNull: false,
     unique: true,
     references: {
-      model: Payment,
+      model: 'Payments',
       key: 'id'
     }
   },

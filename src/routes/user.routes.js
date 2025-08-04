@@ -13,7 +13,15 @@ const userController = require('../controllers/user.controller');
 
 const router = express.Router();
 
-// Apply authentication middleware
+// Public routes (no authentication required)
+/**
+ * @route GET /api/users/public/:username
+ * @desc Get public profile data
+ * @access Public
+ */
+router.get('/public/:username', userController.getPublicProfile);
+
+// Apply authentication middleware for all routes below
 router.use(authenticateJWT);
 
 /**
@@ -87,13 +95,18 @@ router.post('/me/logo', userController.upload.single('logo'), userController.upl
  */
 router.delete('/me/logo', userController.deleteLogo);
 
-// Public routes (no authentication required)
+/**
+ * @route POST /api/users/me/avatar
+ * @desc Upload avatar image
+ * @access Private
+ */
+router.post('/me/avatar', userController.upload.single('avatar'), userController.uploadAvatar);
 
 /**
- * @route GET /api/users/:username/profile
- * @desc Get public profile data
- * @access Public
+ * @route DELETE /api/users/me/avatar
+ * @desc Delete avatar image
+ * @access Private
  */
-router.get('/:username/profile', userController.getPublicProfile);
+router.delete('/me/avatar', userController.deleteAvatar);
 
 module.exports = router;

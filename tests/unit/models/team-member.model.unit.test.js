@@ -240,6 +240,20 @@ describe('TeamMember Model', () => {
   });
 
   describe('Role Management', () => {
+    beforeEach(() => {
+      TeamMember.create.mockImplementation(async (data) => ({
+        id: data.id || uuidv4(),
+        team_id: data.team_id,
+        user_id: data.user_id,
+        role: data.role || 'member',
+        joined_at: data.joined_at || new Date(),
+        created_at: new Date(),
+        updated_at: new Date(),
+        ...data
+      }));
+      TeamMember.update.mockResolvedValue([1]);
+    });
+
     test('should support creating admin members', async () => {
       const validData = {
         team_id: 'team-123',

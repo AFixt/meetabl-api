@@ -240,6 +240,19 @@ describe('JwtBlacklist Model', () => {
   });
 
   describe('Common Blacklist Reasons', () => {
+    beforeEach(() => {
+      JwtBlacklist.create.mockImplementation(async (data) => ({
+        id: data.id || uuidv4(),
+        jwtId: data.jwtId,
+        userId: data.userId || null,
+        reason: data.reason || null,
+        expiresAt: data.expiresAt,
+        created_at: new Date(),
+        updated_at: new Date(),
+        ...data
+      }));
+    });
+
     const validReasons = [
       'logout',
       'password_change',

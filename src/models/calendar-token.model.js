@@ -10,7 +10,6 @@
 const { DataTypes } = require('sequelize');
 const { v4: uuidv4 } = require('uuid');
 const { sequelize } = require('../config/database');
-const User = require('./user.model');
 
 const CalendarToken = sequelize.define('CalendarToken', {
   id: {
@@ -23,7 +22,7 @@ const CalendarToken = sequelize.define('CalendarToken', {
     allowNull: false,
     field: 'user_id',
     references: {
-      model: User,
+      model: 'users',
       key: 'id'
     }
   },
@@ -51,7 +50,7 @@ const CalendarToken = sequelize.define('CalendarToken', {
     allowNull: true
   }
 }, {
-  tableName: 'CalendarTokens',
+  tableName: 'calendar_tokens',
   timestamps: false
 });
 

@@ -65,11 +65,13 @@ const getUserBookings = asyncHandler(async (req, res) => {
       include: [
         {
           model: User,
+          as: 'user',
           attributes: ['id', 'firstName', 'lastName', 'email', 'timezone'],
           required: true
         },
         {
           model: Notification,
+          as: 'notifications',
           required: false,
           attributes: ['id', 'type', 'status', 'sent_at']
         }
@@ -243,6 +245,7 @@ const getBooking = asyncHandler(async (req, res) => {
       },
       {
         model: Notification,
+        as: 'notifications',
         required: false,
         attributes: ['id', 'type', 'status', 'scheduled_for', 'sent_at']
       }
@@ -351,7 +354,7 @@ const getPublicBookings = asyncHandler(async (req, res) => {
         { id: username } // Check if username matches ID
       ]
     },
-    include: [{ model: UserSettings }]
+    include: [{ model: UserSettings, as: 'settings' }]
   });
 
   if (!user) {
@@ -377,7 +380,7 @@ const getPublicBookings = asyncHandler(async (req, res) => {
     // Check booking horizon
     const today = new Date();
     const daysDifference = Math.ceil((targetDate - today) / (1000 * 60 * 60 * 24));
-    const bookingHorizon = user.UserSetting?.bookingHorizon || 30; // Default 30 days
+    const bookingHorizon = user.settings?.bookingHorizon || 30; // Default 30 days
     
     if (daysDifference > bookingHorizon) {
       throw validationError([{
@@ -394,7 +397,7 @@ const getPublicBookings = asyncHandler(async (req, res) => {
     }
 
     // Use user's preferred meeting duration from settings, or duration query param, or default to 60 minutes
-    const userPreferredDuration = user.UserSetting?.meetingDuration;
+    const userPreferredDuration = user.settings?.meetingDuration;
     const requestedDuration = parseInt(duration, 10);
     const slotDuration = userPreferredDuration || requestedDuration || 60;
     
@@ -537,7 +540,7 @@ const getPublicBookings = asyncHandler(async (req, res) => {
         
         // Move to next slot with buffer time
         // Get buffer time from user settings or availability rule
-        const bufferMinutes = user.UserSetting?.bufferMinutes || rule.buffer_minutes || 0;
+        const bufferMinutes = user.settings?.bufferMinutes || rule.buffer_minutes || 0;
         slotStart = addMinutes(slotEnd, bufferMinutes);
       }
     });
@@ -553,12 +556,12 @@ const getPublicBookings = asyncHandler(async (req, res) => {
         username: user.username
       },
       settings: {
-        googleAnalyticsId: user.UserSetting?.googleAnalyticsId || null,
-        bookingPageTitle: user.UserSetting?.bookingPageTitle || null,
-        bookingPageDescription: user.UserSetting?.bookingPageDescription || null,
-        brandingColor: user.UserSetting?.brandingColor || '#000000',
-        meetingDuration: user.UserSetting?.meetingDuration || 60,
-        bufferMinutes: user.UserSetting?.bufferMinutes || 0
+        googleAnalyticsId: user.settings?.googleAnalyticsId || null,
+        bookingPageTitle: user.settings?.bookingPageTitle || null,
+        bookingPageDescription: user.settings?.bookingPageDescription || null,
+        brandingColor: user.settings?.brandingColor || '#000000',
+        meetingDuration: user.settings?.meetingDuration || 60,
+        bufferMinutes: user.settings?.bufferMinutes || 0
       },
       date,
       available_slots: allSlots
@@ -581,7 +584,8 @@ const createPublicBooking = asyncHandler(async (req, res) => {
       customer_phone: customerPhone,
       start_time: startTime,
       end_time: endTime,
-      notes
+      notes,
+      event_type_id: eventTypeId
     } = req.body;
 
     // Find user by username
@@ -672,6 +676,7 @@ const createPublicBooking = asyncHandler(async (req, res) => {
       startTime: startTime,
       endTime: endTime,
       notes: notes,
+      eventTypeId: eventTypeId,
       confirmationToken: confirmationToken,
       status: 'pending',
       expiresAt: expiresAt
