@@ -210,7 +210,7 @@ router.use(requireMeetingPolls);
  */
 router.get('/',
   queryValidation,
-  validationMiddleware.handleValidationErrors,
+  validationMiddleware.validateRequest,
   pollController.getUserPolls
 );
 
@@ -287,7 +287,7 @@ router.get('/',
  */
 router.post('/',
   createPollValidation,
-  validationMiddleware.handleValidationErrors,
+  validationMiddleware.validateRequest,
   pollController.createPoll
 );
 
@@ -316,7 +316,7 @@ router.post('/',
  */
 router.get('/:pollId',
   pollIdValidation,
-  validationMiddleware.handleValidationErrors,
+  validationMiddleware.validateRequest,
   pollController.getPoll
 );
 
@@ -373,7 +373,7 @@ router.get('/:pollId',
 router.put('/:pollId',
   pollIdValidation,
   updatePollValidation,
-  validationMiddleware.handleValidationErrors,
+  validationMiddleware.validateRequest,
   pollController.updatePoll
 );
 
@@ -417,7 +417,7 @@ router.put('/:pollId',
 router.post('/:pollId/finalize',
   pollIdValidation,
   finalizePollValidation,
-  validationMiddleware.handleValidationErrors,
+  validationMiddleware.validateRequest,
   pollController.finalizePoll
 );
 
@@ -448,7 +448,7 @@ router.post('/:pollId/finalize',
  */
 router.post('/:pollId/close',
   pollIdValidation,
-  validationMiddleware.handleValidationErrors,
+  validationMiddleware.validateRequest,
   pollController.closePoll
 );
 
@@ -479,7 +479,7 @@ router.post('/:pollId/close',
  */
 router.delete('/:pollId',
   pollIdValidation,
-  validationMiddleware.handleValidationErrors,
+  validationMiddleware.validateRequest,
   pollController.deletePoll
 );
 
@@ -509,7 +509,7 @@ const publicRouter = express.Router();
  */
 publicRouter.get('/public/:token',
   tokenValidation,
-  validationMiddleware.handleValidationErrors,
+  validationMiddleware.validateRequest,
   pollController.getPollByToken
 );
 
@@ -562,7 +562,7 @@ publicRouter.get('/public/:token',
 publicRouter.post('/public/:token/vote',
   tokenValidation,
   submitVotesValidation,
-  validationMiddleware.handleValidationErrors,
+  validationMiddleware.validateRequest,
   pollController.submitVotes
 );
 
