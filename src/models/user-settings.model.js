@@ -13,12 +13,12 @@ const { sequelize } = require('../config/database');
 
 const UserSettings = sequelize.define('UserSettings', {
   id: {
-    type: DataTypes.STRING(36),
+    type: DataTypes.UUID,
     primaryKey: true,
     defaultValue: () => uuidv4()
   },
   userId: {
-    type: DataTypes.STRING(36),
+    type: DataTypes.UUID,
     allowNull: false,
     field: 'user_id',
     references: {
@@ -120,6 +120,55 @@ const UserSettings = sequelize.define('UserSettings', {
       min: 0,
       max: 60
     }
+  },
+  // Booking page customization fields (Basic/Professional plans)
+  bookingPagePrimaryColor: {
+    type: DataTypes.STRING(7),
+    allowNull: true,
+    defaultValue: '#003b49',
+    field: 'booking_page_primary_color',
+    validate: {
+      is: /^#[0-9A-F]{6}$/i
+    }
+  },
+  bookingPageSecondaryColor: {
+    type: DataTypes.STRING(7),
+    allowNull: true,
+    defaultValue: '#ff6b6b',
+    field: 'booking_page_secondary_color',
+    validate: {
+      is: /^#[0-9A-F]{6}$/i
+    }
+  },
+  bookingPageBackgroundColor: {
+    type: DataTypes.STRING(7),
+    allowNull: true,
+    defaultValue: '#ffffff',
+    field: 'booking_page_background_color',
+    validate: {
+      is: /^#[0-9A-F]{6}$/i
+    }
+  },
+  bookingPageTextColor: {
+    type: DataTypes.STRING(7),
+    allowNull: true,
+    defaultValue: '#333333',
+    field: 'booking_page_text_color',
+    validate: {
+      is: /^#[0-9A-F]{6}$/i
+    }
+  },
+  bookingPageFontSize: {
+    type: DataTypes.ENUM('small', 'medium', 'large'),
+    allowNull: true,
+    defaultValue: 'medium',
+    field: 'booking_page_font_size'
+  },
+  bookingPageFontFamily: {
+    type: DataTypes.STRING(100),
+    allowNull: true,
+    defaultValue: 'Inter, sans-serif',
+    field: 'booking_page_font_family'
   }
 }, {
   tableName: 'user_settings',

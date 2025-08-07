@@ -13,23 +13,23 @@ const { sequelize } = require('../config/database');
 
 const TeamMember = sequelize.define('TeamMember', {
   id: {
-    type: DataTypes.STRING(36),
+    type: DataTypes.UUID,
     primaryKey: true,
     defaultValue: () => uuidv4()
   },
   team_id: {
-    type: DataTypes.STRING(36),
+    type: DataTypes.UUID,
     allowNull: false,
     references: {
-      model: 'Teams',
+      model: 'teams',
       key: 'id'
     }
   },
   user_id: {
-    type: DataTypes.STRING(36),
+    type: DataTypes.UUID,
     allowNull: false,
     references: {
-      model: 'Users',
+      model: 'users',
       key: 'id'
     }
   },

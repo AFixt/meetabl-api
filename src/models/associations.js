@@ -23,6 +23,9 @@ const Payment = require('./payment.model');
 const PricingRule = require('./pricing-rule.model');
 const Invoice = require('./invoice.model');
 const EventType = require('./event-type.model');
+const Poll = require('./poll.model');
+const PollTimeSlot = require('./poll-time-slot.model');
+const PollVote = require('./poll-vote.model');
 
 /**
  * Define all model associations
@@ -34,6 +37,7 @@ function defineAssociations() {
   User.hasMany(CalendarToken, { foreignKey: 'userId', as: 'calendarTokens' });
   User.hasMany(AvailabilityRule, { foreignKey: 'userId', as: 'availabilityRules' });
   User.hasMany(EventType, { foreignKey: 'userId', as: 'eventTypes' });
+  User.hasMany(Poll, { foreignKey: 'userId', as: 'polls' });
   // Notifications are linked to users through bookings, not directly
   User.hasOne(UserSettings, { foreignKey: 'userId', as: 'settings' });
   User.hasMany(AuditLog, { foreignKey: 'userId', as: 'auditLogs' });
@@ -83,6 +87,20 @@ function defineAssociations() {
 
   // EventType associations
   EventType.belongsTo(User, { foreignKey: 'userId', as: 'user' });
+
+  // Poll associations
+  Poll.belongsTo(User, { foreignKey: 'userId', as: 'user' });
+  Poll.hasMany(PollTimeSlot, { foreignKey: 'pollId', as: 'timeSlots' });
+  Poll.hasMany(PollVote, { foreignKey: 'pollId', as: 'votes' });
+  Poll.belongsTo(PollTimeSlot, { foreignKey: 'selectedTimeSlotId', as: 'selectedTimeSlot' });
+
+  // PollTimeSlot associations
+  PollTimeSlot.belongsTo(Poll, { foreignKey: 'pollId', as: 'poll' });
+  PollTimeSlot.hasMany(PollVote, { foreignKey: 'pollTimeSlotId', as: 'votes' });
+
+  // PollVote associations
+  PollVote.belongsTo(Poll, { foreignKey: 'pollId', as: 'poll' });
+  PollVote.belongsTo(PollTimeSlot, { foreignKey: 'pollTimeSlotId', as: 'timeSlot' });
 }
 
 module.exports = {

@@ -13,23 +13,23 @@ const { sequelize } = require('../config/database');
 
 const Payment = sequelize.define('Payment', {
   id: {
-    type: DataTypes.STRING(36),
+    type: DataTypes.UUID,
     primaryKey: true,
     defaultValue: () => uuidv4()
   },
   user_id: {
-    type: DataTypes.STRING(36),
+    type: DataTypes.UUID,
     allowNull: false,
     references: {
-      model: 'Users',
+      model: 'users',
       key: 'id'
     }
   },
   booking_id: {
-    type: DataTypes.STRING(36),
+    type: DataTypes.UUID,
     allowNull: false,
     references: {
-      model: 'Bookings',
+      model: 'bookings',
       key: 'id'
     }
   },

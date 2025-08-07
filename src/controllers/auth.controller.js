@@ -10,6 +10,7 @@ const jwt = require('jsonwebtoken');
 const bcrypt = require('bcrypt');
 const crypto = require('crypto');
 const { v4: uuidv4 } = require('uuid');
+const { Op } = require('sequelize');
 const { 
   generateUserVerificationToken, 
   generatePasswordResetToken 
@@ -52,7 +53,7 @@ const register = asyncHandler(async (req, res) => {
 
   try {
     const {
-      firstName, lastName, email, password, phone, timezone, username
+      firstName, lastName, email, password, phone, timezone, username, language
     } = req.body;
 
     // Check if user already exists
@@ -79,6 +80,7 @@ const register = asyncHandler(async (req, res) => {
       username: username || email.split('@')[0], // Default username from email prefix if not provided
       password: password,
       timezone: timezone || 'UTC',
+      language: language || 'en',
       email_verified: false,
       email_verification_token: hashedVerificationToken,
       email_verification_expires: new Date(Date.now() + 24 * 60 * 60 * 1000) // 24 hours
@@ -97,7 +99,8 @@ const register = asyncHandler(async (req, res) => {
       action: 'user.register',
       metadata: {
         email,
-        timezone
+        timezone: timezone || 'UTC',
+        language: language || 'en'
       }
     }, { transaction });
 
@@ -190,7 +193,12 @@ const login = asyncHandler(async (req, res) => {
     }
 
     // Validate password
+    logger.info(`Login attempt for ${email} - User found: ${!!user}`);
+    logger.info(`User password hash exists: ${!!user.password}`);
+    logger.info(`Password hash length: ${user.password ? user.password.length : 0}`);
+    
     const isPasswordValid = await bcrypt.compare(password, user.password);
+    logger.info(`Password validation result: ${isPasswordValid}`);
 
     if (!isPasswordValid) {
       throw unauthorizedError('Invalid email or password');
@@ -482,7 +490,7 @@ const resetPassword = asyncHandler(async (req, res) => {
     const user = await User.findOne({
       where: {
         password_reset_token: hashedToken,
-        password_reset_expires: { [sequelize.Op.gt]: Date.now() }
+        password_reset_expires: { [Op.gt]: Date.now() }
       }
     });
 
@@ -490,9 +498,8 @@ const resetPassword = asyncHandler(async (req, res) => {
       throw validationError([{ field: 'token', message: 'Invalid or expired reset token' }]);
     }
 
-    // Update password
-    const salt = await bcrypt.genSalt(10);
-    user.password_hash = await bcrypt.hash(password, salt);
+    // Update password - set plain password, the model hook will hash it
+    user.password = password;
     user.password_reset_token = null;
     user.password_reset_expires = null;
     await user.save({ transaction });
@@ -542,7 +549,7 @@ const confirmEmail = asyncHandler(async (req, res) => {
     const user = await User.findOne({
       where: {
         email_verification_token: hashedToken,
-        email_verification_expires: { [sequelize.Op.gt]: Date.now() }
+        email_verification_expires: { [Op.gt]: Date.now() }
       }
     });
 

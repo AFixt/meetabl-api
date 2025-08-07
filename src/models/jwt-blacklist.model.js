@@ -13,12 +13,12 @@ const { sequelize } = require('../config/database');
 
 const JwtBlacklist = sequelize.define('JwtBlacklist', {
     id: {
-      type: DataTypes.STRING(36),
+      type: DataTypes.UUID,
       primaryKey: true,
       defaultValue: () => uuidv4()
     },
     jwtId: {
-      type: DataTypes.STRING(36),
+      type: DataTypes.UUID,
       allowNull: false,
       unique: true,
       field: 'jwtId'  // Explicitly map to camelCase column
@@ -28,7 +28,7 @@ const JwtBlacklist = sequelize.define('JwtBlacklist', {
       allowNull: false
     },
     userId: {
-      type: DataTypes.STRING(36),
+      type: DataTypes.UUID,
       allowNull: false,
       field: 'userId'  // Explicitly map to camelCase column
     },

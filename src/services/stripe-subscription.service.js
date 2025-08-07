@@ -56,12 +56,18 @@ class StripeSubscriptionService {
       // Create subscription
       const subscription = await stripe.subscriptions.create(subscriptionData);
 
+      // Get plan type from price ID
+      const stripeProducts = require('../config/stripe-products');
+      const planInfo = stripeProducts.getPlanFromPriceId(priceId);
+      const planType = planInfo ? planInfo.plan : 'free';
+      
       // Update user with subscription details
       await user.update({
         stripe_subscription_id: subscription.id,
         stripe_price_id: priceId,
         stripe_subscription_status: subscription.status,
-        stripe_current_period_end: new Date(subscription.current_period_end * 1000)
+        stripe_current_period_end: new Date(subscription.current_period_end * 1000),
+        plan_type: planType
       });
 
       logger.info(`Created subscription ${subscription.id} for user ${user.id}`);
@@ -190,10 +196,16 @@ class StripeSubscriptionService {
         proration_behavior: options.proration_behavior || 'create_prorations'
       });
 
+      // Get plan type from price ID
+      const stripeProducts = require('../config/stripe-products');
+      const planInfo = stripeProducts.getPlanFromPriceId(newPriceId);
+      const planType = planInfo ? planInfo.plan : 'free';
+      
       // Update user record
       await user.update({
         stripe_price_id: newPriceId,
-        stripe_subscription_status: updatedSubscription.status
+        stripe_subscription_status: updatedSubscription.status,
+        plan_type: planType
       });
 
       logger.info(`Changed subscription plan for user ${user.id} to ${newPriceId}`);

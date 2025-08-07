@@ -6,17 +6,18 @@ async function createTestUser() {
     const userId = uuidv4();
     
     // Delete existing test user if exists
-    await User.destroy({ where: { email: 'test@example.com' } });
+    await User.destroy({ where: { email: 'karlgroves@gmail.com' } });
     
     // Create new test user - the password will be hashed by the model hook
     const user = await User.create({
       id: userId,
-      firstName: 'Test',
-      lastName: 'User',
-      email: 'test@example.com',
-      username: 'testuser',
-      password: 'Test123!@#',  // This will be hashed automatically
+      firstName: 'Karl',
+      lastName: 'Groves',
+      email: 'karlgroves@gmail.com',
+      username: 'karlgroves',
+      password: 'newPassword',  // This will be hashed automatically
       timezone: 'UTC',
+      subscription_plan: 'basic',  // Set to Basic plan for billing test
       email_verified: true
     });
     
@@ -26,9 +27,9 @@ async function createTestUser() {
       userId: userId
     });
     
-    console.log('Test user created successfully');
-    console.log('Email: test@example.com');
-    console.log('Password: Test123!@#');
+    console.log('Billing test user created successfully');
+    console.log('Email: karlgroves@gmail.com');
+    console.log('Password: newPassword');
     console.log('User ID:', userId);
     
   } catch (error) {

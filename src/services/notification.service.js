@@ -11,7 +11,7 @@ const nodemailer = require('nodemailer');
 const fs = require('fs').promises;
 const path = require('path');
 const logger = require('../config/logger');
-const { Notification, Booking, User } = require('../models');
+const { Notification, Booking, User, Poll, PollTimeSlot } = require('../models');
 
 // Create reusable transporter object using SMTP transport
 const createTransporter = () => {
@@ -131,13 +131,18 @@ const sendEmailNotification = async (notification) => {
     const user = booking.User;
     const transporter = createTransporter();
 
+    // Get display name for the provider
+    const providerName = user.firstName ? 
+      `${user.firstName}${user.lastName ? ' ' + user.lastName : ''}` : 
+      user.email;
+
     // Determine template based on booking status
     let templateName = 'booking-confirmation.html';
-    let subject = `Booking Confirmation with ${user.name}`;
+    let subject = `Booking Confirmation with ${providerName}`;
     
     if (booking.status === 'cancelled') {
       templateName = 'booking-cancelled.html';
-      subject = `Booking Cancelled with ${user.name}`;
+      subject = `Booking Cancelled with ${providerName}`;
     }
 
     // Load email template
@@ -147,10 +152,22 @@ const sendEmailNotification = async (notification) => {
     // Replace template variables
     emailTemplate = emailTemplate
       .replace(/{{customerName}}/g, booking.customer_name)
-      .replace(/{{providerName}}/g, user.name)
+      .replace(/{{providerName}}/g, providerName)
       .replace(/{{startTime}}/g, new Date(booking.start_time).toLocaleString())
       .replace(/{{endTime}}/g, new Date(booking.end_time).toLocaleString())
       .replace(/{{status}}/g, booking.status);
+
+    // Add Meetabl branding for free plan users
+    if (!user.can_remove_branding) {
+      const brandingHtml = `
+        <div style="margin-top: 40px; padding-top: 20px; border-top: 1px solid #e0e0e0; text-align: center; font-size: 12px; color: #666;">
+          <p>Powered by <a href="https://meetabl.com" style="color: #003b49; text-decoration: none;">Meetabl</a> - Schedule meetings effortlessly</p>
+        </div>
+      `;
+      
+      // Add branding before closing body tag
+      emailTemplate = emailTemplate.replace('</body>', brandingHtml + '</body>');
+    }
 
     // Send email
     const info = await transporter.sendMail({
@@ -234,9 +251,13 @@ const sendPasswordResetEmail = async (user, resetToken) => {
     const templatePath = path.join(__dirname, '..', 'config', 'templates', 'password-reset.html');
     let emailTemplate = await fs.readFile(templatePath, 'utf8');
 
+    // Determine the name to use in the greeting
+    // Use firstName if available, otherwise fall back to email
+    const displayName = user.firstName || user.email;
+
     // Replace template variables
     emailTemplate = emailTemplate
-      .replace(/{{name}}/g, user.name)
+      .replace(/{{name}}/g, displayName)
       .replace(/{{resetUrl}}/g, resetUrl);
 
     // Send email
@@ -283,9 +304,13 @@ const sendEmailVerification = async (user, verificationToken) => {
     const templatePath = path.join(__dirname, '..', 'config', 'templates', 'email-verification.html');
     let emailTemplate = await fs.readFile(templatePath, 'utf8');
 
+    // Determine the name to use in the greeting
+    // Use firstName if available, otherwise fall back to email
+    const displayName = user.firstName || user.email;
+
     // Replace template variables
     emailTemplate = emailTemplate
-      .replace(/{{name}}/g, user.name)
+      .replace(/{{name}}/g, displayName)
       .replace(/{{verificationUrl}}/g, verificationUrl);
 
     // Send email
@@ -349,7 +374,9 @@ const sendBookingConfirmationRequest = async (params) => {
           .container { max-width: 600px; margin: 0 auto; padding: 20px; }
           .header { background-color: #f8f9fa; padding: 20px; text-align: center; }
           .content { padding: 20px; }
-          .button { display: inline-block; padding: 12px 24px; background-color: #007bff; color: white; text-decoration: none; border-radius: 4px; margin: 20px 0; }
+          .button { display: inline-block; padding: 12px 24px; background-color: #005a8b; color: white; text-decoration: none; border-radius: 4px; margin: 20px 0; font-weight: bold; font-size: 16px; border: 2px solid transparent; }
+          .button:hover { background-color: #004066; text-decoration: underline; }
+          .button:focus { outline: 3px solid #005a8b; outline-offset: 2px; border-color: white; }
           .details { background-color: #f8f9fa; padding: 15px; border-radius: 4px; margin: 20px 0; }
           .warning { color: #dc3545; font-style: italic; }
         </style>
@@ -519,7 +546,7 @@ const sendBookingNotificationToHost = async (params) => {
         <style>
           body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
           .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-          .header { background-color: #007bff; color: white; padding: 20px; text-align: center; }
+          .header { background-color: #004085; color: white; padding: 20px; text-align: center; }
           .content { padding: 20px; }
           .details { background-color: #f8f9fa; padding: 15px; border-radius: 4px; margin: 20px 0; }
         </style>
@@ -566,6 +593,195 @@ const sendBookingNotificationToHost = async (params) => {
   }
 };
 
+/**
+ * Send poll vote notification to poll owner
+ * @param {string} pollId - Poll ID
+ * @param {Object} voteData - Vote information
+ * @returns {Promise<void>}
+ */
+const sendPollVoteNotification = async (pollId, voteData) => {
+  try {
+    const transporter = createTransporter();
+
+    // Get poll and owner information
+    const poll = await Poll.findByPk(pollId, {
+      include: [
+        {
+          model: User,
+          as: 'user',
+          attributes: ['firstName', 'lastName', 'email']
+        }
+      ]
+    });
+
+    if (!poll || !poll.user) {
+      throw new Error('Poll or poll owner not found');
+    }
+
+    const owner = poll.user;
+    const pollUrl = `${process.env.FRONTEND_URL || 'http://localhost:5173'}/polls/${pollId}`;
+
+    const emailHtml = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="utf-8">
+        <style>
+          body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+          .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+          .header { background: #4a90e2; color: white; padding: 20px; text-align: center; }
+          .content { padding: 20px; background: #f9f9f9; }
+          .details { background: white; padding: 15px; margin: 15px 0; border-radius: 5px; }
+          .button { display: inline-block; padding: 12px 24px; background: #4a90e2; color: white; text-decoration: none; border-radius: 5px; margin: 15px 0; }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <div class="header">
+            <h1>New Poll Vote Received</h1>
+          </div>
+          <div class="content">
+            <p>Hi ${owner.firstName},</p>
+            <p>Someone has voted on your poll!</p>
+            
+            <div class="details">
+              <h3>Poll Details:</h3>
+              <p><strong>Poll Title:</strong> ${poll.title}</p>
+              <p><strong>Participant:</strong> ${voteData.participantName}</p>
+              ${voteData.participantEmail !== '[Anonymous]' ? `<p><strong>Email:</strong> ${voteData.participantEmail}</p>` : ''}
+              <p><strong>Number of Votes:</strong> ${voteData.voteCount}</p>
+            </div>
+            
+            <p>
+              <a href="${pollUrl}" class="button">View Poll Results</a>
+            </p>
+            
+            <p>Best regards,<br>The Meetabl Team</p>
+          </div>
+        </div>
+      </body>
+      </html>
+    `;
+
+    const info = await transporter.sendMail({
+      from: `"Meetabl" <${process.env.EMAIL_FROM || process.env.EMAIL_USER}>`,
+      to: owner.email,
+      subject: `New vote on your poll: ${poll.title}`,
+      html: emailHtml
+    });
+
+    logger.info(`Poll vote notification sent to ${owner.email}: ${info.messageId}`);
+  } catch (error) {
+    logger.error('Error sending poll vote notification:', error);
+    throw error;
+  }
+};
+
+/**
+ * Send poll finalization notification to all participants
+ * @param {string} pollId - Poll ID
+ * @param {Object} selectedTimeSlot - Selected time slot
+ * @returns {Promise<void>}
+ */
+const sendPollFinalizationNotification = async (pollId, selectedTimeSlot) => {
+  try {
+    const transporter = createTransporter();
+
+    // Get poll, owner, and votes information
+    const poll = await Poll.findByPk(pollId, {
+      include: [
+        {
+          model: User,
+          as: 'user',
+          attributes: ['firstName', 'lastName', 'email']
+        },
+        {
+          model: PollVote,
+          as: 'votes',
+          attributes: ['participantName', 'participantEmail']
+        }
+      ]
+    });
+
+    if (!poll || !poll.user) {
+      throw new Error('Poll or poll owner not found');
+    }
+
+    const owner = poll.user;
+    
+    // Get unique participants
+    const participants = {};
+    poll.votes.forEach(vote => {
+      participants[vote.participantEmail] = vote.participantName;
+    });
+
+    const formattedStartTime = new Date(selectedTimeSlot.startTime).toLocaleString();
+    const formattedEndTime = new Date(selectedTimeSlot.endTime).toLocaleTimeString();
+
+    const emailPromises = Object.entries(participants).map(([email, name]) => {
+      const emailHtml = `
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <meta charset="utf-8">
+          <style>
+            body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+            .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+            .header { background: #28a745; color: white; padding: 20px; text-align: center; }
+            .content { padding: 20px; background: #f9f9f9; }
+            .details { background: white; padding: 15px; margin: 15px 0; border-radius: 5px; }
+            .time-slot { background: #e8f5e8; padding: 15px; border-left: 5px solid #28a745; margin: 15px 0; }
+          </style>
+        </head>
+        <body>
+          <div class="container">
+            <div class="header">
+              <h1>Meeting Time Selected!</h1>
+            </div>
+            <div class="content">
+              <p>Hi ${name},</p>
+              <p>Great news! ${owner.firstName} ${owner.lastName} has selected the final time for the meeting poll you participated in.</p>
+              
+              <div class="details">
+                <h3>Meeting Details:</h3>
+                <p><strong>Title:</strong> ${poll.title}</p>
+                ${poll.description ? `<p><strong>Description:</strong> ${poll.description}</p>` : ''}
+                <p><strong>Host:</strong> ${owner.firstName} ${owner.lastName}</p>
+                <p><strong>Duration:</strong> ${poll.durationMinutes} minutes</p>
+              </div>
+
+              <div class="time-slot">
+                <h3>Selected Time:</h3>
+                <p><strong>Date & Time:</strong> ${formattedStartTime} - ${formattedEndTime}</p>
+                <p><strong>Timezone:</strong> ${poll.timezone}</p>
+              </div>
+              
+              <p>Please mark this time in your calendar. You should receive a calendar invitation shortly.</p>
+              
+              <p>Best regards,<br>The Meetabl Team</p>
+            </div>
+          </div>
+        </body>
+        </html>
+      `;
+
+      return transporter.sendMail({
+        from: `"Meetabl" <${process.env.EMAIL_FROM || process.env.EMAIL_USER}>`,
+        to: email,
+        subject: `Meeting time selected: ${poll.title}`,
+        html: emailHtml
+      });
+    });
+
+    const results = await Promise.all(emailPromises);
+    
+    logger.info(`Poll finalization notifications sent to ${results.length} participants`);
+  } catch (error) {
+    logger.error('Error sending poll finalization notifications:', error);
+    throw error;
+  }
+};
+
 module.exports = {
   processNotificationQueue,
   queueNotification,
@@ -573,5 +789,7 @@ module.exports = {
   sendEmailVerification,
   sendBookingConfirmationRequest,
   sendBookingConfirmationToCustomer,
-  sendBookingNotificationToHost
+  sendBookingNotificationToHost,
+  sendPollVoteNotification,
+  sendPollFinalizationNotification
 };

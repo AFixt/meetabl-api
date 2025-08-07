@@ -308,6 +308,7 @@ const stripeElementsRoutes = require('./routes/stripe-elements.routes');
 const twoFactorAuthRoutes = require('./routes/two-factor-auth.routes');
 const testRoutes = require('./routes/test.routes');
 const eventTypeRoutes = require('./routes/event-type.routes');
+const pollRoutes = require('./routes/poll.routes');
 
 // Database monitoring endpoint (only in development/staging)
 if (process.env.NODE_ENV !== 'production') {
@@ -356,6 +357,7 @@ const initializeApp = async () => {
     app.use('/api/stripe/elements', protectCsrf, stripeElementsRoutes);
     app.use('/api/2fa', protectCsrf, twoFactorAuthRoutes);
     app.use('/api/event-types', protectCsrf, eventTypeRoutes);
+    app.use('/api/polls', protectCsrfConditional, pollRoutes);
     
     // Test routes (only in test/development environments)
     if (process.env.NODE_ENV === 'test' || process.env.NODE_ENV === 'development') {

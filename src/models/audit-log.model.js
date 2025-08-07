@@ -13,12 +13,12 @@ const { sequelize } = require('../config/database');
 
 const AuditLog = sequelize.define('AuditLog', {
   id: {
-    type: DataTypes.STRING(36),
+    type: DataTypes.UUID,
     primaryKey: true,
     defaultValue: () => uuidv4()
   },
   userId: {
-    type: DataTypes.STRING(36),
+    type: DataTypes.UUID,
     allowNull: false,
     field: 'user_id',
     references: {

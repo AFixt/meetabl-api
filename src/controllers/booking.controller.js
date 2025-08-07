@@ -25,6 +25,7 @@ const {
   getMinutes,
   differenceInMinutes
 } = require('date-fns');
+const { toZonedTime, fromZonedTime } = require('date-fns-tz');
 const logger = require('../config/logger');
 const {
   Booking, BookingRequest, User, Notification, AuditLog, AvailabilityRule, UserSettings
@@ -108,8 +109,10 @@ const createBooking = asyncHandler(async (req, res) => {
     const {
       customer_name: customerName,
       customer_email: customerEmail,
+      customer_phone: customerPhone,
       start_time: startTime,
-      end_time: endTime
+      end_time: endTime,
+      notes
     } = req.body;
 
     // Validate datetime format
@@ -174,8 +177,10 @@ const createBooking = asyncHandler(async (req, res) => {
       userId: userId,
       customerName: customerName,
       customerEmail: customerEmail,
+      customerPhone: customerPhone || null,
       startTime: startTime,
       endTime: endTime,
+      notes: notes || null,
       status: 'confirmed'
     }, { transaction });
 
@@ -195,8 +200,10 @@ const createBooking = asyncHandler(async (req, res) => {
       metadata: {
         bookingId,
         customer_email: customerEmail,
+        customer_phone: customerPhone,
         start_time: startTime,
-        end_time: endTime
+        end_time: endTime,
+        notes: notes
       }
     }, { transaction });
 
@@ -362,7 +369,7 @@ const getPublicBookings = asyncHandler(async (req, res) => {
   }
 
     const userId = user.id;
-    const { date, duration = 60 } = req.query;
+    const { date, duration = 60, event_type_id } = req.query;
 
     // Validate date
     const parsedDate = date ? parse(date, 'yyyy-MM-dd', new Date()) : null;
@@ -396,10 +403,30 @@ const getPublicBookings = asyncHandler(async (req, res) => {
       }]);
     }
 
-    // Use user's preferred meeting duration from settings, or duration query param, or default to 60 minutes
-    const userPreferredDuration = user.settings?.meetingDuration;
-    const requestedDuration = parseInt(duration, 10);
-    const slotDuration = userPreferredDuration || requestedDuration || 60;
+    // Get event type duration if event_type_id is provided
+    let slotDuration = 60; // Default duration
+    let eventType = null;
+    
+    if (event_type_id) {
+      const EventType = require('../models/event-type.model');
+      eventType = await EventType.findOne({
+        where: { 
+          id: event_type_id,
+          user_id: userId,
+          is_active: true
+        }
+      });
+      
+      if (eventType) {
+        slotDuration = eventType.duration || 60;
+        logger.info(`Using event type duration: ${slotDuration} minutes for event type ${event_type_id}`);
+      }
+    } else {
+      // Fall back to user settings or query parameter
+      const userPreferredDuration = user.settings?.meetingDuration;
+      const requestedDuration = parseInt(duration, 10);
+      slotDuration = requestedDuration || userPreferredDuration || 60;
+    }
     
     if (slotDuration < 15 || slotDuration > 240) {
       throw validationError([{
@@ -418,16 +445,38 @@ const getPublicBookings = asyncHandler(async (req, res) => {
         user: {
           id: user.id,
           firstName: user.firstName,
-          lastName: user.lastName
+          lastName: user.lastName,
+          username: user.username,
+          timezone: user.timezone
         },
         date,
         available_slots: []
       }, 'No availability rules found for this day');
     }
 
-    // Get bookings for this date
-    const dayStart = startOfDay(targetDate);
-    const dayEnd = endOfDay(targetDate);
+    // Get bookings for this date in the user's timezone
+    const userTimezone = user.timezone || 'America/New_York';
+    
+    // Parse the date string and create Date objects for start/end of day
+    // The date string "2025-08-07" represents August 7 in the user's timezone
+    const year = parseInt(date.substring(0, 4));
+    const month = parseInt(date.substring(5, 7)) - 1; // Month is 0-indexed
+    const day = parseInt(date.substring(8, 10));
+    
+    // Create dates at midnight and end of day in user's timezone
+    const dayStartInUserTz = new Date(year, month, day, 0, 0, 0, 0);
+    const dayEndInUserTz = new Date(year, month, day, 23, 59, 59, 999);
+    
+    // Convert from user's timezone to UTC
+    const dayStart = fromZonedTime(dayStartInUserTz, userTimezone);
+    const dayEnd = fromZonedTime(dayEndInUserTz, userTimezone);
+    
+    logger.debug(`Date range for ${date} in ${userTimezone}:`, {
+      userTzStart: dayStartInUserTz.toISOString(),
+      userTzEnd: dayEndInUserTz.toISOString(),
+      utcStart: dayStart.toISOString(),
+      utcEnd: dayEnd.toISOString()
+    });
 
     const bookings = await Booking.findAll({
       where: {
@@ -459,9 +508,30 @@ const getPublicBookings = asyncHandler(async (req, res) => {
     // Get busy times from integrated calendars
     let calendarBusyTimes = [];
     try {
+      logger.info(`Fetching calendar busy times for user ${userId}`, {
+        userId,
+        dayStart: dayStart.toISOString(),
+        dayEnd: dayEnd.toISOString(),
+        date
+      });
+      
       calendarBusyTimes = await calendarService.getAllBusyTimes(userId, dayStart, dayEnd);
+      
+      logger.info(`Calendar busy times fetched for user ${userId}:`, {
+        count: calendarBusyTimes.length,
+        busyTimes: calendarBusyTimes.map(bt => ({
+          start: bt.start.toISOString(),
+          end: bt.end.toISOString(),
+          duration: Math.round((bt.end - bt.start) / 60000) + ' minutes'
+        }))
+      });
     } catch (error) {
-      logger.warn(`Failed to fetch calendar busy times for user ${userId}:`, error);
+      logger.error(`Failed to fetch calendar busy times for user ${userId}:`, {
+        error: error.message,
+        stack: error.stack,
+        userId,
+        date
+      });
       // Continue without calendar integration - don't fail the request
     }
 
@@ -474,24 +544,47 @@ const getPublicBookings = asyncHandler(async (req, res) => {
       const ruleStartTime = parse(rule.startTime, 'HH:mm:ss', new Date());
       const ruleEndTime = parse(rule.endTime, 'HH:mm:ss', new Date());
 
-      // Create slots with specified duration
-      let slotStart = set(targetDate, {
-        hours: getHours(ruleStartTime),
-        minutes: getMinutes(ruleStartTime),
-        seconds: 0
-      });
-      const ruleEnd = set(targetDate, {
-        hours: getHours(ruleEndTime),
-        minutes: getMinutes(ruleEndTime),
-        seconds: 0
-      });
+      // Create slots with specified duration in user's timezone
+      // Use the parsed date components to create slot times
+      let slotStart = new Date(year, month, day, 
+        getHours(ruleStartTime),
+        getMinutes(ruleStartTime),
+        0, 0
+      );
+      const ruleEnd = new Date(year, month, day,
+        getHours(ruleEndTime),
+        getMinutes(ruleEndTime),
+        0, 0
+      );
 
       while (isSameOrBefore(addMinutes(slotStart, slotDuration), ruleEnd)) {
         const slotEnd = addMinutes(slotStart, slotDuration);
+        
+        // Convert slot times from user timezone to UTC
+        const slotStartUtc = fromZonedTime(slotStart, userTimezone);
+        const slotEndUtc = fromZonedTime(slotEnd, userTimezone);
+        
         const slot = {
-          start: slotStart.toISOString(),
-          end: slotEnd.toISOString()
+          start: slotStartUtc.toISOString(),
+          end: slotEndUtc.toISOString()
         };
+
+        // Check if slot is in the past or too soon
+        const now = new Date();
+        const slotStartTime = new Date(slot.start);
+        
+        // Require at least 2 hours advance notice for bookings
+        const minimumAdvanceMinutes = 120; // 2 hours
+        const minimumBookingTime = addMinutes(now, minimumAdvanceMinutes);
+        
+        const isInPast = isBefore(slotStartTime, now);
+        const isTooSoon = isBefore(slotStartTime, minimumBookingTime);
+        
+        if (isInPast || isTooSoon) {
+          logger.debug(`Slot ${slot.start} is ${isInPast ? 'in the past' : 'too soon (less than 2 hours notice)'}, skipping`);
+          slotStart = addMinutes(slotStart, slotDuration);
+          continue;
+        }
 
         // Check if slot conflicts with any booking or calendar event
         const isBookingConflict = bookings.some((booking) => {
@@ -525,10 +618,21 @@ const getPublicBookings = asyncHandler(async (req, res) => {
           const slotStartWithBuffer = addMinutes(new Date(slot.start), -rule.buffer_minutes);
           const slotEndWithBuffer = addMinutes(new Date(slot.end), rule.buffer_minutes);
           
-          return (
-            (isBefore(new Date(slot.start), busyTime.end) && isAfter(new Date(slot.end), busyTime.start))
-            || (isBefore(slotStartWithBuffer, busyTime.end) && isAfter(slotEndWithBuffer, busyTime.start))
-          );
+          const hasOverlap = (isBefore(new Date(slot.start), busyTime.end) && isAfter(new Date(slot.end), busyTime.start))
+            || (isBefore(slotStartWithBuffer, busyTime.end) && isAfter(slotEndWithBuffer, busyTime.start));
+          
+          if (hasOverlap) {
+            logger.debug(`Slot ${slot.start} conflicts with calendar event`, {
+              slot: { start: slot.start, end: slot.end },
+              busyTime: { 
+                start: busyTime.start.toISOString(), 
+                end: busyTime.end.toISOString() 
+              },
+              bufferMinutes: rule.buffer_minutes
+            });
+          }
+          
+          return hasOverlap;
         });
 
         const isConflict = isBookingConflict || isCalendarConflict;
@@ -536,6 +640,8 @@ const getPublicBookings = asyncHandler(async (req, res) => {
         // Add slot if no conflict
         if (!isConflict) {
           allSlots.push(slot);
+        } else if (isCalendarConflict) {
+          logger.debug(`Slot ${slot.start} blocked due to calendar conflict`);
         }
         
         // Move to next slot with buffer time
@@ -553,7 +659,8 @@ const getPublicBookings = asyncHandler(async (req, res) => {
         id: user.id,
         firstName: user.firstName,
         lastName: user.lastName,
-        username: user.username
+        username: user.username,
+        timezone: user.timezone
       },
       settings: {
         googleAnalyticsId: user.settings?.googleAnalyticsId || null,
@@ -1021,6 +1128,7 @@ const confirmBookingRequest = asyncHandler(async (req, res) => {
       },
       include: [{
         model: User,
+        as: 'user',
         attributes: ['id', 'firstName', 'lastName', 'email', 'timezone']
       }]
     });
@@ -1104,7 +1212,7 @@ const confirmBookingRequest = asyncHandler(async (req, res) => {
         bookingId: bookingId,
         type: 'email',
         recipientType: 'host',
-        recipientEmail: bookingRequest.User.email,
+        recipientEmail: bookingRequest.user.email,
         status: 'pending'
       },
       {
@@ -1142,13 +1250,13 @@ const confirmBookingRequest = asyncHandler(async (req, res) => {
       // Send confirmation to customer
       await notificationService.sendBookingConfirmationToCustomer({
         booking,
-        host: bookingRequest.User
+        host: bookingRequest.user
       });
 
       // Send notification to host
       await notificationService.sendBookingNotificationToHost({
         booking,
-        host: bookingRequest.User
+        host: bookingRequest.user
       });
     } catch (emailError) {
       logger.error(`Failed to send confirmation emails for booking ${bookingId}:`, emailError);
@@ -1172,8 +1280,8 @@ const confirmBookingRequest = asyncHandler(async (req, res) => {
         status: booking.status
       },
       host: {
-        name: `${bookingRequest.User.firstName} ${bookingRequest.User.lastName}`,
-        email: bookingRequest.User.email
+        name: `${bookingRequest.user.firstName} ${bookingRequest.user.lastName}`,
+        email: bookingRequest.user.email
       }
     }, 'Booking confirmed successfully');
   } catch (error) {

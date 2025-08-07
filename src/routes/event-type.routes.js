@@ -9,6 +9,7 @@ const router = express.Router();
 const { body, param } = require('express-validator');
 const { authenticate } = require('../middlewares/auth');
 const { validateRequest } = require('../middlewares/validation');
+const { checkEventTypeLimit } = require('../middlewares/subscription');
 const {
   getEventTypes,
   getEventType,
@@ -79,7 +80,7 @@ const reorderValidation = [
 // Protected routes
 router.get('/', authenticate, getEventTypes);
 router.get('/:id', authenticate, param('id').isUUID(), validateRequest, getEventType);
-router.post('/', authenticate, createValidation, validateRequest, createEventType);
+router.post('/', authenticate, checkEventTypeLimit, createValidation, validateRequest, createEventType);
 router.put('/:id', authenticate, updateValidation, validateRequest, updateEventType);
 router.delete('/:id', authenticate, param('id').isUUID(), validateRequest, deleteEventType);
 router.post('/reorder', authenticate, reorderValidation, validateRequest, reorderEventTypes);

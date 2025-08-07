@@ -90,4 +90,28 @@ router.post('/cancel',
   subscriptionController.cancel
 );
 
+/**
+ * @route   POST /api/subscriptions/create-checkout-session
+ * @desc    Create Stripe checkout session with price ID (new multi-tier endpoint)
+ * @access  Private
+ */
+router.post('/create-checkout-session',
+  authenticateJWT,
+  [
+    body('price_id').notEmpty().withMessage('price_id is required').isString()
+  ],
+  validateRequest,
+  subscriptionController.createCheckoutSession
+);
+
+/**
+ * @route   POST /api/subscriptions/sync
+ * @desc    Sync subscription status with Stripe (useful when webhooks fail)
+ * @access  Private
+ */
+router.post('/sync',
+  authenticateJWT,
+  subscriptionController.syncSubscription
+);
+
 module.exports = router;

@@ -13,12 +13,12 @@ const { sequelize } = require('../config/database');
 
 const Invoice = sequelize.define('Invoice', {
   id: {
-    type: DataTypes.STRING(36),
+    type: DataTypes.UUID,
     primaryKey: true,
     defaultValue: () => uuidv4()
   },
   payment_id: {
-    type: DataTypes.STRING(36),
+    type: DataTypes.UUID,
     allowNull: false,
     unique: true,
     references: {

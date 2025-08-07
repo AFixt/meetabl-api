@@ -13,7 +13,7 @@ const path = require('path');
 const logger = require('../config/logger');
 const { User, UserSettings, AuditLog } = require('../models');
 const { sequelize } = require('../config/database');
-const { asyncHandler, successResponse, notFoundError, validationError, unauthorizedError } = require('../utils/error-response');
+const { asyncHandler, successResponse, notFoundError, validationError, unauthorizedError, forbiddenError } = require('../utils/error-response');
 // Use local storage if AWS credentials are not configured
 let uploadFile, deleteFile;
 if (process.env.AWS_ACCESS_KEY_ID && process.env.AWS_SECRET_ACCESS_KEY && process.env.AWS_S3_BUCKET) {
@@ -408,6 +408,18 @@ const getUserSettings = asyncHandler(async (req, res) => {
   try {
     const userId = req.user.id || req.user.dataValues?.id;
 
+    // Get user with subscription data
+    const user = await User.findByPk(userId, {
+      attributes: [
+        'plan_type',
+        'stripe_subscription_id',
+        'stripe_subscription_status',
+        'stripe_price_id',
+        'stripe_current_period_end',
+        'stripe_customer_id'
+      ]
+    });
+
     // Find settings
     let settings = await UserSettings.findOne({ where: { userId: userId } });
 
@@ -419,8 +431,21 @@ const getUserSettings = asyncHandler(async (req, res) => {
       });
     }
 
-    // Return settings
-    return successResponse(res, settings, 'User settings retrieved successfully');
+    // Combine settings with subscription data
+    const settingsData = settings.toJSON();
+    const combinedData = {
+      ...settingsData,
+      // Include subscription data from user record
+      plan_type: user.plan_type,
+      stripe_subscription_id: user.stripe_subscription_id,
+      stripe_subscription_status: user.stripe_subscription_status,
+      stripe_price_id: user.stripe_price_id,
+      stripe_current_period_end: user.stripe_current_period_end,
+      stripe_customer_id: user.stripe_customer_id
+    };
+
+    // Return combined data
+    return successResponse(res, combinedData, 'User settings retrieved successfully');
   } catch (error) {
     throw error;
   }
@@ -435,8 +460,24 @@ const updateUserSettings = asyncHandler(async (req, res) => {
   try {
     const userId = req.user.id || req.user.dataValues?.id;
     const {
-      branding_color, confirmation_email_copy, accessibility_mode, alt_text_enabled, booking_horizon, google_analytics_id, logo_alt_text, meeting_duration, buffer_minutes
+      branding_color, confirmation_email_copy, accessibility_mode, alt_text_enabled, booking_horizon, google_analytics_id, logo_alt_text, meeting_duration, buffer_minutes,
+      // Booking page customization fields
+      booking_page_primary_color, booking_page_secondary_color, booking_page_background_color, 
+      booking_page_text_color, booking_page_font_size, booking_page_font_family
     } = req.body;
+
+    // Check if user can customize booking page
+    const user = await User.findByPk(userId);
+    if (!user) {
+      throw notFoundError('User');
+    }
+
+    // Validate booking page customization permission
+    if ((booking_page_primary_color || booking_page_secondary_color || booking_page_background_color || 
+         booking_page_text_color || booking_page_font_size || booking_page_font_family) && 
+        !user.can_customize_booking_page) {
+      throw forbiddenError('Booking page customization requires a Basic or Professional subscription');
+    }
 
     // Find settings
     let settings = await UserSettings.findOne({ where: { userId: userId } });
@@ -460,6 +501,16 @@ const updateUserSettings = asyncHandler(async (req, res) => {
     if (meeting_duration !== undefined) settings.meetingDuration = meeting_duration;
     if (buffer_minutes !== undefined) settings.bufferMinutes = buffer_minutes;
 
+    // Update booking page customization fields (if user has permission)
+    if (user.can_customize_booking_page) {
+      if (booking_page_primary_color !== undefined) settings.bookingPagePrimaryColor = booking_page_primary_color;
+      if (booking_page_secondary_color !== undefined) settings.bookingPageSecondaryColor = booking_page_secondary_color;
+      if (booking_page_background_color !== undefined) settings.bookingPageBackgroundColor = booking_page_background_color;
+      if (booking_page_text_color !== undefined) settings.bookingPageTextColor = booking_page_text_color;
+      if (booking_page_font_size !== undefined) settings.bookingPageFontSize = booking_page_font_size;
+      if (booking_page_font_family !== undefined) settings.bookingPageFontFamily = booking_page_font_family;
+    }
+
     await settings.save();
 
     // Create audit log
@@ -469,7 +520,9 @@ const updateUserSettings = asyncHandler(async (req, res) => {
       action: 'user.settings.update',
       metadata: {
         updated: {
-          branding_color, confirmation_email_copy, accessibility_mode, alt_text_enabled, booking_horizon, google_analytics_id, logo_alt_text, meeting_duration
+          branding_color, confirmation_email_copy, accessibility_mode, alt_text_enabled, booking_horizon, google_analytics_id, logo_alt_text, meeting_duration, buffer_minutes,
+          booking_page_primary_color, booking_page_secondary_color, booking_page_background_color,
+          booking_page_text_color, booking_page_font_size, booking_page_font_family
         }
       }
     });
@@ -668,11 +721,20 @@ const getPublicProfile = async (req, res) => {
       lastName: user.lastName,
       username: user.username,
       timezone: user.timezone,
+      can_remove_branding: user.can_remove_branding,
+      can_customize_booking_page: user.can_customize_booking_page,
       settings: {
-        brandingColor: user.settings?.brandingColor || '#007bff',
+        brandingColor: user.settings?.brandingColor || '#004085',
         googleAnalyticsId: user.settings?.googleAnalyticsId || null,
         bookingPageTitle: user.settings?.bookingPageTitle || null,
-        bookingPageDescription: user.settings?.bookingPageDescription || null
+        bookingPageDescription: user.settings?.bookingPageDescription || null,
+        // Booking page customization fields
+        bookingPagePrimaryColor: user.settings?.bookingPagePrimaryColor || '#003b49',
+        bookingPageSecondaryColor: user.settings?.bookingPageSecondaryColor || '#ff6b6b',
+        bookingPageBackgroundColor: user.settings?.bookingPageBackgroundColor || '#ffffff',
+        bookingPageTextColor: user.settings?.bookingPageTextColor || '#333333',
+        bookingPageFontSize: user.settings?.bookingPageFontSize || 'medium',
+        bookingPageFontFamily: user.settings?.bookingPageFontFamily || 'Inter, sans-serif'
       }
     };
 

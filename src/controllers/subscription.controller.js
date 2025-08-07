@@ -136,44 +136,47 @@ const upgrade = asyncHandler(async (req, res) => {
   const { planId, billingPeriod = 'monthly' } = req.body;
   const userId = req.user.id;
   
-  // Determine the correct Stripe price ID based on billing period
+  // Validate planId
+  if (!planId || !['basic', 'professional'].includes(planId)) {
+    return res.status(400).json({
+      error: 'Invalid plan ID. Must be "basic" or "professional"'
+    });
+  }
+  
+  // Determine the correct Stripe price ID based on plan and billing period
   let priceId;
-  if (billingPeriod === 'annual') {
-    priceId = stripeProducts.PRICES.ANNUAL.id;
+  const plan = planId.toUpperCase();
+  const period = billingPeriod === 'annual' ? 'ANNUAL' : 'MONTHLY';
+  
+  if (stripeProducts.PRICES[plan] && stripeProducts.PRICES[plan][period]) {
+    priceId = stripeProducts.PRICES[plan][period].id;
   } else {
-    priceId = stripeProducts.PRICES.MONTHLY.id;
+    return res.status(400).json({
+      error: 'Invalid plan or billing period combination'
+    });
   }
   
   logger.info('Subscription upgrade requested', { 
     userId, 
     planId,
     billingPeriod,
-    priceId,
-    productId: stripeProducts.SUBSCRIPTION_PRODUCT_ID
+    priceId
   });
   
   // Create Stripe checkout session for upgrade
   const session = await stripeSubscriptionService.createCheckoutSession(req.user, priceId, {
-    successUrl: `${process.env.APP_URL || process.env.FRONTEND_URL}/subscription/success?session_id={CHECKOUT_SESSION_ID}`,
-    cancelUrl: `${process.env.APP_URL || process.env.FRONTEND_URL}/subscription/plans`,
+    successUrl: `${process.env.APP_URL || process.env.FRONTEND_URL}/settings/billing?success=true&session_id={CHECKOUT_SESSION_ID}`,
+    cancelUrl: `${process.env.APP_URL || process.env.FRONTEND_URL}/settings/billing?canceled=true`,
     // Enable discount codes
     allow_promotion_codes: stripeProducts.DISCOUNT_CODES.ENABLED
-  });
-  
-  // Update user plan limits when upgrading
-  await req.user.update({
-    plan_type: 'paid',
-    max_calendars: stripeProducts.PLAN_LIMITS.PAID.maxCalendars,
-    max_event_types: stripeProducts.PLAN_LIMITS.PAID.maxEventTypes,
-    integrations_enabled: stripeProducts.PLAN_LIMITS.PAID.integrationsEnabled,
-    billing_period: billingPeriod
   });
   
   successResponse(res, {
     message: 'Stripe checkout session created',
     checkoutUrl: session.url,
     sessionId: session.id,
-    productId: stripeProducts.SUBSCRIPTION_PRODUCT_ID
+    planId,
+    billingPeriod
   });
 });
 
@@ -210,6 +213,52 @@ const cancel = asyncHandler(async (req, res) => {
       canceledAt: subscription.canceled_at,
       currentPeriodEnd: subscription.current_period_end
     }
+  });
+});
+
+/**
+ * Create checkout session with price ID - new endpoint for multi-tier plans
+ * @param {Object} req - Express request object
+ * @param {Object} res - Express response object
+ */
+const createCheckoutSession = asyncHandler(async (req, res) => {
+  const { price_id } = req.body;
+  const userId = req.user.id;
+  
+  if (!price_id) {
+    return res.status(400).json({
+      error: 'price_id is required'
+    });
+  }
+  
+  // Validate price_id and get plan details
+  const planDetails = stripeProducts.getPlanFromPriceId(price_id);
+  if (!planDetails) {
+    return res.status(400).json({
+      error: 'Invalid price_id provided'
+    });
+  }
+  
+  logger.info('Checkout session creation requested', { 
+    userId, 
+    price_id,
+    planDetails
+  });
+  
+  // Create Stripe checkout session
+  const session = await stripeSubscriptionService.createCheckoutSession(req.user, price_id, {
+    successUrl: `${process.env.APP_URL || process.env.FRONTEND_URL}/settings/billing?success=true&session_id={CHECKOUT_SESSION_ID}`,
+    cancelUrl: `${process.env.APP_URL || process.env.FRONTEND_URL}/settings/billing?canceled=true`,
+    // Enable discount codes
+    allow_promotion_codes: stripeProducts.DISCOUNT_CODES.ENABLED
+  });
+  
+  successResponse(res, {
+    message: 'Stripe checkout session created',
+    checkout_url: session.url,
+    session_id: session.id,
+    plan: planDetails.plan,
+    interval: planDetails.interval
   });
 });
 
@@ -289,6 +338,115 @@ const getUsageStats = asyncHandler(async (req, res) => {
   });
 });
 
+/**
+ * Sync subscription status with Stripe
+ * This is useful when webhooks fail or for local development
+ * @param {Object} req - Express request object
+ * @param {Object} res - Express response object
+ */
+const syncSubscription = asyncHandler(async (req, res) => {
+  const userId = req.user.id;
+  
+  logger.info(`Syncing subscription for user ${userId}`);
+  
+  // Get the user with their Stripe details
+  const { User } = require('../models');
+  const user = await User.findByPk(userId);
+  
+  if (!user) {
+    return res.status(404).json({
+      error: {
+        code: 'user_not_found',
+        message: 'User not found'
+      }
+    });
+  }
+  
+  // If user has a Stripe customer ID, fetch latest subscription from Stripe
+  if (user.stripe_customer_id) {
+    try {
+      const stripe = stripeService.getStripe();
+      
+      // Get all subscriptions for this customer
+      const subscriptions = await stripe.subscriptions.list({
+        customer: user.stripe_customer_id,
+        status: 'all',
+        limit: 1
+      });
+      
+      if (subscriptions.data.length > 0) {
+        const subscription = subscriptions.data[0];
+        const priceId = subscription.items.data[0]?.price.id;
+        
+        // Determine plan type from price ID
+        const planDetails = stripeProducts.getPlanFromPriceId(priceId);
+        const planType = planDetails ? planDetails.plan : 'free';
+        
+        // Update user with latest subscription details
+        await user.update({
+          stripe_subscription_id: subscription.id,
+          stripe_subscription_status: subscription.status,
+          stripe_price_id: priceId,
+          stripe_current_period_end: new Date(subscription.current_period_end * 1000),
+          plan_type: planType,
+          billing_period: planDetails?.interval === 'year' ? 'annual' : 'monthly'
+        });
+        
+        // Apply plan limits based on new plan type
+        await user.applyPlanLimits();
+        await user.save();
+        
+        logger.info(`Subscription synced for user ${userId}: ${planType} (${subscription.status})`);
+        
+        successResponse(res, {
+          message: 'Subscription synced successfully',
+          subscription: {
+            plan_type: planType,
+            status: subscription.status,
+            billing_period: user.billing_period,
+            current_period_end: user.stripe_current_period_end
+          }
+        });
+      } else {
+        // No active subscription found
+        await user.update({
+          stripe_subscription_id: null,
+          stripe_subscription_status: null,
+          stripe_price_id: null,
+          stripe_current_period_end: null,
+          plan_type: 'free',
+          billing_period: null
+        });
+        
+        await user.applyPlanLimits();
+        await user.save();
+        
+        logger.info(`No active subscription found for user ${userId}, reset to free plan`);
+        
+        successResponse(res, {
+          message: 'No active subscription found',
+          subscription: {
+            plan_type: 'free',
+            status: 'inactive'
+          }
+        });
+      }
+    } catch (error) {
+      logger.error(`Error syncing subscription for user ${userId}:`, error);
+      throw error;
+    }
+  } else {
+    // No Stripe customer ID
+    successResponse(res, {
+      message: 'No Stripe customer associated with this account',
+      subscription: {
+        plan_type: user.plan_type || 'free',
+        status: 'inactive'
+      }
+    });
+  }
+});
+
 module.exports = {
   getSubscription,
   getPlans,
@@ -296,5 +454,7 @@ module.exports = {
   checkLimit,
   upgrade,
   cancel,
-  getUsageStats
+  createCheckoutSession,
+  getUsageStats,
+  syncSubscription
 };

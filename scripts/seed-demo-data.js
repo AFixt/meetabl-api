@@ -19,8 +19,14 @@ async function seedDemoData() {
 
     // Insert demo user using raw SQL for simplicity
     await sequelize.query(`
-      INSERT OR REPLACE INTO users (id, name, email, password_hash, timezone, calendar_provider, created, updated)
+      INSERT INTO users (id, name, email, password_hash, timezone, calendar_provider, created, updated)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      ON DUPLICATE KEY UPDATE
+        name = VALUES(name),
+        password_hash = VALUES(password_hash),
+        timezone = VALUES(timezone),
+        calendar_provider = VALUES(calendar_provider),
+        updated = VALUES(updated)
     `, {
       replacements: [
         userId,
@@ -39,8 +45,13 @@ async function seedDemoData() {
     // Create user settings
     const settingsId = uuidv4();
     await sequelize.query(`
-      INSERT OR REPLACE INTO user_settings (id, user_id, branding_color, confirmation_email_copy, accessibility_mode, alt_text_enabled)
+      INSERT INTO user_settings (id, user_id, branding_color, confirmation_email_copy, accessibility_mode, alt_text_enabled)
       VALUES (?, ?, ?, ?, ?, ?)
+      ON DUPLICATE KEY UPDATE
+        branding_color = VALUES(branding_color),
+        confirmation_email_copy = VALUES(confirmation_email_copy),
+        accessibility_mode = VALUES(accessibility_mode),
+        alt_text_enabled = VALUES(alt_text_enabled)
     `, {
       replacements: [
         settingsId,
@@ -56,8 +67,13 @@ async function seedDemoData() {
     const weekdays = [1, 2, 3, 4, 5]; // Monday to Friday
     for (const dayOfWeek of weekdays) {
       await sequelize.query(`
-        INSERT OR REPLACE INTO availability_rules (id, user_id, day_of_week, start_time, end_time, buffer_minutes, max_bookings_per_day)
+        INSERT INTO availability_rules (id, user_id, day_of_week, start_time, end_time, buffer_minutes, max_bookings_per_day)
         VALUES (?, ?, ?, ?, ?, ?, ?)
+        ON DUPLICATE KEY UPDATE
+          start_time = VALUES(start_time),
+          end_time = VALUES(end_time),
+          buffer_minutes = VALUES(buffer_minutes),
+          max_bookings_per_day = VALUES(max_bookings_per_day)
       `, {
         replacements: [
           uuidv4(),
@@ -82,8 +98,14 @@ async function seedDemoData() {
     endTime.setMinutes(endTime.getMinutes() + 30);
 
     await sequelize.query(`
-      INSERT OR REPLACE INTO bookings (id, user_id, customer_name, customer_email, start_time, end_time, status, created)
+      INSERT INTO bookings (id, user_id, customer_name, customer_email, start_time, end_time, status, created)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      ON DUPLICATE KEY UPDATE
+        customer_name = VALUES(customer_name),
+        customer_email = VALUES(customer_email),
+        start_time = VALUES(start_time),
+        end_time = VALUES(end_time),
+        status = VALUES(status)
     `, {
       replacements: [
         uuidv4(),

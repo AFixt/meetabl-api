@@ -121,6 +121,11 @@ const validateUserRegistration = [
     .isString()
     .withMessage('Timezone must be a string'),
 
+  body('language')
+    .optional()
+    .isString()
+    .withMessage('Language must be a string'),
+
   validateRequest
 ];
 
@@ -197,6 +202,13 @@ const validateBooking = [
     .withMessage('Customer email must be valid')
     .normalizeEmail(),
 
+  body('customer_phone')
+    .optional()
+    .isLength({ max: 25 })
+    .withMessage('Customer phone must be at most 25 characters')
+    .matches(/^[\d\s\-\+\(\)\.]+$/)
+    .withMessage('Customer phone must contain only numbers, spaces, and common phone symbols'),
+
   body('start_time')
     .notEmpty()
     .withMessage('Start time is required')
@@ -208,6 +220,13 @@ const validateBooking = [
     .withMessage('End time is required')
     .isISO8601()
     .withMessage('End time must be a valid ISO 8601 date-time'),
+
+  body('notes')
+    .optional()
+    .isString()
+    .withMessage('Notes must be a string')
+    .isLength({ max: 5000 })
+    .withMessage('Notes must be at most 5000 characters'),
 
   validateRequest
 ];

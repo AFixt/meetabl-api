@@ -13,6 +13,7 @@ const { addSeconds } = require('date-fns');
 const logger = require('../config/logger');
 const { User, CalendarToken, AuditLog } = require('../models');
 const { sequelize } = require('../config/database');
+const calendarService = require('../services/calendar.service');
 
 /**
  * Get Google OAuth authorization URL
@@ -44,7 +45,10 @@ const getGoogleAuthUrl = (req, res) => {
     // Generate auth URL
     const authUrl = oauth2Client.generateAuthUrl({
       access_type: 'offline',
-      scope: ['https://www.googleapis.com/auth/calendar'],
+      scope: [
+        'https://www.googleapis.com/auth/calendar',
+        'https://www.googleapis.com/auth/userinfo.email'
+      ],
       state: userId // Pass user ID as state parameter
     });
 
@@ -107,37 +111,67 @@ const handleGoogleCallback = async (req, res) => {
     // Exchange code for tokens
     const { tokens } = await oauth2Client.getToken(code);
 
-    // Check existing token
-    const existingToken = await CalendarToken.findOne({
-      where: { userId: userId, provider: 'google' }
-    });
-
     // Calculate expiry date
     const expiresAt = addSeconds(new Date(), tokens.expires_in);
 
-    if (existingToken) {
-      // Update existing token
-      existingToken.accessToken = tokens.access_token;
-      existingToken.refreshToken = tokens.refresh_token || existingToken.refreshToken;
-      existingToken.expiresAt = expiresAt;
-      existingToken.scope = tokens.scope;
+    // Create a temporary token to fetch the email first
+    const tempTokenId = uuidv4();
+    const newToken = await CalendarToken.create({
+      id: tempTokenId,
+      userId: userId,
+      provider: 'google',
+      accessToken: tokens.access_token,
+      refreshToken: tokens.refresh_token,
+      expiresAt: expiresAt,
+      scope: tokens.scope,
+      email: 'pending@google.com' // Temporary email
+    }, { transaction });
 
-      await existingToken.save({ transaction });
-    } else {
-      // Create new token
-      await CalendarToken.create({
-        id: uuidv4(),
-        userId: userId,
-        provider: 'google',
-        accessToken: tokens.access_token,
-        refreshToken: tokens.refresh_token,
-        expiresAt: expiresAt,
-        scope: tokens.scope
-      }, { transaction });
+    // Now fetch the email from Google
+    try {
+      const googleEmail = await calendarService.getGoogleUserEmail(userId, tokens.access_token);
+      
+      // Check if this email is already connected for this user
+      const existingTokenWithEmail = await CalendarToken.findOne({
+        where: { 
+          userId: userId, 
+          provider: 'google',
+          email: googleEmail 
+        },
+        transaction
+      });
 
-      // Update user calendar provider
-      user.calendar_provider = 'google';
-      await user.save({ transaction });
+      if (existingTokenWithEmail && existingTokenWithEmail.id !== tempTokenId) {
+        // Email already connected, update existing token instead
+        existingTokenWithEmail.accessToken = tokens.access_token;
+        existingTokenWithEmail.refreshToken = tokens.refresh_token || existingTokenWithEmail.refreshToken;
+        existingTokenWithEmail.expiresAt = expiresAt;
+        existingTokenWithEmail.scope = tokens.scope;
+        await existingTokenWithEmail.save({ transaction });
+        
+        // Delete the temporary token we created
+        await CalendarToken.destroy({
+          where: { id: tempTokenId },
+          transaction
+        });
+        
+        logger.info(`Updated existing Google calendar connection for email: ${googleEmail}`);
+      } else {
+        // New email connection, update the token we just created
+        newToken.email = googleEmail;
+        await newToken.save({ transaction });
+        
+        logger.info(`Added new Google calendar connection for email: ${googleEmail}`);
+      }
+      
+      // Update user calendar provider if not already set
+      if (user.calendar_provider !== 'google' && user.calendar_provider !== 'microsoft') {
+        user.calendar_provider = 'google';
+        await user.save({ transaction });
+      }
+    } catch (error) {
+      logger.warn('Failed to fetch Google email, continuing without it:', error);
+      // Keep the token but with the temporary email
     }
 
     // Create audit log
@@ -190,11 +224,12 @@ const getMicrosoftAuthUrl = (req, res) => {
     }
 
     // Microsoft OAuth configuration
+    // Include User.Read scope to fetch user's email address
     const authUrl = `https://login.microsoftonline.com/common/oauth2/v2.0/authorize?client_id=${
       process.env.MICROSOFT_CLIENT_ID
     }&response_type=code&redirect_uri=${
       encodeURIComponent(process.env.MICROSOFT_REDIRECT_URI)
-    }&scope=Calendars.ReadWrite%20offline_access&state=${
+    }&scope=User.Read%20Calendars.ReadWrite%20offline_access&state=${
       userId
     }`;
 
@@ -286,37 +321,67 @@ const handleMicrosoftCallback = async (req, res) => {
       userId: userId
     });
 
-    // Check existing token
-    const existingToken = await CalendarToken.findOne({
-      where: { userId: userId, provider: 'microsoft' }
-    });
-
     // Calculate expiry date
     const expiresAt = addSeconds(new Date(), tokens.expires_in);
 
-    if (existingToken) {
-      // Update existing token
-      existingToken.accessToken = tokens.access_token;
-      existingToken.refreshToken = tokens.refresh_token || existingToken.refreshToken;
-      existingToken.expiresAt = expiresAt;
-      existingToken.scope = tokens.scope;
+    // Create a temporary token to fetch the email first
+    const tempTokenId = uuidv4();
+    const newToken = await CalendarToken.create({
+      id: tempTokenId,
+      userId: userId,
+      provider: 'microsoft',
+      accessToken: tokens.access_token,
+      refreshToken: tokens.refresh_token,
+      expiresAt: expiresAt,
+      scope: tokens.scope,
+      email: 'pending@microsoft.com' // Temporary email
+    }, { transaction });
 
-      await existingToken.save({ transaction });
-    } else {
-      // Create new token
-      await CalendarToken.create({
-        id: uuidv4(),
-        userId: userId,
-        provider: 'microsoft',
-        accessToken: tokens.access_token,
-        refreshToken: tokens.refresh_token,
-        expiresAt: expiresAt,
-        scope: tokens.scope
-      }, { transaction });
+    // Now fetch the email from Microsoft
+    try {
+      const microsoftEmail = await calendarService.getMicrosoftUserEmail(userId, tokens.access_token);
+      
+      // Check if this email is already connected for this user
+      const existingTokenWithEmail = await CalendarToken.findOne({
+        where: { 
+          userId: userId, 
+          provider: 'microsoft',
+          email: microsoftEmail 
+        },
+        transaction
+      });
 
-      // Update user calendar provider
-      user.calendar_provider = 'microsoft';
-      await user.save({ transaction });
+      if (existingTokenWithEmail && existingTokenWithEmail.id !== tempTokenId) {
+        // Email already connected, update existing token instead
+        existingTokenWithEmail.accessToken = tokens.access_token;
+        existingTokenWithEmail.refreshToken = tokens.refresh_token || existingTokenWithEmail.refreshToken;
+        existingTokenWithEmail.expiresAt = expiresAt;
+        existingTokenWithEmail.scope = tokens.scope;
+        await existingTokenWithEmail.save({ transaction });
+        
+        // Delete the temporary token we created
+        await CalendarToken.destroy({
+          where: { id: tempTokenId },
+          transaction
+        });
+        
+        logger.info(`Updated existing Microsoft calendar connection for email: ${microsoftEmail}`);
+      } else {
+        // New email connection, update the token we just created
+        newToken.email = microsoftEmail;
+        await newToken.save({ transaction });
+        
+        logger.info(`Added new Microsoft calendar connection for email: ${microsoftEmail}`);
+      }
+      
+      // Update user calendar provider if not already set
+      if (user.calendar_provider !== 'microsoft') {
+        user.calendar_provider = 'microsoft';
+        await user.save({ transaction });
+      }
+    } catch (error) {
+      logger.warn('Failed to fetch Microsoft email, continuing without it:', error);
+      // Keep the token but with the temporary email
     }
 
     // Create audit log
@@ -375,8 +440,27 @@ const getCalendarStatus = async (req, res) => {
     // Find calendar tokens
     const tokens = await CalendarToken.findAll({
       where: { userId: userId },
-      attributes: ['id', 'provider', 'expiresAt', 'scope']
+      attributes: ['id', 'provider', 'email', 'expiresAt', 'scope', 'createdAt', 'updatedAt']
     });
+
+    // For tokens without email, try to fetch it
+    for (const token of tokens) {
+      if (!token.email) {
+        try {
+          if (token.provider === 'google') {
+            token.email = await calendarService.getGoogleUserEmail(userId);
+          } else if (token.provider === 'microsoft') {
+            token.email = await calendarService.getMicrosoftUserEmail(userId);
+          }
+          // Save the email for future use
+          await token.save();
+        } catch (error) {
+          logger.warn(`Failed to fetch ${token.provider} email for user ${userId}:`, error);
+          // Fallback to user's email if we can't fetch from provider
+          token.email = user.email;
+        }
+      }
+    }
 
     const calendarStatus = {
       provider: user.calendar_provider,
@@ -384,13 +468,13 @@ const getCalendarStatus = async (req, res) => {
       connections: tokens.map((token) => ({
         id: token.id,
         provider: token.provider,
-        email: user.email, // Use user's email since token doesn't store provider email
+        email: token.email || user.email, // Use token email if available, otherwise user's email
         isActive: true, // Token exists means it's active
         userId: userId,
         expires_at: token.expiresAt,
         scope: token.scope,
-        createdAt: new Date().toISOString(), // Fallback since table doesn't have timestamps
-        updatedAt: new Date().toISOString() // Fallback since table doesn't have timestamps
+        createdAt: token.createdAt,
+        updatedAt: token.updatedAt
       }))
     };
 

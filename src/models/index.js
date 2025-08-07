@@ -21,6 +21,9 @@ const Payment = require('./payment.model');
 const PricingRule = require('./pricing-rule.model');
 const Invoice = require('./invoice.model');
 const EventType = require('./event-type.model');
+const Poll = require('./poll.model');
+const PollTimeSlot = require('./poll-time-slot.model');
+const PollVote = require('./poll-vote.model');
 
 // Initialize associations after all models are loaded
 const { defineAssociations } = require('./associations');
@@ -41,5 +44,8 @@ module.exports = {
   Payment,
   PricingRule,
   Invoice,
-  EventType
+  EventType,
+  Poll,
+  PollTimeSlot,
+  PollVote
 };

@@ -251,11 +251,31 @@ class StripeWebhookService {
     
     const user = await this.findUserByCustomerId(subscription.customer);
     if (user) {
+      const priceId = subscription.items.data[0]?.price.id;
+      
+      // Import stripe products configuration
+      const stripeProducts = require('../config/stripe-products');
+      
+      // Determine plan type from price ID
+      const planDetails = stripeProducts.getPlanFromPriceId(priceId);
+      let planType = user.plan_type; // Keep existing if not found
+      if (planDetails) {
+        planType = planDetails.plan;
+      }
+      
       await user.update({
         stripe_subscription_status: subscription.status,
-        stripe_price_id: subscription.items.data[0]?.price.id,
-        stripe_current_period_end: new Date(subscription.current_period_end * 1000)
+        stripe_price_id: priceId,
+        stripe_current_period_end: new Date(subscription.current_period_end * 1000),
+        plan_type: planType,
+        billing_period: planDetails?.interval === 'year' ? 'annual' : 'monthly'
       });
+      
+      // Apply plan limits if plan changed
+      if (planDetails) {
+        await user.applyPlanLimits();
+        await user.save();
+      }
     }
     
     return { subscriptionId: subscription.id, userId: user?.id, status: subscription.status };
@@ -269,7 +289,8 @@ class StripeWebhookService {
     if (user) {
       await user.update({
         stripe_subscription_status: 'canceled',
-        stripe_current_period_end: new Date(subscription.current_period_end * 1000)
+        stripe_current_period_end: new Date(subscription.current_period_end * 1000),
+        plan_type: 'free'
       });
     }
     
@@ -399,12 +420,34 @@ class StripeWebhookService {
         const stripe = stripeService.getStripe();
         const subscription = await stripe.subscriptions.retrieve(session.subscription);
         
+        // Get the price ID from subscription
+        const priceId = subscription.items.data[0]?.price.id;
+        
+        // Import stripe products configuration
+        const stripeProducts = require('../config/stripe-products');
+        
+        // Determine plan type from price ID
+        const planDetails = stripeProducts.getPlanFromPriceId(priceId);
+        let planType = 'free';
+        if (planDetails) {
+          planType = planDetails.plan;
+        }
+        
+        // Update user with subscription details and apply plan limits
         await user.update({
           stripe_subscription_id: subscription.id,
           stripe_subscription_status: subscription.status,
-          stripe_price_id: subscription.items.data[0]?.price.id,
-          stripe_current_period_end: new Date(subscription.current_period_end * 1000)
+          stripe_price_id: priceId,
+          stripe_current_period_end: new Date(subscription.current_period_end * 1000),
+          plan_type: planType,
+          billing_period: planDetails?.interval === 'year' ? 'annual' : 'monthly'
         });
+        
+        // Apply plan limits based on new plan type
+        await user.applyPlanLimits();
+        await user.save();
+        
+        logger.info(`User ${user.id} upgraded to ${planType} plan (${planDetails?.interval || 'unknown'} billing)`);
       }
     }
     

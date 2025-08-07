@@ -85,22 +85,24 @@ const checkCalendarLimit = async (req, res, next) => {
 };
 
 /**
- * Check if user can add more event types (availability rules)
- * Uses AvailabilityRule model since that serves as event types
+ * Check if user can add more event types
  */
 const checkEventTypeLimit = async (req, res, next) => {
   try {
     const user = await User.findByPk(req.user.id);
-    const AvailabilityRule = require('../models/availability-rule.model');
+    const EventType = require('../models/event-type.model');
     
-    // Count distinct availability rules as event types
-    const eventTypeCount = await AvailabilityRule.count({
-      where: { userId: req.user.id },
-      distinct: true,
-      col: 'id'
+    // Count actual event types
+    const eventTypeCount = await EventType.count({
+      where: { user_id: req.user.id }
     });
     
     if (!user.canAddEventTypes(eventTypeCount)) {
+      logger.warn('Event type limit reached', {
+        userId: req.user.id,
+        currentCount: eventTypeCount,
+        limit: user.max_event_types
+      });
       
       return res.status(403).json({
         success: false,
