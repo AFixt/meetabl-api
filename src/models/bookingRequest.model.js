@@ -69,7 +69,7 @@ const BookingRequest = sequelize.define('BookingRequest', {
     unique: true
   },
   status: {
-    type: DataTypes.ENUM('pending', 'confirmed', 'expired', 'cancelled'),
+    type: DataTypes.ENUM('pending', 'confirmed', 'expired', 'cancelled', 'pending_host_approval'),
     defaultValue: 'pending',
     allowNull: false
   },
@@ -82,6 +82,22 @@ const BookingRequest = sequelize.define('BookingRequest', {
     type: DataTypes.DATE,
     allowNull: true,
     field: 'confirmed_at'
+  },
+  hostApprovalToken: {
+    type: DataTypes.STRING(255),
+    allowNull: true,
+    field: 'host_approval_token',
+    unique: true
+  },
+  hostApprovalTokenExpiresAt: {
+    type: DataTypes.DATE,
+    allowNull: true,
+    field: 'host_approval_token_expires_at'
+  },
+  hostDecisionAt: {
+    type: DataTypes.DATE,
+    allowNull: true,
+    field: 'host_decision_at'
   },
   createdAt: {
     type: DataTypes.DATE,

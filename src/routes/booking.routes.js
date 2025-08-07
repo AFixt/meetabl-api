@@ -100,4 +100,18 @@ router.post('/public/:username', validateBooking, bookingController.createPublic
  */
 router.get('/confirm/:token', bookingController.confirmBookingRequest);
 
+/**
+ * @route GET /api/bookings/approve/:token
+ * @desc Approve a booking request by host
+ * @access Public
+ */
+router.get('/approve/:token', bookingController.approveBookingRequest);
+
+/**
+ * @route POST /api/bookings/reject/:token
+ * @desc Reject a booking request by host
+ * @access Public
+ */
+router.post('/reject/:token', bookingController.rejectBookingRequest);
+
 module.exports = router;

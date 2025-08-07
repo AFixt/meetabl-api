@@ -259,8 +259,8 @@ const validateUserSettings = [
     .optional()
     .isInt({ min: 1 })
     .withMessage('Booking horizon must be a positive integer')
-    .isIn([7, 14, 21, 30])
-    .withMessage('Booking horizon must be 7, 14, 21, or 30 days'),
+    .isIn([7, 14, 21, 30, 90, 180, 365])
+    .withMessage('Booking horizon must be 7, 14, 21, 30, 90, 180, or 365 days'),
 
   body('google_analytics_id')
     .optional()

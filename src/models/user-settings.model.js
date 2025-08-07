@@ -80,7 +80,7 @@ const UserSettings = sequelize.define('UserSettings', {
     defaultValue: 30,
     field: 'booking_horizon',
     validate: {
-      isIn: [[7, 14, 21, 30]]
+      isIn: [[7, 14, 21, 30, 90, 180, 365]]
     }
   },
   googleAnalyticsId: {
@@ -169,6 +169,12 @@ const UserSettings = sequelize.define('UserSettings', {
     allowNull: true,
     defaultValue: 'Inter, sans-serif',
     field: 'booking_page_font_family'
+  },
+  reminderTime: {
+    type: DataTypes.ENUM('none', '15_minutes', '30_minutes', '1_hour', '2_hours', '24_hours'),
+    allowNull: false,
+    defaultValue: '30_minutes',
+    field: 'reminder_time'
   }
 }, {
   tableName: 'user_settings',

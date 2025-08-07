@@ -26,8 +26,26 @@ const Notification = sequelize.define('Notification', {
     }
   },
   type: {
-    type: DataTypes.ENUM('email', 'sms'),
+    type: DataTypes.ENUM('booking_created', 'booking_updated', 'booking_cancelled', 'reminder'),
     allowNull: false
+  },
+  channel: {
+    type: DataTypes.ENUM('email', 'sms'),
+    allowNull: false,
+    defaultValue: 'email'
+  },
+  recipient: {
+    type: DataTypes.STRING(255),
+    allowNull: false
+  },
+  content: {
+    type: DataTypes.TEXT,
+    allowNull: true
+  },
+  scheduledFor: {
+    type: DataTypes.DATE,
+    allowNull: true,
+    field: 'scheduled_for'
   },
   sentAt: {
     type: DataTypes.DATE,
@@ -39,7 +57,13 @@ const Notification = sequelize.define('Notification', {
   },
   errorMessage: {
     type: DataTypes.TEXT,
-    allowNull: true
+    allowNull: true,
+    field: 'error_message'
+  },
+  errorDetails: {
+    type: DataTypes.TEXT,
+    allowNull: true,
+    field: 'error_details'
   }
 }, {
   tableName: 'notifications',

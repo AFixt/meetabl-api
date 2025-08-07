@@ -57,12 +57,9 @@ const getUserBookings = asyncHandler(async (req, res) => {
     limit = 100, offset = 0, order = 'start_time', dir = 'desc'
   } = req.query;
 
-    // Find all bookings for this user with optimized includes to prevent N+1 queries
-    const bookings = await Booking.findAndCountAll({
+    // Find all confirmed bookings for this user
+    const bookings = await Booking.findAll({
       where: { userId: userId },
-      limit,
-      offset,
-      order: [[order, dir]],
       include: [
         {
           model: User,
@@ -79,20 +76,77 @@ const getUserBookings = asyncHandler(async (req, res) => {
       ]
     });
 
+    // Find all pending booking requests for this user
+    const bookingRequests = await BookingRequest.findAll({
+      where: { 
+        userId: userId,
+        status: ['pending', 'pending_host_approval'],
+        expiresAt: { [Op.gt]: new Date() } // Only non-expired requests
+      },
+      include: [
+        {
+          model: User,
+          as: 'user',
+          attributes: ['id', 'firstName', 'lastName', 'email', 'timezone'],
+          required: true
+        }
+      ]
+    });
+
+    // Transform booking requests to match booking format
+    const transformedRequests = bookingRequests.map(req => ({
+      id: req.id,
+      userId: req.userId,
+      customerName: req.customerName,
+      customerEmail: req.customerEmail,
+      customerPhone: req.customerPhone,
+      startTime: req.startTime,
+      endTime: req.endTime,
+      status: req.status,
+      notes: req.notes,
+      meetingUrl: null,
+      calendarEventId: null,
+      createdAt: req.createdAt,
+      updatedAt: req.updatedAt,
+      user: req.user,
+      notifications: [], // Booking requests don't have notifications yet
+      // Add additional fields to distinguish booking requests
+      isBookingRequest: true,
+      confirmationToken: req.confirmationToken,
+      expiresAt: req.expiresAt,
+      confirmedAt: req.confirmedAt
+    }));
+
+    // Combine bookings and booking requests
+    const allBookings = [...bookings.map(b => ({ ...b.toJSON(), isBookingRequest: false })), ...transformedRequests];
+    
+    // Sort combined results
+    allBookings.sort((a, b) => {
+      if (order === 'start_time') {
+        const comparison = new Date(b.startTime) - new Date(a.startTime);
+        return dir === 'desc' ? comparison : -comparison;
+      }
+      return 0;
+    });
+
+    // Apply pagination
+    const total = allBookings.length;
+    const paginatedBookings = allBookings.slice(offset, offset + parseInt(limit));
+
     // Set pagination headers
     res.set({
-      'X-Total-Count': bookings.count,
-      'X-Total-Pages': Math.ceil(bookings.count / limit),
+      'X-Total-Count': total,
+      'X-Total-Pages': Math.ceil(total / limit),
       'X-Per-Page': limit,
       'X-Current-Page': Math.floor(offset / limit) + 1
     });
 
-    logger.info(`Found ${bookings.count} bookings for user ${userId}`);
+    logger.info(`Found ${bookings.length} confirmed bookings and ${bookingRequests.length} pending requests for user ${userId}`);
     
-    return paginatedResponse(res, bookings.rows, {
+    return paginatedResponse(res, paginatedBookings, {
       page: Math.floor(offset / limit) + 1,
       limit: parseInt(limit),
-      total: bookings.count
+      total: total
     }, 'Bookings retrieved successfully');
 });
 
@@ -216,6 +270,14 @@ const createBooking = asyncHandler(async (req, res) => {
     // Queue email notification job
     await notificationService.queueNotification(bookingId, 'email');
 
+    // Schedule reminder notifications
+    try {
+      await notificationService.scheduleReminders(bookingId);
+    } catch (reminderError) {
+      logger.error(`Failed to schedule reminders for booking ${bookingId}:`, reminderError);
+      // Non-critical error, don't fail the booking creation
+    }
+
     // Create calendar event if user has calendar integration
     try {
       await calendarService.createCalendarEvent(booking);
@@ -325,6 +387,14 @@ const cancelBooking = asyncHandler(async (req, res) => {
 
     // Queue email notification job for cancellation
     await notificationService.queueNotification(id, 'email');
+
+    // Cancel any scheduled reminder notifications
+    try {
+      await notificationService.cancelReminders(id);
+    } catch (reminderError) {
+      logger.error(`Failed to cancel reminders for booking ${id}:`, reminderError);
+      // Non-critical error, don't fail the cancellation
+    }
 
     // Update calendar event if user has calendar integration
     try {
@@ -1080,6 +1150,16 @@ const bulkCancelBookings = asyncHandler(async (req, res) => {
       // Non-critical error, don't fail the cancellation
     }
 
+    // Cancel scheduled reminder notifications for all cancelled bookings
+    try {
+      await Promise.allSettled(
+        cancelledBookings.map(bookingId => notificationService.cancelReminders(bookingId))
+      );
+    } catch (error) {
+      logger.error('Error cancelling bulk reminder notifications:', error);
+      // Non-critical error, don't fail the cancellation
+    }
+
     // Update calendar events if user has calendar integration - parallel processing
     const calendarUpdates = bookings.map(async (booking) => {
       try {
@@ -1150,6 +1230,23 @@ const confirmBookingRequest = asyncHandler(async (req, res) => {
       }]);
     }
 
+    // Check if this event type requires host confirmation
+    let eventType = null;
+    let requiresHostConfirmation = false;
+    
+    if (bookingRequest.eventTypeId) {
+      const EventType = require('../models/event-type.model');
+      eventType = await EventType.findOne({
+        where: { 
+          id: bookingRequest.eventTypeId,
+          user_id: bookingRequest.userId,
+          is_active: true
+        }
+      });
+      
+      requiresHostConfirmation = eventType?.requiresConfirmation || false;
+    }
+
     // Check for race condition - another booking might have been confirmed for this time slot
     const overlappingBookings = await Booking.findOne({
       where: {
@@ -1186,6 +1283,251 @@ const confirmBookingRequest = asyncHandler(async (req, res) => {
       });
     }
 
+    // Handle different flows based on whether host confirmation is required
+    if (requiresHostConfirmation) {
+      // Two-step confirmation: Customer confirmed, now needs host approval
+      
+      // Generate host approval token
+      const { token: hostApprovalToken, expiresAt: hostApprovalExpires } = generateTokenWithExpiration(32, 7 * 24 * 60); // 7 days
+      
+      // Update booking request to pending host approval
+      bookingRequest.status = 'pending_host_approval';
+      bookingRequest.confirmedAt = new Date();
+      bookingRequest.hostApprovalToken = hostApprovalToken;
+      bookingRequest.hostApprovalTokenExpiresAt = hostApprovalExpires;
+      await bookingRequest.save({ transaction });
+
+      // Create audit log
+      await AuditLog.create({
+        id: uuidv4(),
+        userId: bookingRequest.userId,
+        action: 'booking.customer_confirmed',
+        metadata: {
+          bookingRequestId: bookingRequest.id,
+          customer_email: bookingRequest.customerEmail,
+          awaiting_host_approval: true
+        }
+      }, { transaction });
+
+      // Commit transaction
+      await transaction.commit();
+
+      // Log customer confirmation
+      logger.info(`Booking request ${bookingRequest.id} confirmed by customer, awaiting host approval`);
+
+      // Send notification to host for approval
+      try {
+        await notificationService.sendHostApprovalRequest({
+          bookingRequest,
+          host: bookingRequest.user,
+          eventType,
+          approvalToken: hostApprovalToken
+        });
+      } catch (emailError) {
+        logger.error(`Failed to send host approval request for booking request ${bookingRequest.id}:`, emailError);
+        // Don't fail the confirmation, email can be retried
+      }
+
+      return successResponse(res, {
+        message: 'Thank you for confirming your booking. Your request has been sent to the host for approval. You will receive an email once the host responds.',
+        status: 'pending_host_approval',
+        bookingRequestId: bookingRequest.id
+      }, 'Booking confirmed by customer, pending host approval');
+
+    } else {
+      // Single-step confirmation: Create booking immediately
+      
+      // Create the actual booking
+      const bookingId = uuidv4();
+      const booking = await Booking.create({
+        id: bookingId,
+        userId: bookingRequest.userId,
+        customerName: bookingRequest.customerName,
+        customerEmail: bookingRequest.customerEmail,
+        customerPhone: bookingRequest.customerPhone,
+        startTime: bookingRequest.startTime,
+        endTime: bookingRequest.endTime,
+        notes: bookingRequest.notes,
+        status: 'confirmed'
+      }, { transaction });
+
+      // Update booking request status
+      bookingRequest.status = 'confirmed';
+      bookingRequest.confirmedAt = new Date();
+      await bookingRequest.save({ transaction });
+
+      // Create notifications for both parties
+      const notifications = [
+        {
+          id: uuidv4(),
+          bookingId: bookingId,
+          type: 'email',
+          recipientType: 'host',
+          recipientEmail: bookingRequest.user.email,
+          status: 'pending'
+        },
+        {
+          id: uuidv4(),
+          bookingId: bookingId,
+          type: 'email',
+          recipientType: 'customer',
+          recipientEmail: bookingRequest.customerEmail,
+          status: 'pending'
+        }
+      ];
+
+      await Notification.bulkCreate(notifications, { transaction });
+
+      // Create audit log
+      await AuditLog.create({
+        id: uuidv4(),
+        userId: bookingRequest.userId,
+        action: 'booking.confirm',
+        metadata: {
+          bookingId,
+          bookingRequestId: bookingRequest.id,
+          customer_email: bookingRequest.customerEmail
+        }
+      }, { transaction });
+
+      // Commit transaction
+      await transaction.commit();
+
+      // Log booking confirmation
+      logger.info(`Booking confirmed: ${bookingId} from request ${bookingRequest.id}`);
+
+      // Send notification emails
+      try {
+        // Send confirmation to customer
+        await notificationService.sendBookingConfirmationToCustomer({
+          booking,
+          host: bookingRequest.user
+        });
+
+        // Send notification to host
+        await notificationService.sendBookingNotificationToHost({
+          booking,
+          host: bookingRequest.user
+        });
+      } catch (emailError) {
+        logger.error(`Failed to send confirmation emails for booking ${bookingId}:`, emailError);
+        // Don't fail the confirmation, emails can be retried
+      }
+
+      // Schedule reminder notifications
+      try {
+        await notificationService.scheduleReminders(bookingId);
+      } catch (reminderError) {
+        logger.error(`Failed to schedule reminders for confirmed booking ${bookingId}:`, reminderError);
+        // Non-critical error, don't fail the confirmation
+      }
+
+      // Create calendar event if user has calendar integration
+      try {
+        await calendarService.createCalendarEvent(booking);
+      } catch (calendarError) {
+        logger.error(`Failed to create calendar event for confirmed booking ${bookingId}:`, calendarError);
+        // Non-critical error, don't fail the confirmation
+      }
+
+      return successResponse(res, {
+        booking: {
+          id: booking.id,
+          customerName: booking.customerName,
+          startTime: booking.startTime,
+          endTime: booking.endTime,
+          status: booking.status
+        },
+        host: {
+          name: `${bookingRequest.user.firstName} ${bookingRequest.user.lastName}`,
+          email: bookingRequest.user.email
+        }
+      }, 'Booking confirmed successfully');
+    }
+  } catch (error) {
+    // Rollback transaction
+    await transaction.rollback();
+    throw error;
+  }
+});
+
+/**
+ * Approve booking request by host
+ * @param {Object} req - Express request object
+ * @param {Object} res - Express response object
+ */
+const approveBookingRequest = asyncHandler(async (req, res) => {
+  const transaction = await sequelize.transaction();
+
+  try {
+    const { token } = req.params;
+
+    // Find the booking request by host approval token
+    const bookingRequest = await BookingRequest.findOne({
+      where: {
+        hostApprovalToken: token,
+        status: 'pending_host_approval'
+      },
+      include: [{
+        model: User,
+        as: 'user',
+        attributes: ['id', 'firstName', 'lastName', 'email', 'timezone']
+      }]
+    });
+
+    if (!bookingRequest) {
+      throw notFoundError('Invalid or expired approval link');
+    }
+
+    // Check if approval token has expired
+    if (new Date() > new Date(bookingRequest.hostApprovalTokenExpiresAt)) {
+      // Update status to expired
+      bookingRequest.status = 'expired';
+      await bookingRequest.save({ transaction });
+      await transaction.commit();
+      
+      throw validationError([{
+        field: 'token',
+        message: 'This approval link has expired. The booking request is no longer valid.'
+      }]);
+    }
+
+    // Check for race condition - another booking might have been confirmed for this time slot
+    const overlappingBookings = await Booking.findOne({
+      where: {
+        userId: bookingRequest.userId,
+        status: 'confirmed',
+        [Op.and]: [
+          {
+            startTime: { [Op.lt]: bookingRequest.endTime }
+          },
+          {
+            endTime: { [Op.gt]: bookingRequest.startTime }
+          }
+        ]
+      }
+    });
+
+    if (overlappingBookings) {
+      // Update status to cancelled due to conflict
+      bookingRequest.status = 'cancelled';
+      bookingRequest.hostDecisionAt = new Date();
+      await bookingRequest.save({ transaction });
+      await transaction.commit();
+      
+      return res.status(409).json({
+        success: false,
+        error: {
+          code: 'time_slot_taken',
+          message: 'This time slot is no longer available. Another booking has been confirmed.',
+          data: {
+            userId: bookingRequest.userId,
+            date: bookingRequest.startTime
+          }
+        }
+      });
+    }
+
     // Create the actual booking
     const bookingId = uuidv4();
     const booking = await Booking.create({
@@ -1202,36 +1544,14 @@ const confirmBookingRequest = asyncHandler(async (req, res) => {
 
     // Update booking request status
     bookingRequest.status = 'confirmed';
-    bookingRequest.confirmedAt = new Date();
+    bookingRequest.hostDecisionAt = new Date();
     await bookingRequest.save({ transaction });
-
-    // Create notifications for both parties
-    const notifications = [
-      {
-        id: uuidv4(),
-        bookingId: bookingId,
-        type: 'email',
-        recipientType: 'host',
-        recipientEmail: bookingRequest.user.email,
-        status: 'pending'
-      },
-      {
-        id: uuidv4(),
-        bookingId: bookingId,
-        type: 'email',
-        recipientType: 'customer',
-        recipientEmail: bookingRequest.customerEmail,
-        status: 'pending'
-      }
-    ];
-
-    await Notification.bulkCreate(notifications, { transaction });
 
     // Create audit log
     await AuditLog.create({
       id: uuidv4(),
       userId: bookingRequest.userId,
-      action: 'booking.confirm',
+      action: 'booking.host_approved',
       metadata: {
         bookingId,
         bookingRequestId: bookingRequest.id,
@@ -1242,48 +1562,142 @@ const confirmBookingRequest = asyncHandler(async (req, res) => {
     // Commit transaction
     await transaction.commit();
 
-    // Log booking confirmation
-    logger.info(`Booking confirmed: ${bookingId} from request ${bookingRequest.id}`);
+    // Log booking approval
+    logger.info(`Booking approved by host: ${bookingId} from request ${bookingRequest.id}`);
 
     // Send notification emails
     try {
       // Send confirmation to customer
-      await notificationService.sendBookingConfirmationToCustomer({
+      await notificationService.sendBookingApprovedToCustomer({
         booking,
         host: bookingRequest.user
       });
 
-      // Send notification to host
-      await notificationService.sendBookingNotificationToHost({
+      // Send confirmation to host
+      await notificationService.sendBookingConfirmationToHost({
         booking,
         host: bookingRequest.user
       });
     } catch (emailError) {
-      logger.error(`Failed to send confirmation emails for booking ${bookingId}:`, emailError);
-      // Don't fail the confirmation, emails can be retried
+      logger.error(`Failed to send approval emails for booking ${bookingId}:`, emailError);
+      // Don't fail the approval, emails can be retried
+    }
+
+    // Schedule reminder notifications
+    try {
+      await notificationService.scheduleReminders(bookingId);
+    } catch (reminderError) {
+      logger.error(`Failed to schedule reminders for approved booking ${bookingId}:`, reminderError);
+      // Non-critical error, don't fail the approval
     }
 
     // Create calendar event if user has calendar integration
     try {
       await calendarService.createCalendarEvent(booking);
     } catch (calendarError) {
-      logger.error(`Failed to create calendar event for confirmed booking ${bookingId}:`, calendarError);
-      // Non-critical error, don't fail the confirmation
+      logger.error(`Failed to create calendar event for approved booking ${bookingId}:`, calendarError);
+      // Non-critical error, don't fail the approval
     }
 
     return successResponse(res, {
       booking: {
         id: booking.id,
         customerName: booking.customerName,
+        customerEmail: booking.customerEmail,
         startTime: booking.startTime,
         endTime: booking.endTime,
         status: booking.status
       },
-      host: {
-        name: `${bookingRequest.user.firstName} ${bookingRequest.user.lastName}`,
-        email: bookingRequest.user.email
+      message: 'Booking has been approved and confirmed successfully'
+    }, 'Booking approved by host');
+  } catch (error) {
+    // Rollback transaction
+    await transaction.rollback();
+    throw error;
+  }
+});
+
+/**
+ * Reject booking request by host
+ * @param {Object} req - Express request object
+ * @param {Object} res - Express response object
+ */
+const rejectBookingRequest = asyncHandler(async (req, res) => {
+  const transaction = await sequelize.transaction();
+
+  try {
+    const { token } = req.params;
+    const { reason } = req.body;
+
+    // Find the booking request by host approval token
+    const bookingRequest = await BookingRequest.findOne({
+      where: {
+        hostApprovalToken: token,
+        status: 'pending_host_approval'
+      },
+      include: [{
+        model: User,
+        as: 'user',
+        attributes: ['id', 'firstName', 'lastName', 'email', 'timezone']
+      }]
+    });
+
+    if (!bookingRequest) {
+      throw notFoundError('Invalid or expired approval link');
+    }
+
+    // Check if approval token has expired
+    if (new Date() > new Date(bookingRequest.hostApprovalTokenExpiresAt)) {
+      // Update status to expired
+      bookingRequest.status = 'expired';
+      await bookingRequest.save({ transaction });
+      await transaction.commit();
+      
+      throw validationError([{
+        field: 'token',
+        message: 'This approval link has expired. The booking request is no longer valid.'
+      }]);
+    }
+
+    // Update booking request status to cancelled
+    bookingRequest.status = 'cancelled';
+    bookingRequest.hostDecisionAt = new Date();
+    await bookingRequest.save({ transaction });
+
+    // Create audit log
+    await AuditLog.create({
+      id: uuidv4(),
+      userId: bookingRequest.userId,
+      action: 'booking.host_rejected',
+      metadata: {
+        bookingRequestId: bookingRequest.id,
+        customer_email: bookingRequest.customerEmail,
+        rejection_reason: reason || 'No reason provided'
       }
-    }, 'Booking confirmed successfully');
+    }, { transaction });
+
+    // Commit transaction
+    await transaction.commit();
+
+    // Log booking rejection
+    logger.info(`Booking rejected by host: request ${bookingRequest.id}`);
+
+    // Send notification to customer
+    try {
+      await notificationService.sendBookingRejectedToCustomer({
+        bookingRequest,
+        host: bookingRequest.user,
+        reason: reason || null
+      });
+    } catch (emailError) {
+      logger.error(`Failed to send rejection email for booking request ${bookingRequest.id}:`, emailError);
+      // Don't fail the rejection, email can be retried
+    }
+
+    return successResponse(res, {
+      message: 'Booking request has been rejected successfully',
+      bookingRequestId: bookingRequest.id
+    }, 'Booking rejected by host');
   } catch (error) {
     // Rollback transaction
     await transaction.rollback();
@@ -1300,5 +1714,7 @@ module.exports = {
   createPublicBooking,
   confirmBookingRequest,
   rescheduleBooking,
-  bulkCancelBookings
+  bulkCancelBookings,
+  approveBookingRequest,
+  rejectBookingRequest
 };
