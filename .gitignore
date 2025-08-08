@@ -138,3 +138,19 @@ dist
 .idea/
 .DS_Store
 app.zip
+# Environment files - contain secrets, never commit
+.env
+.env.*
+*.env
+!.env.example
+!.env.template
+
+# Uploads directory - user generated content
+uploads/
+/uploads/
+uploads/**/*
+
+# Large files
+*.zip
+*.tar.gz
+*.sql
