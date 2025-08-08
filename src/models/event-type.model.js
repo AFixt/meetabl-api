@@ -119,6 +119,16 @@ const EventType = sequelize.define('EventType', {
       },
       comment: 'Maximum advance booking time in minutes'
     },
+    reminderMinutes: {
+      type: DataTypes.INTEGER,
+      allowNull: false,
+      defaultValue: 15,
+      validate: {
+        min: 0,
+        max: 10080 // 7 days max
+      },
+      comment: 'Reminder time before event in minutes'
+    },
     questions: {
       type: DataTypes.JSON,
       allowNull: true,
