@@ -173,7 +173,7 @@
     "serverless": "^3.38.0",
     "serverless-dotenv-plugin": "^6.0.0",
     "serverless-offline": "^13.9.0",
-    "snyk": "^1.1243.0",
+    "snyk": "^1.1297.3",
     "sqlite3": "^5.1.7",
     "supertest": "^6.3.4"
   },
