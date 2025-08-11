@@ -15,7 +15,7 @@ This document outlines our SQL design patterns, naming conventions, and best pra
 
 1. All MySQL databases should use InnoDB as the engine
 2. All MySQL databases should use `DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci`;
-3. All MySQL databases should have a column, `inc` set to be an auto incrementing integer. This should be an index, but not be used as a referenceable primary key. 
+3. All MySQL databases should have a column, `inc` set to be an auto incrementing integer. This should be an index, but MUST NOT be used as a referenceable primary key. 
 It is rather used to help MySQL indexing.
 
 ## Table Naming Conventions
@@ -29,8 +29,8 @@ It is rather used to help MySQL indexing.
 
 1. **CamelCase for Column Names**: All column names use camelCase (e.g., `userId`, `tokenHash`, `permissionId`).
 2. **Primary Keys**:
-   - `inc`: Used as an auto-incrementing integer primary key in most tables.
-   - Entity-specific IDs: Many tables also include a UUID-based identifier (e.g., `userId`, `teamId`, `logId`).
+   - `inc`: MUST NOT be used as an auto-incrementing integer primary key in most tables.
+   - Entity-specific IDs: All tables MUST have a UUID-based identifier (e.g., `userId`, `teamId`, `logId`).
 
 3. **Common Columns**:
    - `created`: Timestamp column with default `CURRENT_TIMESTAMP`.
@@ -83,8 +83,8 @@ Use standard SQL operators for better cross-database compatibility:
 
 ### Index Patterns
 
-1. Primary keys on `inc` columns.
-2. Secondary indexes on UUID columns (e.g., `userId`, `teamId`).
+1. Primary keys on UUID columns (e.g., `userId`, `teamId`).
+2. Indexes on `inc` columns.
 3. Indexes on frequently searched string columns (e.g., `event` in `logs` table).
 4. Indexes on foreign key columns.
 

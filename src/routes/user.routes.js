@@ -13,7 +13,15 @@ const userController = require('../controllers/user.controller');
 
 const router = express.Router();
 
-// Apply authentication middleware
+// Public routes (no authentication required)
+/**
+ * @route GET /api/users/public/:username
+ * @desc Get public profile data
+ * @access Public
+ */
+router.get('/public/:username', userController.getPublicProfile);
+
+// Apply authentication middleware for all routes below
 router.use(authenticateJWT);
 
 /**
@@ -43,5 +51,62 @@ router.get('/settings', userController.getUserSettings);
  * @access Private
  */
 router.put('/settings', validateUserSettings, userController.updateUserSettings);
+
+/**
+ * @route PUT /api/users/me/password
+ * @desc Change user password
+ * @access Private
+ */
+router.put('/me/password', userController.changePassword);
+
+/**
+ * @route POST /api/users/me/resend-verification
+ * @desc Resend email verification
+ * @access Private
+ */
+const { resendVerificationEmail } = require('../controllers/auth.controller');
+router.post('/me/resend-verification', resendVerificationEmail);
+
+/**
+ * @route DELETE /api/users/me
+ * @desc Delete user account
+ * @access Private
+ */
+router.delete('/me', userController.deleteAccount);
+
+/**
+ * @route PUT /api/users/me/public-profile
+ * @desc Update public profile settings
+ * @access Private
+ */
+router.put('/me/public-profile', userController.updatePublicProfile);
+
+/**
+ * @route POST /api/users/me/logo
+ * @desc Upload logo image
+ * @access Private
+ */
+router.post('/me/logo', userController.upload.single('logo'), userController.uploadLogo);
+
+/**
+ * @route DELETE /api/users/me/logo
+ * @desc Delete logo image
+ * @access Private
+ */
+router.delete('/me/logo', userController.deleteLogo);
+
+/**
+ * @route POST /api/users/me/avatar
+ * @desc Upload avatar image
+ * @access Private
+ */
+router.post('/me/avatar', userController.upload.single('avatar'), userController.uploadAvatar);
+
+/**
+ * @route DELETE /api/users/me/avatar
+ * @desc Delete avatar image
+ * @access Private
+ */
+router.delete('/me/avatar', userController.deleteAvatar);
 
 module.exports = router;

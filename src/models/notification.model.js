@@ -10,27 +10,44 @@
 const { DataTypes } = require('sequelize');
 const { v4: uuidv4 } = require('uuid');
 const { sequelize } = require('../config/database');
-const Booking = require('./booking.model');
 
 const Notification = sequelize.define('Notification', {
   id: {
-    type: DataTypes.STRING(36),
+    type: DataTypes.UUID,
     primaryKey: true,
     defaultValue: () => uuidv4()
   },
-  booking_id: {
-    type: DataTypes.STRING(36),
+  bookingId: {
+    type: DataTypes.UUID,
     allowNull: false,
     references: {
-      model: Booking,
+      model: 'bookings',
       key: 'id'
     }
   },
   type: {
-    type: DataTypes.ENUM('email', 'sms'),
+    type: DataTypes.ENUM('booking_created', 'booking_updated', 'booking_cancelled', 'reminder'),
     allowNull: false
   },
-  sent_at: {
+  channel: {
+    type: DataTypes.ENUM('email', 'sms'),
+    allowNull: false,
+    defaultValue: 'email'
+  },
+  recipient: {
+    type: DataTypes.STRING(255),
+    allowNull: false
+  },
+  content: {
+    type: DataTypes.TEXT,
+    allowNull: true
+  },
+  scheduledFor: {
+    type: DataTypes.DATE,
+    allowNull: true,
+    field: 'scheduled_for'
+  },
+  sentAt: {
     type: DataTypes.DATE,
     allowNull: true
   },
@@ -38,17 +55,21 @@ const Notification = sequelize.define('Notification', {
     type: DataTypes.ENUM('pending', 'sent', 'failed'),
     defaultValue: 'pending'
   },
-  error_message: {
+  errorMessage: {
     type: DataTypes.TEXT,
-    allowNull: true
+    allowNull: true,
+    field: 'error_message'
+  },
+  errorDetails: {
+    type: DataTypes.TEXT,
+    allowNull: true,
+    field: 'error_details'
   }
 }, {
   tableName: 'notifications',
   timestamps: false
 });
 
-// Define relationships
-Booking.hasMany(Notification, { foreignKey: 'booking_id', onDelete: 'CASCADE' });
-Notification.belongsTo(Booking, { foreignKey: 'booking_id' });
+// Relationships are defined in associations.js to avoid circular dependencies
 
 module.exports = Notification;

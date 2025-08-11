@@ -8,115 +8,180 @@
 
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcrypt');
+const crypto = require('crypto');
 const { v4: uuidv4 } = require('uuid');
+const { Op } = require('sequelize');
+const { 
+  generateUserVerificationToken, 
+  generatePasswordResetToken 
+} = require('../utils/crypto');
 const logger = require('../config/logger');
-const { User, UserSettings, AuditLog } = require('../models');
+const { User, UserSettings, AuditLog, JwtBlacklist } = require('../models');
 const { sequelize } = require('../config/database');
+const { sendPasswordResetEmail, sendEmailVerification } = require('../services/notification.service');
+const stripeCustomerService = require('../services/stripe-customer.service');
+const stripeService = require('../services/stripe.service');
+const stripeSubscriptionService = require('../services/stripe-subscription.service');
+const twoFactorAuthService = require('../services/two-factor-auth.service');
+const { asyncHandler, successResponse, conflictError, unauthorizedError, notFoundError, validationError, createError } = require('../utils/error-response');
 
 /**
- * Register a new user
+ * Get subscription status for user
+ * @param {Object} user - User object
+ * @returns {Promise<Object>} Subscription status
+ */
+async function getSubscriptionStatus(user) {
+  try {
+    return await stripeSubscriptionService.getSubscriptionStatus(user);
+  } catch (error) {
+    logger.error('Error getting subscription status:', error);
+    return {
+      status: 'unknown',
+      has_access: stripeService.isSuperAdmin(user),
+      error: 'Failed to check subscription status'
+    };
+  }
+}
+
+/**
+ * Register a new user with Stripe customer creation
  * @param {Object} req - Express request object
  * @param {Object} res - Express response object
  */
-const register = async (req, res) => {
+const register = asyncHandler(async (req, res) => {
   const transaction = await sequelize.transaction();
 
   try {
     const {
-      name, email, password, timezone
+      firstName, lastName, email, password, phone, timezone, username, language
     } = req.body;
 
     // Check if user already exists
     const existingUser = await User.findOne({ where: { email } });
 
     if (existingUser) {
-      return res.status(400).json({
-        error: {
-          code: 'bad_request',
-          message: 'Email already in use',
-          params: [
-            {
-              param: 'email',
-              message: 'A user with this email already exists'
-            }
-          ]
-        }
-      });
+      throw conflictError('Email already in use');
     }
 
-    // Create user
-    const salt = await bcrypt.genSalt(10);
-    const passwordHash = await bcrypt.hash(password, salt);
+    // Create user (password will be hashed by User model hook)
 
     const userId = uuidv4();
+    
+    // Generate email verification token
+    const verificationToken = generateUserVerificationToken();
+    const hashedVerificationToken = crypto.createHash('sha256').update(verificationToken).digest('hex');
 
+    // Set default consent for new users (can be changed later)
     const user = await User.create({
       id: userId,
-      name,
+      firstName,
+      lastName,
       email,
-      password_hash: passwordHash,
-      timezone: timezone || 'UTC'
+      username: username || email.split('@')[0], // Default username from email prefix if not provided
+      password: password,
+      timezone: timezone || 'UTC',
+      language: language || 'en',
+      email_verified: false,
+      email_verification_token: hashedVerificationToken,
+      email_verification_expires: new Date(Date.now() + 24 * 60 * 60 * 1000) // 24 hours
     }, { transaction });
 
     // Create default user settings
     await UserSettings.create({
       id: uuidv4(),
-      user_id: userId
+      userId: userId
     }, { transaction });
 
     // Create audit log
     await AuditLog.create({
       id: uuidv4(),
-      user_id: userId,
+      userId: userId,
       action: 'user.register',
       metadata: {
         email,
-        timezone
+        timezone: timezone || 'UTC',
+        language: language || 'en'
       }
     }, { transaction });
 
-    // Generate JWT token
+    // Commit database transaction first
+    await transaction.commit();
+
+    // Create Stripe customer (after successful user creation)
+    let stripeCustomer = null;
+    try {
+      stripeCustomer = await stripeCustomerService.createCustomer(user, {
+        metadata: {
+          source: 'registration',
+          user_timezone: timezone || 'UTC'
+        }
+      });
+      
+      logger.info(`Stripe customer created for user ${userId}: ${stripeCustomer.id}`);
+    } catch (stripeError) {
+      logger.error('Failed to create Stripe customer during registration:', stripeError);
+      // Don't fail registration if Stripe customer creation fails
+      // Customer can be created later when needed
+    }
+
+    // Send verification email
+    try {
+      await sendEmailVerification(user, verificationToken);
+    } catch (emailError) {
+      logger.error('Error sending verification email:', emailError);
+      // Continue anyway - user can request resend
+    }
+
+    // Generate JWT token with unique ID
+    const jti = uuidv4();
     const token = jwt.sign(
-      { userId: user.id },
+      { userId: user.id, jti },
       process.env.JWT_SECRET,
       { expiresIn: process.env.JWT_EXPIRES_IN || '7d' }
     );
 
-    // Commit transaction
-    await transaction.commit();
-
     // Log successful registration
     logger.info(`User registered: ${email}`);
 
-    // Return user data and token
-    return res.status(201).json({
+    // Set secure httpOnly cookies for tokens
+    const cookieOptions = {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: process.env.NODE_ENV === 'production' ? 'strict' : 'lax',
+      maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
+    };
+
+    res.cookie('token', token, cookieOptions);
+
+    // Return user data with subscription status
+    const subscriptionStatus = await getSubscriptionStatus(user);
+
+    return successResponse(res, {
       id: user.id,
-      name: user.name,
+      first_name: user.firstName,
+      last_name: user.lastName,
       email: user.email,
+      phone: user.phone,
       timezone: user.timezone,
-      token
-    });
+      email_verified: user.email_verified,
+      subscription: subscriptionStatus,
+      stripe_customer_created: !!stripeCustomer
+    }, 'User registered successfully. Please check your email to verify your account.', 201);
   } catch (error) {
-    // Rollback transaction
-    await transaction.rollback();
-
-    logger.error('Registration error:', error);
-
-    return res.status(500).json({
-      error: {
-        code: 'internal_server_error',
-        message: 'Failed to register user'
-      }
-    });
+    // Rollback transaction if still active
+    if (!transaction.finished) {
+      await transaction.rollback();
+    }
+    throw error;
   }
-};
+});
 
 /**
- * Login user
+ * Login user with Stripe subscription status
  * @param {Object} req - Express request object
  * @param {Object} res - Express response object
  */
-const login = async (req, res) => {
+const login = asyncHandler(async (req, res) => {
   try {
     const { email, password } = req.body;
 
@@ -124,36 +189,43 @@ const login = async (req, res) => {
     const user = await User.findOne({ where: { email } });
 
     if (!user) {
-      return res.status(401).json({
-        error: {
-          code: 'unauthorized',
-          message: 'Invalid email or password'
-        }
-      });
+      throw unauthorizedError('Invalid email or password');
     }
 
     // Validate password
-    const isPasswordValid = await bcrypt.compare(password, user.password_hash);
+    logger.info(`Login attempt for ${email} - User found: ${!!user}`);
+    logger.info(`User password hash exists: ${!!user.password}`);
+    logger.info(`Password hash length: ${user.password ? user.password.length : 0}`);
+    
+    const isPasswordValid = await bcrypt.compare(password, user.password);
+    logger.info(`Password validation result: ${isPasswordValid}`);
 
     if (!isPasswordValid) {
-      return res.status(401).json({
-        error: {
-          code: 'unauthorized',
-          message: 'Invalid email or password'
-        }
-      });
+      throw unauthorizedError('Invalid email or password');
     }
 
-    // Generate JWT token
+    // Check if 2FA is enabled for this user
+    if (user.two_factor_enabled) {
+      // Return a special response indicating 2FA is required
+      return successResponse(res, {
+        requires_2fa: true,
+        email: user.email,
+        message: 'Two-factor authentication required. Please provide your 2FA token.'
+      }, 'Two-factor authentication required', 202);
+    }
+
+    // Generate JWT token with unique ID
+    const jti = uuidv4();
     const token = jwt.sign(
-      { userId: user.id },
+      { userId: user.id, jti },
       process.env.JWT_SECRET,
       { expiresIn: process.env.JWT_EXPIRES_IN || '7d' }
     );
 
-    // Generate refresh token
+    // Generate refresh token with unique ID
+    const refreshJti = uuidv4();
     const refreshToken = jwt.sign(
-      { userId: user.id, type: 'refresh' },
+      { userId: user.id, type: 'refresh', jti: refreshJti },
       process.env.JWT_SECRET,
       { expiresIn: process.env.JWT_REFRESH_EXPIRES_IN || '30d' }
     );
@@ -161,95 +233,95 @@ const login = async (req, res) => {
     // Create audit log
     await AuditLog.create({
       id: uuidv4(),
-      user_id: user.id,
+      userId: user.id,
       action: 'user.login',
       metadata: {
         email
       }
     });
 
+    // Get subscription status
+    const subscriptionStatus = await getSubscriptionStatus(user);
+
     // Log successful login
     logger.info(`User logged in: ${email}`);
 
-    // Return user data and tokens
-    return res.status(200).json({
+    // Set secure httpOnly cookies for tokens
+    const cookieOptions = {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: process.env.NODE_ENV === 'production' ? 'strict' : 'lax',
+      maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
+    };
+
+    const refreshCookieOptions = {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: process.env.NODE_ENV === 'production' ? 'strict' : 'lax',
+      maxAge: 30 * 24 * 60 * 60 * 1000 // 30 days
+    };
+
+    res.cookie('token', token, cookieOptions);
+    res.cookie('refreshToken', refreshToken, refreshCookieOptions);
+
+    // Return user data with subscription status
+    return successResponse(res, {
       id: user.id,
-      name: user.name,
+      first_name: user.firstName,
+      last_name: user.lastName,
       email: user.email,
       timezone: user.timezone,
-      token,
-      refreshToken
-    });
+      email_verified: user.email_verified,
+      subscription: subscriptionStatus,
+      access_token: token,
+      refresh_token: refreshToken,
+      expires_in: process.env.JWT_EXPIRES_IN || '7d'
+    }, 'Login successful');
   } catch (error) {
-    logger.error('Login error:', error);
-
-    return res.status(500).json({
-      error: {
-        code: 'internal_server_error',
-        message: 'Failed to log in'
-      }
-    });
+    throw error;
   }
-};
+});
 
 /**
  * Refresh auth token
  * @param {Object} req - Express request object
  * @param {Object} res - Express response object
  */
-const refreshToken = async (req, res) => {
+const refreshToken = asyncHandler(async (req, res) => {
   try {
-    const { refreshToken } = req.body;
+    // Get refresh token from cookie instead of body
+    const tokenFromCookie = req.cookies.refreshToken;
 
-    if (!refreshToken) {
-      return res.status(400).json({
-        error: {
-          code: 'bad_request',
-          message: 'Refresh token is required',
-          params: [
-            {
-              param: 'refreshToken',
-              message: 'Refresh token is required'
-            }
-          ]
-        }
-      });
+    if (!tokenFromCookie) {
+      throw validationError([{ field: 'refreshToken', message: 'Refresh token is required' }]);
     }
 
     // Verify refresh token
-    const decoded = jwt.verify(refreshToken, process.env.JWT_SECRET);
+    const decoded = jwt.verify(tokenFromCookie, process.env.JWT_SECRET);
 
     if (!decoded.userId || decoded.type !== 'refresh') {
-      return res.status(401).json({
-        error: {
-          code: 'unauthorized',
-          message: 'Invalid refresh token'
-        }
-      });
+      throw unauthorizedError('Invalid refresh token');
     }
 
     // Find user
     const user = await User.findOne({ where: { id: decoded.userId } });
 
     if (!user) {
-      return res.status(401).json({
-        error: {
-          code: 'unauthorized',
-          message: 'User not found'
-        }
-      });
+      throw unauthorizedError('User not found');
     }
 
-    // Generate new JWT token
+    // Generate new JWT token with unique ID
+    const jti = uuidv4();
     const token = jwt.sign(
-      { userId: user.id },
+      { userId: user.id, jti },
       process.env.JWT_SECRET,
       { expiresIn: process.env.JWT_EXPIRES_IN || '7d' }
     );
 
-    // Generate new refresh token
+    // Generate new refresh token with unique ID
+    const newRefreshJti = uuidv4();
     const newRefreshToken = jwt.sign(
-      { userId: user.id, type: 'refresh' },
+      { userId: user.id, type: 'refresh', jti: newRefreshJti },
       process.env.JWT_SECRET,
       { expiresIn: process.env.JWT_REFRESH_EXPIRES_IN || '30d' }
     );
@@ -257,7 +329,7 @@ const refreshToken = async (req, res) => {
     // Create audit log
     await AuditLog.create({
       id: uuidv4(),
-      user_id: user.id,
+      userId: user.id,
       action: 'user.token_refresh',
       metadata: {}
     });
@@ -265,42 +337,474 @@ const refreshToken = async (req, res) => {
     // Log token refresh
     logger.info(`Token refreshed for user: ${user.id}`);
 
-    // Return new tokens
-    return res.status(200).json({
-      token,
-      refreshToken: newRefreshToken
-    });
+    // Set secure httpOnly cookies for new tokens
+    const cookieOptions = {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: process.env.NODE_ENV === 'production' ? 'strict' : 'lax',
+      maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
+    };
+
+    const refreshCookieOptions = {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: process.env.NODE_ENV === 'production' ? 'strict' : 'lax',
+      maxAge: 30 * 24 * 60 * 60 * 1000 // 30 days
+    };
+
+    res.cookie('token', token, cookieOptions);
+    res.cookie('refreshToken', newRefreshToken, refreshCookieOptions);
+
+    // Return success without tokens
+    return successResponse(res, null, 'Tokens refreshed successfully');
   } catch (error) {
-    // Handle JWT errors
-    if (error instanceof jwt.TokenExpiredError) {
-      return res.status(401).json({
-        error: {
-          code: 'unauthorized',
-          message: 'Refresh token expired'
-        }
-      });
-    } if (error instanceof jwt.JsonWebTokenError) {
-      return res.status(401).json({
-        error: {
-          code: 'unauthorized',
-          message: 'Invalid refresh token'
-        }
-      });
+    throw error;
+  }
+});
+
+/**
+ * Logout user
+ * @param {Object} req - Express request object
+ * @param {Object} res - Express response object
+ */
+const logout = asyncHandler(async (req, res) => {
+  try {
+    // Get token from cookie or Authorization header
+    const token = req.cookies.token || 
+                  (req.headers.authorization && req.headers.authorization.startsWith('Bearer ') 
+                    ? req.headers.authorization.substring(7) 
+                    : null);
+
+    if (!token) {
+      throw validationError([{ field: 'token', message: 'Authorization token required' }]);
+    }
+    
+    // Decode token to get jti and expiration
+    const decoded = jwt.decode(token);
+    if (!decoded || !decoded.jti) {
+      throw validationError([{ field: 'token', message: 'Invalid token format' }]);
     }
 
-    logger.error('Token refresh error:', error);
+    // Calculate expiration time
+    const expiresAt = new Date(decoded.exp * 1000);
 
-    return res.status(500).json({
-      error: {
-        code: 'internal_server_error',
-        message: 'Failed to refresh token'
+    // Add token to blacklist
+    await JwtBlacklist.create({
+      id: uuidv4(),
+      jwtId: decoded.jti,
+      token,
+      userId: decoded.userId,
+      reason: 'logout',
+      expiresAt
+    });
+
+    // Create audit log
+    await AuditLog.create({
+      id: uuidv4(),
+      user_id: decoded.userId,
+      action: 'user.logout',
+      metadata: {
+        jti: decoded.jti
       }
     });
+
+    logger.info(`User logged out: ${decoded.userId}`);
+
+    // Clear cookies
+    res.clearCookie('token');
+    res.clearCookie('refreshToken');
+
+    return successResponse(res, null, 'Logged out successfully');
+  } catch (error) {
+    throw error;
   }
-};
+});
+
+/**
+ * Request password reset
+ * @param {Object} req - Express request object
+ * @param {Object} res - Express response object
+ */
+const forgotPassword = asyncHandler(async (req, res) => {
+  try {
+    const { email } = req.body;
+
+    // Find user by email
+    const user = await User.findOne({ where: { email } });
+
+    if (!user) {
+      // Don't reveal if email exists or not for security
+      return successResponse(res, null, 'If an account exists with this email, a password reset link has been sent.');
+    }
+
+    // Generate reset token
+    const resetToken = generatePasswordResetToken();
+    const hashedToken = crypto.createHash('sha256').update(resetToken).digest('hex');
+
+    // Save hashed token and expiration to user
+    user.password_reset_token = hashedToken;
+    user.password_reset_expires = new Date(Date.now() + 3600000); // 1 hour
+    await user.save();
+
+    // Send password reset email
+    try {
+      await sendPasswordResetEmail(user, resetToken);
+    } catch (emailError) {
+      logger.error('Error sending password reset email:', emailError);
+      // Still return success to not reveal if email exists
+    }
+
+    // Create audit log
+    await AuditLog.create({
+      id: uuidv4(),
+      userId: user.id,
+      action: 'user.password_reset_requested',
+      metadata: {
+        email
+      }
+    });
+
+    logger.info(`Password reset requested for: ${email}`);
+
+    return successResponse(res, null, 'If an account exists with this email, a password reset link has been sent.');
+  } catch (error) {
+    throw error;
+  }
+});
+
+/**
+ * Reset password with token
+ * @param {Object} req - Express request object
+ * @param {Object} res - Express response object
+ */
+const resetPassword = asyncHandler(async (req, res) => {
+  const transaction = await sequelize.transaction();
+
+  try {
+    const { token, password } = req.body;
+
+    // Hash the token to compare with stored hash
+    const hashedToken = crypto.createHash('sha256').update(token).digest('hex');
+
+    // Find user with valid reset token
+    const user = await User.findOne({
+      where: {
+        password_reset_token: hashedToken,
+        password_reset_expires: { [Op.gt]: Date.now() }
+      }
+    });
+
+    if (!user) {
+      throw validationError([{ field: 'token', message: 'Invalid or expired reset token' }]);
+    }
+
+    // Update password - set plain password, the model hook will hash it
+    user.password = password;
+    user.password_reset_token = null;
+    user.password_reset_expires = null;
+    await user.save({ transaction });
+
+    // Create audit log
+    await AuditLog.create({
+      id: uuidv4(),
+      userId: user.id,
+      action: 'user.password_reset_completed',
+      metadata: {
+        email: user.email
+      }
+    }, { transaction });
+
+    // Commit transaction
+    await transaction.commit();
+
+    logger.info(`Password reset completed for: ${user.email}`);
+
+    return successResponse(res, null, 'Password has been reset successfully');
+  } catch (error) {
+    // Rollback transaction
+    await transaction.rollback();
+    throw error;
+  }
+});
+
+/**
+ * Verify/confirm email with token
+ * @param {Object} req - Express request object
+ * @param {Object} res - Express response object
+ */
+const confirmEmail = asyncHandler(async (req, res) => {
+  const transaction = await sequelize.transaction();
+
+  try {
+    const { token } = req.body;
+
+    if (!token) {
+      throw validationError([{ field: 'token', message: 'Verification token is required' }]);
+    }
+
+    // Hash the token to compare with stored hash
+    const hashedToken = crypto.createHash('sha256').update(token).digest('hex');
+
+    // Find user with valid verification token
+    const user = await User.findOne({
+      where: {
+        email_verification_token: hashedToken,
+        email_verification_expires: { [Op.gt]: Date.now() }
+      }
+    });
+
+    if (!user) {
+      throw validationError([{ field: 'token', message: 'Invalid or expired verification token' }]);
+    }
+
+    // Update user as verified
+    user.email_verified = true;
+    user.email_verification_token = null;
+    user.email_verification_expires = null;
+    await user.save({ transaction });
+
+    // Ensure Stripe customer exists after email verification
+    let stripeCustomerCreated = false;
+    if (!user.stripe_customer_id) {
+      try {
+        await stripeCustomerService.createCustomer(user, {
+          metadata: {
+            source: 'email_verification',
+            verified_at: new Date().toISOString()
+          }
+        });
+        stripeCustomerCreated = true;
+        logger.info(`Stripe customer created for verified user ${user.id}`);
+      } catch (stripeError) {
+        logger.error('Failed to create Stripe customer after email verification:', stripeError);
+        // Don't fail verification if Stripe customer creation fails
+      }
+    }
+
+    // Create audit log
+    await AuditLog.create({
+      id: uuidv4(),
+      userId: user.id,
+      action: 'user.email_verified',
+      metadata: {
+        email: user.email,
+        stripe_customer_created: stripeCustomerCreated
+      }
+    }, { transaction });
+
+    // Commit transaction
+    await transaction.commit();
+
+    // Get updated subscription status
+    const subscriptionStatus = await getSubscriptionStatus(user);
+
+    logger.info(`Email verified for: ${user.email}`);
+
+    return successResponse(res, {
+      email_verified: true,
+      subscription: subscriptionStatus,
+      stripe_customer_created: stripeCustomerCreated
+    }, 'Email verified successfully! Your account is now active.');
+  } catch (error) {
+    // Rollback transaction
+    if (!transaction.finished) {
+      await transaction.rollback();
+    }
+    throw error;
+  }
+});
+
+// Keep the old verifyEmail function for backward compatibility
+const verifyEmail = confirmEmail;
+
+/**
+ * Verify 2FA token during login
+ * @param {Object} req - Express request object
+ * @param {Object} res - Express response object
+ */
+const verify2FA = asyncHandler(async (req, res) => {
+  try {
+    const { email, password, two_factor_token } = req.body;
+
+    if (!email || !password || !two_factor_token) {
+      throw validationError([
+        { field: 'email', message: 'Email is required' },
+        { field: 'password', message: 'Password is required' },
+        { field: 'two_factor_token', message: '2FA token is required' }
+      ]);
+    }
+
+    // Find user by email
+    const user = await User.findOne({ where: { email } });
+
+    if (!user) {
+      throw unauthorizedError('Invalid credentials');
+    }
+
+    // Validate password
+    const isPasswordValid = await bcrypt.compare(password, user.password);
+
+    if (!isPasswordValid) {
+      throw unauthorizedError('Invalid credentials');
+    }
+
+    // Verify 2FA token
+    const twoFactorResult = await twoFactorAuthService.verifyLogin2FA(user, two_factor_token);
+
+    if (!twoFactorResult.verified) {
+      // Log failed 2FA attempt
+      await AuditLog.create({
+        id: uuidv4(),
+        userId: user.id,
+        action: 'user.2fa_login_failed',
+        metadata: {
+          email,
+          method: twoFactorResult.method,
+          ip_address: req.ip
+        }
+      });
+
+      throw unauthorizedError('Invalid 2FA token');
+    }
+
+    // Generate JWT tokens
+    const jti = uuidv4();
+    const token = jwt.sign(
+      { userId: user.id, jti },
+      process.env.JWT_SECRET,
+      { expiresIn: process.env.JWT_EXPIRES_IN || '7d' }
+    );
+
+    const refreshJti = uuidv4();
+    const refreshToken = jwt.sign(
+      { userId: user.id, type: 'refresh', jti: refreshJti },
+      process.env.JWT_SECRET,
+      { expiresIn: process.env.JWT_REFRESH_EXPIRES_IN || '30d' }
+    );
+
+    // Create audit log for successful login
+    await AuditLog.create({
+      id: uuidv4(),
+      userId: user.id,
+      action: 'user.2fa_login_success',
+      metadata: {
+        email,
+        method: twoFactorResult.method,
+        remaining_backup_codes: twoFactorResult.remaining_codes,
+        ip_address: req.ip
+      }
+    });
+
+    // Get subscription status
+    const subscriptionStatus = await getSubscriptionStatus(user);
+
+    logger.info(`User logged in with 2FA: ${email} (method: ${twoFactorResult.method})`);
+
+    // Set secure httpOnly cookies for tokens
+    const cookieOptions = {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: process.env.NODE_ENV === 'production' ? 'strict' : 'lax',
+      maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
+    };
+
+    const refreshCookieOptions = {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: process.env.NODE_ENV === 'production' ? 'strict' : 'lax',
+      maxAge: 30 * 24 * 60 * 60 * 1000 // 30 days
+    };
+
+    res.cookie('token', token, cookieOptions);
+    res.cookie('refreshToken', refreshToken, refreshCookieOptions);
+
+    const responseData = {
+      id: user.id,
+      first_name: user.firstName,
+      last_name: user.lastName,
+      email: user.email,
+      phone: user.phone,
+      timezone: user.timezone,
+      email_verified: user.email_verified,
+      is_super_admin: user.is_super_admin,
+      subscription: subscriptionStatus,
+      two_factor: {
+        method: twoFactorResult.method,
+        remaining_backup_codes: twoFactorResult.remaining_codes
+      }
+    };
+
+    return successResponse(res, responseData, 'Login successful with 2FA verification');
+  } catch (error) {
+    throw error;
+  }
+});
+
+/**
+ * Resend verification email
+ * @param {Object} req - Express request object
+ * @param {Object} res - Express response object
+ */
+const resendVerificationEmail = asyncHandler(async (req, res) => {
+  try {
+    const userId = req.user.id;
+
+    // Find user
+    const user = await User.findOne({ where: { id: userId } });
+
+    if (!user) {
+      throw notFoundError('User');
+    }
+
+    // Check if already verified
+    if (user.email_verified) {
+      throw validationError([{ field: 'email', message: 'Email is already verified' }]);
+    }
+
+    // Generate new verification token
+    const verificationToken = generateUserVerificationToken();
+    const hashedToken = crypto.createHash('sha256').update(verificationToken).digest('hex');
+
+    // Update user with new token
+    user.email_verification_token = hashedToken;
+    user.email_verification_expires = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
+    await user.save();
+
+    // Send verification email
+    try {
+      await sendEmailVerification(user, verificationToken);
+    } catch (emailError) {
+      logger.error('Error sending verification email:', emailError);
+      throw createError('EXTERNAL_SERVICE_ERROR', 'Failed to send verification email');
+    }
+
+    // Create audit log
+    await AuditLog.create({
+      id: uuidv4(),
+      userId: user.id,
+      action: 'user.verification_email_resent',
+      metadata: {
+        email: user.email
+      }
+    });
+
+    logger.info(`Verification email resent to: ${user.email}`);
+
+    return successResponse(res, null, 'Verification email has been sent');
+  } catch (error) {
+    throw error;
+  }
+});
 
 module.exports = {
   register,
   login,
-  refreshToken
+  verify2FA,
+  refreshToken,
+  logout,
+  forgotPassword,
+  resetPassword,
+  verifyEmail,
+  confirmEmail,
+  resendVerificationEmail
 };

@@ -28,7 +28,7 @@ const validateRequest = (req, res, next) => {
 
   // Format errors to match API error response format
   const formattedErrors = errors.array().map((error) => ({
-    param: error.param,
+    param: error.path,
     message: error.msg
   }));
 
@@ -85,11 +85,17 @@ const validateUuid = [
  * Validate user registration
  */
 const validateUserRegistration = [
-  body('name')
+  body('firstName')
     .notEmpty()
-    .withMessage('Name is required')
-    .isLength({ max: 100 })
-    .withMessage('Name must be at most 100 characters'),
+    .withMessage('First name is required')
+    .isLength({ max: 50 })
+    .withMessage('First name must be at most 50 characters'),
+    
+  body('lastName')
+    .notEmpty()
+    .withMessage('Last name is required')
+    .isLength({ max: 50 })
+    .withMessage('Last name must be at most 50 characters'),
 
   body('email')
     .notEmpty()
@@ -111,8 +117,14 @@ const validateUserRegistration = [
     .withMessage('Password must contain at least one number'),
 
   body('timezone')
-    .notEmpty()
-    .withMessage('Timezone is required'),
+    .optional()
+    .isString()
+    .withMessage('Timezone must be a string'),
+
+  body('language')
+    .optional()
+    .isString()
+    .withMessage('Language must be a string'),
 
   validateRequest
 ];
@@ -190,6 +202,13 @@ const validateBooking = [
     .withMessage('Customer email must be valid')
     .normalizeEmail(),
 
+  body('customer_phone')
+    .optional()
+    .isLength({ max: 25 })
+    .withMessage('Customer phone must be at most 25 characters')
+    .matches(/^[\d\s\-\+\(\)\.]+$/)
+    .withMessage('Customer phone must contain only numbers, spaces, and common phone symbols'),
+
   body('start_time')
     .notEmpty()
     .withMessage('Start time is required')
@@ -201,6 +220,13 @@ const validateBooking = [
     .withMessage('End time is required')
     .isISO8601()
     .withMessage('End time must be a valid ISO 8601 date-time'),
+
+  body('notes')
+    .optional()
+    .isString()
+    .withMessage('Notes must be a string')
+    .isLength({ max: 5000 })
+    .withMessage('Notes must be at most 5000 characters'),
 
   validateRequest
 ];
@@ -229,6 +255,142 @@ const validateUserSettings = [
     .isBoolean()
     .withMessage('Alt text enabled must be a boolean'),
 
+  body('booking_horizon')
+    .optional()
+    .isInt({ min: 1 })
+    .withMessage('Booking horizon must be a positive integer')
+    .isIn([7, 14, 21, 30, 90, 180, 365])
+    .withMessage('Booking horizon must be 7, 14, 21, 30, 90, 180, or 365 days'),
+
+  body('google_analytics_id')
+    .optional()
+    .matches(/^(G-[A-Z0-9]+|UA-[0-9]+-[0-9]+|GT-[A-Z0-9]+)?$/i)
+    .withMessage('Google Analytics ID must be in G-XXXXXXXX, UA-XXXXXXX-X, or GT-XXXXXXXX format'),
+
+  validateRequest
+];
+
+/**
+ * Validate team creation/update
+ */
+const validateTeam = [
+  body('name')
+    .notEmpty()
+    .withMessage('Team name is required')
+    .isLength({ max: 100 })
+    .withMessage('Team name must be at most 100 characters'),
+
+  body('description')
+    .optional()
+    .isString()
+    .withMessage('Description must be a string')
+    .isLength({ max: 1000 })
+    .withMessage('Description must be at most 1000 characters'),
+
+  validateRequest
+];
+
+/**
+ * Validate team member addition
+ */
+const validateTeamMember = [
+  body('user_id')
+    .notEmpty()
+    .withMessage('User ID is required')
+    .isUUID(4)
+    .withMessage('User ID must be a valid UUID'),
+
+  body('role')
+    .optional()
+    .isIn(['admin', 'member'])
+    .withMessage('Role must be either "admin" or "member"'),
+
+  validateRequest
+];
+
+/**
+ * Validate user ID parameter
+ */
+const validateUserIdParam = [
+  param('userId')
+    .isUUID(4)
+    .withMessage('User ID must be a valid UUID'),
+
+  validateRequest
+];
+
+/**
+ * Validate payment processing
+ */
+const validatePayment = [
+  body('booking_id')
+    .notEmpty()
+    .withMessage('Booking ID is required')
+    .isUUID(4)
+    .withMessage('Booking ID must be a valid UUID'),
+
+  validateRequest
+];
+
+/**
+ * Validate refund request
+ */
+const validateRefund = [
+  body('payment_id')
+    .notEmpty()
+    .withMessage('Payment ID is required')
+    .isUUID(4)
+    .withMessage('Payment ID must be a valid UUID'),
+
+  body('amount')
+    .optional()
+    .isFloat({ min: 0.01 })
+    .withMessage('Amount must be greater than 0')
+    .toFloat(),
+
+  body('reason')
+    .optional()
+    .isIn(['duplicate', 'fraudulent', 'requested_by_customer'])
+    .withMessage('Invalid refund reason'),
+
+  validateRequest
+];
+
+/**
+ * Validate pricing rule creation/update
+ */
+const validatePricingRule = [
+  body('name')
+    .notEmpty()
+    .withMessage('Name is required')
+    .isLength({ max: 100 })
+    .withMessage('Name must be at most 100 characters'),
+
+  body('description')
+    .optional()
+    .isString()
+    .withMessage('Description must be a string'),
+
+  body('price_per_slot')
+    .notEmpty()
+    .withMessage('Price per slot is required')
+    .isFloat({ min: 0 })
+    .withMessage('Price per slot must be a non-negative number')
+    .toFloat(),
+
+  body('currency')
+    .optional()
+    .isLength({ min: 3, max: 3 })
+    .withMessage('Currency must be a 3-letter code')
+    .isUppercase()
+    .withMessage('Currency must be uppercase'),
+
+  body('is_active')
+    .optional()
+    .isBoolean()
+    .withMessage('Is active must be a boolean')
+    .toBoolean(),
+
   validateRequest
 ];
 
@@ -240,5 +402,11 @@ module.exports = {
   validateUserLogin,
   validateAvailabilityRule,
   validateBooking,
-  validateUserSettings
+  validateUserSettings,
+  validateTeam,
+  validateTeamMember,
+  validateUserIdParam,
+  validatePayment,
+  validateRefund,
+  validatePricingRule
 };

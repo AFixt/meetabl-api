@@ -22,7 +22,7 @@ This document provides detailed instructions for deploying the meetabl API to va
 
 Before deploying the meetabl API, ensure you have:
 
-- Node.js (v16 or later recommended)
+- Node.js 22+ (LTS recommended)
 - MySQL or MariaDB (v8.0 or later recommended)
 - Git
 - NPM or Yarn
@@ -133,14 +133,14 @@ npm start
    - Ubuntu/Debian:
 
      ```bash
-     curl -fsSL https://deb.nodesource.com/setup_16.x | sudo -E bash -
+     curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
      sudo apt-get install -y nodejs
      ```
 
    - CentOS/RHEL:
 
      ```bash
-     curl -fsSL https://rpm.nodesource.com/setup_16.x | sudo bash -
+     curl -fsSL https://rpm.nodesource.com/setup_22.x | sudo bash -
      sudo yum install -y nodejs
      ```
 
@@ -177,7 +177,7 @@ npm start
 1. **Create a Dockerfile** in the project root:
 
    ```dockerfile
-   FROM node:16-alpine
+   FROM node:22-alpine
 
    WORKDIR /app
 
@@ -191,47 +191,16 @@ npm start
    CMD ["node", "src/index.js"]
    ```
 
-2. **Create a docker-compose.yml file**:
+2. **Use the docker-compose.yml file from meetabl-infra**:
 
-   ```yaml
-   version: '3'
-
-   services:
-     api:
-       build: .
-       ports:
-         - "4000:4000"
-       environment:
-         - NODE_ENV=production
-         - PORT=4000
-         # Add other environment variables here
-       restart: always
-       depends_on:
-         - db
-     
-     db:
-       image: mysql:8.0
-       ports:
-         - "3306:3306"
-       environment:
-         - MYSQL_ROOT_PASSWORD=root_password
-         - MYSQL_DATABASE=meetabl
-         - MYSQL_USER=meetabl_user
-         - MYSQL_PASSWORD=strong_password_here
-       volumes:
-         - mysql_data:/var/lib/mysql
-         - ./install.sql:/docker-entrypoint-initdb.d/install.sql
-       restart: always
-
-   volumes:
-     mysql_data:
-   ```
-
-3. **Build and run with Docker Compose**:
+   The docker-compose configuration is maintained in the `meetabl-infra` directory. Navigate to the project root and use:
 
    ```bash
+   cd ../meetabl-infra
    docker-compose up -d
    ```
+
+   For more detailed Docker setup instructions, see `meetabl-infra/docs/README-Docker.md`.
 
 #### Cloud Deployment
 

@@ -1,8 +1,8 @@
 /**
  * Auth controller mock for tests
- * 
+ *
  * This provides mock implementations of auth controller functions
- * 
+ *
  * @author meetabl Team
  */
 
@@ -17,7 +17,7 @@ const mockRegister = jest.fn(async (req, res) => {
       }
     });
   }
-  
+
   // Return success
   return res.status(201).json({
     id: 'new-user-id',
@@ -37,7 +37,7 @@ const mockLogin = jest.fn(async (req, res) => {
       }
     });
   }
-  
+
   // Check password
   if (req.body.password !== 'Password123!') {
     return res.status(401).json({
@@ -47,7 +47,7 @@ const mockLogin = jest.fn(async (req, res) => {
       }
     });
   }
-  
+
   // Return success
   return res.status(200).json({
     id: 'test-user-id',
@@ -60,7 +60,7 @@ const mockLogin = jest.fn(async (req, res) => {
 
 const mockRefreshToken = jest.fn(async (req, res) => {
   const { refreshToken } = req.body;
-  
+
   if (!refreshToken) {
     return res.status(400).json({
       error: {
@@ -69,21 +69,20 @@ const mockRefreshToken = jest.fn(async (req, res) => {
       }
     });
   }
-  
+
   // Check token is valid
   if (refreshToken === 'valid.refresh.token') {
     return res.status(200).json({
       token: 'new.access.token',
       refreshToken: 'new.refresh.token'
     });
-  } else {
-    return res.status(401).json({
-      error: {
-        code: 'unauthorized',
-        message: 'Invalid refresh token'
-      }
-    });
   }
+  return res.status(401).json({
+    error: {
+      code: 'unauthorized',
+      message: 'Invalid refresh token'
+    }
+  });
 });
 
 module.exports = {

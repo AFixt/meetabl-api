@@ -7,6 +7,7 @@
  */
 
 const express = require('express');
+const path = require('path');
 const helmet = require('helmet');
 const cors = require('cors');
 const bodyParser = require('body-parser');
@@ -14,49 +15,276 @@ const rateLimit = require('express-rate-limit');
 const cookieParser = require('cookie-parser');
 const logger = require('./config/logger');
 const { processNotifications } = require('./jobs/notification-processor');
+const { processDataRetention } = require('./jobs/data-retention-processor');
+const { initializeCsrf, protectCsrf, protectCsrfConditional, provideCsrfToken } = require('./middlewares/csrf');
+const { initializeSession, sessionCleanup, sessionSecurity } = require('./config/session');
+const dbMonitor = require('./utils/db-monitor');
+const { errorHandler, notFoundError } = require('./utils/error-response');
+const { requestPerformanceMiddleware, initializePerformanceMonitoring } = require('./middlewares/performance');
+const { requestLoggingMiddleware, errorLoggingMiddleware } = require('./middlewares/logging');
+const logManagementService = require('./services/log-management.service');
+const statusMonitor = require('express-status-monitor');
+const { initializePWA } = require('./middlewares/pwa');
 
-// Use test database configuration when in test environment
-const { initializeDatabase } = process.env.NODE_ENV === 'test' 
-  ? require('./models/test-models')
-  : require('./config/database');
+// Validate critical environment variables at startup
+function validateEnvironment() {
+  const requiredEnvVars = {
+    JWT_SECRET: process.env.JWT_SECRET,
+    SESSION_SECRET: process.env.SESSION_SECRET,
+    NODE_ENV: process.env.NODE_ENV
+  };
+
+  const missing = [];
+  const invalid = [];
+
+  for (const [key, value] of Object.entries(requiredEnvVars)) {
+    if (!value) {
+      missing.push(key);
+    }
+  }
+
+  // Validate JWT_SECRET strength
+  if (process.env.JWT_SECRET) {
+    const jwtSecret = process.env.JWT_SECRET;
+    if (jwtSecret.length < 32) {
+      invalid.push('JWT_SECRET must be at least 32 characters long');
+    }
+    if (!/[A-Z]/.test(jwtSecret) || !/[a-z]/.test(jwtSecret) || !/[0-9]/.test(jwtSecret)) {
+      invalid.push('JWT_SECRET should contain uppercase, lowercase, and numeric characters');
+    }
+  }
+
+  // Validate SESSION_SECRET strength
+  if (process.env.SESSION_SECRET) {
+    const sessionSecret = process.env.SESSION_SECRET;
+    if (sessionSecret.length < 32) {
+      invalid.push('SESSION_SECRET must be at least 32 characters long');
+    }
+  }
+
+  if (missing.length > 0) {
+    logger.error(`Missing required environment variables: ${missing.join(', ')}`);
+    process.exit(1);
+  }
+
+  if (invalid.length > 0) {
+    logger.error(`Invalid environment configuration: ${invalid.join(', ')}`);
+    process.exit(1);
+  }
+
+  logger.info('Environment validation passed');
+}
+
+// Validate environment before proceeding
+validateEnvironment();
+
+// Use appropriate database configuration based on environment
+let initializeDatabase;
+if (process.env.NODE_ENV === 'test') {
+  const { initializeTestDatabase } = require('./models/test-models');
+  initializeDatabase = initializeTestDatabase;
+} else if (process.env.AWS_LAMBDA_FUNCTION_NAME) {
+  ({ initializeDatabase } = require('./config/database-serverless'));
+} else {
+  ({ initializeDatabase } = require('./config/database'));
+}
 
 // Create Express app
 const app = express();
 
-// Apply basic middlewares
-app.use(helmet());
-app.use(cors({
-  origin: process.env.FRONTEND_URL,
-  credentials: true
+// Initialize performance monitoring
+initializePerformanceMonitoring();
+
+// Initialize log management
+logManagementService.initialize().catch(error => {
+  logger.error('Failed to initialize log management service', { error: error.message });
+});
+
+// Initialize PWA features
+initializePWA(app);
+
+// Serve static files (for PWA assets)
+app.use(express.static(path.join(__dirname, '../public')));
+
+// Serve uploaded files in development
+if (!process.env.AWS_ACCESS_KEY_ID || !process.env.AWS_SECRET_ACCESS_KEY || !process.env.AWS_S3_BUCKET) {
+  app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
+}
+
+// Status monitor configuration
+const statusMonitorConfig = {
+  title: 'meetabl API Status',
+  path: '/status',
+  spans: [
+    { interval: 1, retention: 60 },
+    { interval: 5, retention: 60 },
+    { interval: 15, retention: 60 }
+  ],
+  chartVisibility: {
+    cpu: true,
+    mem: true,
+    load: true,
+    responseTime: true,
+    rps: true,
+    statusCodes: true
+  },
+  healthChecks: [{
+    protocol: 'http',
+    host: 'localhost',
+    path: '/api/monitoring/health',
+    port: process.env.PORT || 3000
+  }]
+};
+
+app.use(statusMonitor(statusMonitorConfig));
+
+// Apply security middlewares with comprehensive CSP
+app.use(helmet({
+  contentSecurityPolicy: {
+    useDefaults: true,
+    directives: {
+      defaultSrc: ["'self'"],
+      styleSrc: [
+        "'self'",
+        "'unsafe-inline'", // Required for some UI frameworks
+        "https://fonts.googleapis.com"
+      ],
+      fontSrc: [
+        "'self'",
+        "https://fonts.gstatic.com"
+      ],
+      scriptSrc: [
+        "'self'",
+        "'unsafe-inline'", // Required for some analytics
+        "https://apis.google.com",
+        "https://accounts.google.com"
+      ],
+      connectSrc: [
+        "'self'",
+        "https://api.github.com", // For OAuth
+        "https://graph.microsoft.com", // For Microsoft Calendar
+        "https://login.microsoftonline.com",
+        "https://accounts.google.com",
+        "https://www.googleapis.com"
+      ],
+      imgSrc: [
+        "'self'",
+        "data:",
+        "https://*.gravatar.com",
+        "https://avatar.githubusercontent.com"
+      ],
+      frameSrc: [
+        "'self'",
+        "https://accounts.google.com"
+      ],
+      objectSrc: ["'none'"],
+      upgradeInsecureRequests: process.env.NODE_ENV === 'production' ? [] : null
+    }
+  },
+  crossOriginEmbedderPolicy: false, // Disable for OAuth compatibility
+  crossOriginResourcePolicy: { policy: "cross-origin" } // Allow cross-origin for API
 }));
+
+// Configure CORS for multiple origins
+const allowedOrigins = [
+  'https://drfmk5zqf7le1.cloudfront.net',
+  'http://localhost:5173',
+  'http://localhost:3000',
+  'http://3.144.134.66:5173'  // EC2 frontend
+];
+
+app.use(cors({
+  origin: (origin, callback) => {
+    // Allow requests with no origin (like mobile apps or curl requests)
+    if (!origin) return callback(null, true);
+    
+    if (allowedOrigins.includes(origin)) {
+      return callback(null, true);
+    } else {
+      return callback(new Error('Not allowed by CORS'));
+    }
+  },
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'Accept', 'Cookie', 'X-CSRF-Token'],
+  exposedHeaders: ['X-Total-Count', 'Set-Cookie'],
+  optionsSuccessStatus: 200
+}));
+
+// Add raw body parsing for Stripe webhooks
+app.use('/api/stripe/webhook', express.raw({ type: 'application/json' }));
+
+// Apply JSON body parsing to all other routes
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(cookieParser());
 
-// Apply rate limiting
-const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100, // limit each IP to 100 requests per windowMs
+// Redis-based session configuration will be initialized in initializeApp
+// CSRF will be initialized after session middleware is set up
+
+// Apply rate limiting with different limits for different endpoint types
+const createRateLimiter = (windowMs, max, message) => rateLimit({
+  windowMs,
+  max,
   standardHeaders: true,
   legacyHeaders: false,
   handler: (req, res) => {
-    logger.warn(`Rate limit exceeded for IP: ${req.ip}`);
+    logger.warn(`Rate limit exceeded for IP: ${req.ip}, endpoint: ${req.path}`);
     return res.status(429).json({
       error: {
         code: 'too_many_requests',
-        message: 'Too many requests, please try again later.'
+        message
       }
     });
   }
 });
-app.use(limiter);
+
+// General API rate limiting (higher limit)
+const generalLimiter = createRateLimiter(
+  15 * 60 * 1000, // 15 minutes
+  process.env.NODE_ENV === 'development' ? 1000 : 200, // Very lenient in development
+  'Too many requests, please try again later.'
+);
+
+// Strict rate limiting for authentication endpoints
+const authLimiter = createRateLimiter(
+  15 * 60 * 1000, // 15 minutes  
+  process.env.NODE_ENV === 'development' ? 100 : 5, // More lenient in development
+  'Too many authentication attempts, please try again in 15 minutes.'
+);
+
+// Moderate rate limiting for password reset endpoints
+const passwordResetLimiter = createRateLimiter(
+  60 * 60 * 1000, // 1 hour
+  process.env.NODE_ENV === 'development' ? 50 : 3, // More lenient in development
+  'Too many password reset requests, please try again in 1 hour.'
+);
+
+// Apply rate limiting only in non-development environments
+if (process.env.NODE_ENV !== 'development') {
+  // Apply general rate limiting to all routes
+  app.use(generalLimiter);
+}
+
+// Add logging and performance monitoring middleware
+app.use(requestLoggingMiddleware);
+app.use(requestPerformanceMiddleware);
+
+// Apply strict rate limiting to authentication endpoints only in non-development
+if (process.env.NODE_ENV !== 'development') {
+  app.use('/api/auth/login', authLimiter);
+  app.use('/api/auth/register', authLimiter);
+  app.use('/api/auth/forgot-password', passwordResetLimiter);
+  app.use('/api/auth/reset-password', passwordResetLimiter);
+}
 
 // Add request logging middleware
 app.use((req, res, next) => {
   logger.info({
     method: req.method,
-    url: req.url,
-    ip: req.ip
+    url: req.url.replace(/\/\d+/g, '/[ID]'), // Replace numeric IDs with placeholder
+    ip: req.ip,
+    userAgent: req.get('User-Agent') || 'Unknown'
   }, 'Request received');
   next();
 });
@@ -65,65 +293,35 @@ app.use((req, res, next) => {
 // Note: These will be created in separate files
 const authRoutes = require('./routes/auth.routes');
 const userRoutes = require('./routes/user.routes');
+const accountRoutes = require('./routes/account.routes');
 const availabilityRoutes = require('./routes/availability.routes');
 const bookingRoutes = require('./routes/booking.routes');
 const calendarRoutes = require('./routes/calendar.routes');
+const notificationRoutes = require('./routes/notification.routes');
+const analyticsRoutes = require('./routes/analytics.routes');
+const teamRoutes = require('./routes/team.routes');
+const paymentRoutes = require('./routes/payment.routes');
+const docsRoutes = require('./routes/docs.routes');
+const subscriptionRoutes = require('./routes/subscription.routes');
+const monitoringRoutes = require('./routes/monitoring.routes');
+const pwaRoutes = require('./routes/pwa.routes');
+const gdprRoutes = require('./routes/gdpr.routes');
+const stripeWebhookRoutes = require('./routes/stripe-webhook.routes');
+const stripeElementsRoutes = require('./routes/stripe-elements.routes');
+const twoFactorAuthRoutes = require('./routes/two-factor-auth.routes');
+const eventTypeRoutes = require('./routes/event-type.routes');
+const pollRoutes = require('./routes/poll.routes');
+const migrationRoutes = require('./routes/migration.routes');
 
-// Apply routes
-app.use('/api/auth', authRoutes);
-app.use('/api/users', userRoutes);
-app.use('/api/availability', availabilityRoutes);
-app.use('/api/bookings', bookingRoutes);
-app.use('/api/calendar', calendarRoutes);
+// Database monitoring endpoint (only in development/staging)
+if (process.env.NODE_ENV !== 'production') {
+  app.use(dbMonitor.createExpressMiddleware());
+}
 
-// Default route
-app.get('/', (req, res) => {
-  res.status(200).json({
-    message: 'meetabl API is running',
-    version: '1.0.0',
-    documentation: 'See README.md for API documentation'
-  });
-});
+// Import health check service for endpoints
+const healthCheckService = require('./services/health-check.service');
 
-// 404 handler
-app.use((req, res) => {
-  logger.info(`Not found: ${req.method} ${req.url}`);
-  res.status(404).json({
-    error: {
-      code: 'not_found',
-      message: 'The requested resource was not found.'
-    }
-  });
-});
-
-// Error handling middleware
-app.use((err, req, res, next) => {
-  logger.error({
-    err: {
-      message: err.message,
-      stack: err.stack
-    },
-    request: {
-      method: req.method,
-      url: req.url,
-      headers: req.headers,
-      params: req.params,
-      query: req.query,
-      body: req.body
-    }
-  }, 'Error processing request');
-
-  // Don't expose error details in production
-  const isProduction = process.env.NODE_ENV === 'production';
-
-  return res.status(err.statusCode || 500).json({
-    error: {
-      code: err.code || 'internal_server_error',
-      message: err.message || 'An unexpected error occurred',
-      params: !isProduction && err.params ? err.params : undefined
-    }
-  });
-});
+// Routes and health check endpoints will be applied after session middleware is initialized
 
 /**
  * Initialize the application
@@ -131,23 +329,214 @@ app.use((err, req, res, next) => {
  */
 const initializeApp = async () => {
   try {
-    // Initialize database connection
-    await initializeDatabase();
+    // Initialize session middleware
+    const sessionMiddleware = await initializeSession();
+    app.use(sessionMiddleware);
+    app.use(sessionCleanup);
+    app.use(sessionSecurity);
     
-    // Setup basic notification processing job
-    // In production, you would use a proper job scheduler like node-cron, Bull, or a dedicated service
-    if (process.env.NODE_ENV !== 'test') {
-      // Run once at startup
-      processNotifications().catch(err => logger.error('Error in initial notification processing:', err));
-      
-      // Then every 5 minutes
-      setInterval(() => {
-        processNotifications().catch(err => logger.error('Error in scheduled notification processing:', err));
-      }, 5 * 60 * 1000);
-      
-      logger.info('Notification processor scheduled');
+    // Initialize CSRF protection after session is available
+    app.use(initializeCsrf);
+    
+    // CSRF token endpoint
+    app.get('/api/csrf-token', provideCsrfToken);
+    
+    // Apply routes
+    app.use('/api/auth', authRoutes);
+    app.use('/api/users', protectCsrf, userRoutes);
+    app.use('/api/account', protectCsrf, accountRoutes);
+    app.use('/api/availability', protectCsrf, availabilityRoutes);
+    app.use('/api/bookings', protectCsrfConditional, bookingRoutes);
+    app.use('/api/calendar', protectCsrf, calendarRoutes);
+    app.use('/api/notifications', protectCsrf, notificationRoutes);
+    app.use('/api/analytics', protectCsrf, analyticsRoutes);
+    app.use('/api/teams', protectCsrf, teamRoutes);
+    app.use('/api/payments', protectCsrf, paymentRoutes);
+    app.use('/api/subscriptions', protectCsrf, subscriptionRoutes);
+    app.use('/api/monitoring', monitoringRoutes);
+    app.use('/api/pwa', pwaRoutes);
+    app.use('/api/gdpr', protectCsrf, gdprRoutes);
+    app.use('/api/stripe/webhook', stripeWebhookRoutes);
+    app.use('/api/stripe/elements', protectCsrf, stripeElementsRoutes);
+    app.use('/api/2fa', protectCsrf, twoFactorAuthRoutes);
+    app.use('/api/event-types', protectCsrf, eventTypeRoutes);
+    app.use('/api/polls', protectCsrfConditional, pollRoutes);
+    
+    
+    // Migration routes (only in non-production environments)
+    if (process.env.NODE_ENV !== 'production') {
+      app.use('/api/migrations', migrationRoutes);
     }
     
+    // Documentation routes (no rate limiting for docs)
+    app.use('/api/docs', docsRoutes);
+    
+    // Default route
+    app.get('/', (req, res) => {
+      res.status(200).json({
+        message: 'meetabl API is running',
+        version: '1.0.0',
+        documentation: 'See README.md for API documentation'
+      });
+    });
+    
+    // Root health check endpoints (commonly used by load balancers)
+    app.get('/health', async (req, res) => {
+      try {
+        const result = await healthCheckService.getBasicHealth();
+        const statusCode = result.status === 'healthy' ? 200 : 503;
+        res.status(statusCode).json(result);
+      } catch (error) {
+        res.status(503).json({
+          status: 'unhealthy',
+          timestamp: new Date().toISOString()
+        });
+      }
+    });
+    
+    app.get('/healthz', async (req, res) => {
+      try {
+        const result = await healthCheckService.getBasicHealth();
+        const statusCode = result.status === 'healthy' ? 200 : 503;
+        res.status(statusCode).json(result);
+      } catch (error) {
+        res.status(503).json({
+          status: 'unhealthy',
+          timestamp: new Date().toISOString()
+        });
+      }
+    });
+    
+    app.get('/ping', (req, res) => {
+      res.status(200).json({
+        status: 'pong',
+        timestamp: new Date().toISOString(),
+        uptime: process.uptime()
+      });
+    });
+    
+    app.get('/ready', async (req, res) => {
+      try {
+        const isReady = await healthCheckService.isReady();
+        
+        if (isReady) {
+          res.status(200).json({
+            status: 'ready',
+            timestamp: new Date().toISOString()
+          });
+        } else {
+          res.status(503).json({
+            status: 'not-ready',
+            timestamp: new Date().toISOString()
+          });
+        }
+      } catch (error) {
+        res.status(503).json({
+          status: 'not-ready',
+          timestamp: new Date().toISOString()
+        });
+      }
+    });
+    
+    app.get('/alive', (req, res) => {
+      const result = healthCheckService.isAlive();
+      const statusCode = result.status === 'healthy' ? 200 : 503;
+      res.status(statusCode).json(result);
+    });
+    
+    // Legacy /api/health endpoint with detailed monitoring info
+    app.get('/api/health', async (req, res) => {
+      try {
+        const { sequelize, getPoolStats } = require('./config/database');
+        const dbStatus = await sequelize.authenticate().then(() => 'connected').catch(() => 'disconnected');
+        
+        const response = {
+          status: 'healthy',
+          timestamp: new Date().toISOString(),
+          environment: process.env.NODE_ENV,
+          database: {
+            status: dbStatus,
+            pool: getPoolStats()
+          },
+          monitoring: {
+            enabled: dbMonitor.enabled,
+            slowQueryThreshold: dbMonitor.slowQueryThreshold
+          }
+        };
+        
+        // Include detailed stats in non-production environments
+        if (process.env.NODE_ENV !== 'production') {
+          response.monitoring.stats = dbMonitor.getStats();
+          response.monitoring.slowQueries = dbMonitor.getSlowQueries(5);
+        }
+        
+        res.status(200).json(response);
+      } catch (error) {
+        logger.error('Health check failed:', error);
+        res.status(503).json({
+          status: 'unhealthy',
+          timestamp: new Date().toISOString(),
+          error: 'Failed to perform health check'
+        });
+      }
+    });
+    
+    // 404 handler
+    app.use((req, res, next) => {
+      const error = notFoundError('Route not found');
+      next(error);
+    });
+    
+    // Error logging middleware (before global error handler)
+    app.use(errorLoggingMiddleware);
+    
+    // Standardized error handling middleware
+    app.use(errorHandler);
+    
+    // Initialize database connection
+    await initializeDatabase();
+
+    // Setup basic notification processing job
+    // In production, you would use a proper job scheduler
+    // like node-cron, Bull, or a dedicated service
+    if (process.env.NODE_ENV !== 'test') {
+      // Run notification processor once at startup
+      processNotifications().catch((err) => logger.error('Error in initial notification processing:', err));
+
+      // Then every 5 minutes
+      setInterval(() => {
+        processNotifications().catch((err) => logger.error('Error in scheduled notification processing:', err));
+      }, 5 * 60 * 1000);
+
+      // Setup data retention processing job (daily at 2 AM)
+      const scheduleDataRetention = () => {
+        const now = new Date();
+        const nextRun = new Date();
+        nextRun.setHours(2, 0, 0, 0); // 2 AM
+        
+        if (nextRun <= now) {
+          nextRun.setDate(nextRun.getDate() + 1);
+        }
+        
+        const msUntilNextRun = nextRun.getTime() - now.getTime();
+        
+        setTimeout(() => {
+          // Execute data retention
+          processDataRetention().catch((err) => logger.error('Error in data retention processing:', err));
+          
+          // Schedule next run (every 24 hours)
+          setInterval(() => {
+            processDataRetention().catch((err) => logger.error('Error in scheduled data retention processing:', err));
+          }, 24 * 60 * 60 * 1000);
+        }, msUntilNextRun);
+        
+        logger.info(`Data retention processor scheduled for ${nextRun.toISOString()}`);
+      };
+
+      scheduleDataRetention();
+      logger.info('Notification and data retention processors scheduled');
+    }
+
     logger.info('Application initialized successfully');
     return app;
   } catch (error) {

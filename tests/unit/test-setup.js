@@ -1,8 +1,8 @@
 /**
  * Shared test setup for all unit tests
- * 
+ *
  * This file configures all the necessary mocks for unit tests
- * 
+ *
  * @author meetabl Team
  */
 
@@ -12,9 +12,13 @@ process.env.JWT_SECRET = 'test-jwt-secret';
 process.env.JWT_EXPIRES_IN = '1h';
 process.env.JWT_REFRESH_EXPIRES_IN = '7d';
 
-// Configure SQLite for testing
-process.env.DB_DIALECT = 'sqlite';
-process.env.DB_STORAGE = ':memory:';
+// Configure MySQL for testing (as per CLAUDE.md - NEVER use SQLite)
+process.env.DB_DIALECT = 'mysql';
+process.env.DB_HOST = 'localhost';
+process.env.DB_PORT = '3306';
+process.env.DB_NAME = 'meetabl_test';
+process.env.DB_USER = 'meetabl_user';
+process.env.DB_PASSWORD = 'meetabl_password';
 
 // Mock logger
 jest.mock('../../src/config/logger', () => ({
@@ -66,19 +70,15 @@ jest.mock('@microsoft/microsoft-graph-client', () => ({
   }
 }));
 
-jest.mock('node-fetch', () => 
-  jest.fn().mockImplementation(() => 
-    Promise.resolve({
-      ok: true,
-      json: jest.fn().mockResolvedValue({
-        access_token: 'test-access-token',
-        refresh_token: 'test-refresh-token',
-        expires_in: 3600,
-        scope: 'Calendars.ReadWrite offline_access'
-      })
-    })
-  )
-);
+jest.mock('node-fetch', () => jest.fn().mockImplementation(() => Promise.resolve({
+  ok: true,
+  json: jest.fn().mockResolvedValue({
+    access_token: 'test-access-token',
+    refresh_token: 'test-refresh-token',
+    expires_in: 3600,
+    scope: 'Calendars.ReadWrite offline_access'
+  })
+})));
 
 // Capture console errors during tests
 let originalConsoleError;
@@ -97,16 +97,14 @@ beforeEach(() => {
 });
 
 // Define global test utilities
-global.createMockRequest = (overrides = {}) => {
-  return {
-    body: {},
-    params: {},
-    query: {},
-    headers: {},
-    user: { id: 'test-user-id' },
-    ...overrides
-  };
-};
+global.createMockRequest = (overrides = {}) => ({
+  body: {},
+  params: {},
+  query: {},
+  headers: {},
+  user: { id: 'test-user-id' },
+  ...overrides
+});
 
 global.createMockResponse = () => {
   const res = {};
@@ -114,7 +112,9 @@ global.createMockResponse = () => {
   res.json = jest.fn().mockReturnValue(res);
   res.send = jest.fn().mockReturnValue(res);
   res.set = jest.fn().mockReturnValue(res);
-  res.redirect = jest.fn().mockReturnValue(res);
+  res.setHeader = jest.fn().mockReturnValue(res);
+  res.redirect = jest.fn().mockImplementation(() => res);
+  res.end = jest.fn().mockReturnValue(res);
   return res;
 };
 

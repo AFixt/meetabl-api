@@ -8,6 +8,7 @@
 
 const express = require('express');
 const { authenticateJWT } = require('../middlewares/auth');
+const { requireIntegrations, checkCalendarLimit } = require('../middlewares/subscription');
 const calendarController = require('../controllers/calendar.controller');
 
 const router = express.Router();
@@ -23,18 +24,32 @@ router.use(['/status', '/disconnect', '/google/auth', '/microsoft/auth'], authen
 router.get('/status', calendarController.getCalendarStatus);
 
 /**
- * @route DELETE /api/calendar/disconnect/:provider
- * @desc Disconnect calendar integration
+ * @route DELETE /api/calendar/disconnect/token/:tokenId
+ * @desc Disconnect calendar integration by token ID
  * @access Private
  */
-router.delete('/disconnect/:provider', calendarController.disconnectCalendar);
+router.delete('/disconnect/token/:tokenId', calendarController.disconnectCalendar);
+
+/**
+ * @route DELETE /api/calendar/disconnect/:provider
+ * @desc Disconnect calendar integration by provider (legacy)
+ * @access Private
+ */
+router.delete('/disconnect/:provider', calendarController.disconnectCalendarByProvider);
+
+/**
+ * @route GET /api/calendar/google/status
+ * @desc Get Google Calendar integration status
+ * @access Public
+ */
+router.get('/google/status', calendarController.getGoogleStatus);
 
 /**
  * @route GET /api/calendar/google/auth
  * @desc Get Google OAuth authorization URL
- * @access Private
+ * @access Private (Requires integration access and calendar limit check)
  */
-router.get('/google/auth', calendarController.getGoogleAuthUrl);
+router.get('/google/auth', requireIntegrations, checkCalendarLimit, calendarController.getGoogleAuthUrl);
 
 /**
  * @route GET /api/calendar/google/callback
@@ -44,11 +59,18 @@ router.get('/google/auth', calendarController.getGoogleAuthUrl);
 router.get('/google/callback', calendarController.handleGoogleCallback);
 
 /**
+ * @route GET /api/calendar/microsoft/status
+ * @desc Get Microsoft Calendar integration status
+ * @access Public
+ */
+router.get('/microsoft/status', calendarController.getMicrosoftStatus);
+
+/**
  * @route GET /api/calendar/microsoft/auth
  * @desc Get Microsoft OAuth authorization URL
- * @access Private
+ * @access Private (Requires integration access and calendar limit check)
  */
-router.get('/microsoft/auth', calendarController.getMicrosoftAuthUrl);
+router.get('/microsoft/auth', requireIntegrations, checkCalendarLimit, calendarController.getMicrosoftAuthUrl);
 
 /**
  * @route GET /api/calendar/microsoft/callback

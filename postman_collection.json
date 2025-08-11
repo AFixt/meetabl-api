@@ -1,14 +1,38 @@
 {
   "info": {
     "name": "meetabl API",
+    "description": "WCAG 2.2 AA/AAA compliant booking API for the meetabl platform",
+    "version": "1.0.0",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{authToken}}",
+        "type": "string"
+      }
+    ]
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:3001/api",
+      "type": "string"
+    },
+    {
+      "key": "authToken",
+      "value": "",
+      "type": "string"
+    }
+  ],
   "item": [
     {
-      "name": "Auth",
+      "name": "Authentication",
       "item": [
         {
-          "name": "Register",
+          "name": "Register a new user",
           "request": {
             "method": "POST",
             "header": [
@@ -18,24 +42,28 @@
               }
             ],
             "url": {
-              "raw": "{{base_url}}/api/auth/register",
+              "raw": "{{baseUrl}}/auth/register",
               "host": [
-                "{{base_url}}"
+                "{{baseUrl}}"
               ],
               "path": [
-                "api",
                 "auth",
                 "register"
               ]
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"name\": \"Jane Doe\",\n  \"email\": \"jane@example.com\",\n  \"password\": \"Password123!\",\n  \"timezone\": \"America/New_York\"\n}"
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             }
           }
         },
         {
-          "name": "Login",
+          "name": "User login",
           "request": {
             "method": "POST",
             "header": [
@@ -45,284 +73,65 @@
               }
             ],
             "url": {
-              "raw": "{{base_url}}/api/auth/login",
+              "raw": "{{baseUrl}}/auth/login",
               "host": [
-                "{{base_url}}"
+                "{{baseUrl}}"
               ],
               "path": [
-                "api",
                 "auth",
                 "login"
               ]
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"email\": \"jane@example.com\",\n  \"password\": \"Password123!\"\n}"
-            }
-          }
-        }
-      ]
-    },
-    {
-      "name": "Availability",
-      "item": [
-        {
-          "name": "Get Availability Rules",
-          "request": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{access_token}}"
-              }
-            ],
-            "url": {
-              "raw": "{{base_url}}/api/availability",
-              "host": [
-                "{{base_url}}"
-              ],
-              "path": [
-                "api",
-                "availability"
-              ]
-            }
-          }
-        },
-        {
-          "name": "Create Availability Rule",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{access_token}}"
-              },
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "url": {
-              "raw": "{{base_url}}/api/availability",
-              "host": [
-                "{{base_url}}"
-              ],
-              "path": [
-                "api",
-                "availability"
-              ]
-            },
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"dayOfWeek\": 1,\n  \"startTime\": \"09:00\",\n  \"endTime\": \"17:00\",\n  \"buffer\": 15\n}"
-            }
-          }
-        }
-      ]
-    },
-    {
-      "name": "Bookings",
-      "item": [
-        {
-          "name": "Create Booking",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{access_token}}"
-              },
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "url": {
-              "raw": "{{base_url}}/api/bookings",
-              "host": [
-                "{{base_url}}"
-              ],
-              "path": [
-                "api",
-                "bookings"
-              ]
-            },
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"customerName\": \"John Smith\",\n  \"customerEmail\": \"john@example.com\",\n  \"startTime\": \"2025-04-10T14:00:00Z\",\n  \"endTime\": \"2025-04-10T14:30:00Z\"\n}"
-            }
-          }
-        },
-        {
-          "name": "Get My Bookings",
-          "request": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{access_token}}"
-              }
-            ],
-            "url": {
-              "raw": "{{base_url}}/api/bookings",
-              "host": [
-                "{{base_url}}"
-              ],
-              "path": [
-                "api",
-                "bookings"
-              ]
-            }
-          }
-        }
-      ]
-    },
-    {
-      "name": "Calendar Integration",
-      "item": [
-        {
-          "name": "Start Google Calendar OAuth",
-          "request": {
-            "method": "GET",
-            "url": {
-              "raw": "{{base_url}}/api/calendar/google/auth-url",
-              "host": [
-                "{{base_url}}"
-              ],
-              "path": [
-                "api",
-                "calendar",
-                "google",
-                "auth-url"
-              ]
-            }
-          }
-        },
-        {
-          "name": "Handle Google OAuth Callback",
-          "request": {
-            "method": "GET",
-            "url": {
-              "raw": "{{base_url}}/api/calendar/google/callback?code=xyz",
-              "host": [
-                "{{base_url}}"
-              ],
-              "path": [
-                "api",
-                "calendar",
-                "google",
-                "callback"
-              ],
-              "query": [
-                {
-                  "key": "code",
-                  "value": "xyz"
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
                 }
-              ]
-            }
-          }
-        },
-        {
-          "name": "Sync with Google Calendar",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{access_token}}"
               }
-            ],
-            "url": {
-              "raw": "{{base_url}}/api/calendar/google/sync",
-              "host": [
-                "{{base_url}}"
-              ],
-              "path": [
-                "api",
-                "calendar",
-                "google",
-                "sync"
-              ]
             }
           }
-        },
+        }
+      ]
+    },
+    {
+      "name": "Documentation",
+      "item": [
         {
-          "name": "Start Microsoft OAuth",
+          "name": "API Documentation",
           "request": {
             "method": "GET",
+            "header": [],
             "url": {
-              "raw": "{{base_url}}/api/calendar/microsoft/auth-url",
+              "raw": "{{baseUrl}}/docs",
               "host": [
-                "{{base_url}}"
+                "{{baseUrl}}"
               ],
               "path": [
-                "api",
-                "calendar",
-                "microsoft",
-                "auth-url"
+                "docs"
               ]
             }
           }
         },
         {
-          "name": "Handle Microsoft OAuth Callback",
+          "name": "OpenAPI JSON Specification",
           "request": {
             "method": "GET",
+            "header": [],
             "url": {
-              "raw": "{{base_url}}/api/calendar/microsoft/callback?code=abc",
+              "raw": "{{baseUrl}}/docs/json",
               "host": [
-                "{{base_url}}"
+                "{{baseUrl}}"
               ],
               "path": [
-                "api",
-                "calendar",
-                "microsoft",
-                "callback"
-              ],
-              "query": [
-                {
-                  "key": "code",
-                  "value": "abc"
-                }
-              ]
-            }
-          }
-        },
-        {
-          "name": "Sync with Microsoft Calendar",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{access_token}}"
-              }
-            ],
-            "url": {
-              "raw": "{{base_url}}/api/calendar/microsoft/sync",
-              "host": [
-                "{{base_url}}"
-              ],
-              "path": [
-                "api",
-                "calendar",
-                "microsoft",
-                "sync"
+                "docs",
+                "json"
               ]
             }
           }
         }
       ]
-    }
-  ],
-  "variable": [
-    {
-      "key": "base_url",
-      "value": "http://localhost:3000"
-    },
-    {
-      "key": "access_token",
-      "value": ""
     }
   ]
 }

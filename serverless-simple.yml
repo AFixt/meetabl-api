@@ -1,0 +1,63 @@
+service: meetabl-api
+
+frameworkVersion: '3'
+
+provider:
+  name: aws
+  runtime: nodejs20.x
+  region: ${opt:region, 'us-east-1'}
+  stage: ${opt:stage, 'dev'}
+  memorySize: 1024
+  timeout: 30
+  environment:
+    NODE_ENV: ${self:provider.stage}
+    DB_HOST: ${ssm:/meetabl/${self:provider.stage}/db-host}
+    DB_NAME: ${ssm:/meetabl/${self:provider.stage}/db-name}
+    DB_USERNAME: ${ssm:/meetabl/${self:provider.stage}/db-username}
+    DB_PASSWORD: ${ssm:/meetabl/${self:provider.stage}/db-password}
+    JWT_SECRET: ${ssm:/meetabl/${self:provider.stage}/jwt-secret}
+    JWT_REFRESH_SECRET: ${ssm:/meetabl/${self:provider.stage}/jwt-refresh-secret}
+    FRONTEND_URL: ${ssm:/meetabl/${self:provider.stage}/frontend-url}
+    AWS_S3_BUCKET: ${ssm:/meetabl/${self:provider.stage}/s3-bucket}
+    STRIPE_SECRET_KEY: ${ssm:/meetabl/${self:provider.stage}/stripe-secret-key}
+    STRIPE_PUBLISHABLE_KEY: ${ssm:/meetabl/${self:provider.stage}/stripe-publishable-key}
+    STRIPE_WEBHOOK_SECRET: ${ssm:/meetabl/${self:provider.stage}/stripe-webhook-secret}
+  
+  iam:
+    role:
+      statements:
+        - Effect: Allow
+          Action:
+            - s3:GetObject
+            - s3:PutObject
+            - s3:DeleteObject
+          Resource: "*"
+        - Effect: Allow
+          Action:
+            - ssm:GetParameter
+            - ssm:GetParameters
+          Resource: "arn:aws:ssm:${self:provider.region}:*:parameter/meetabl/${self:provider.stage}/*"
+
+plugins:
+  - serverless-offline
+  - serverless-dotenv-plugin
+
+functions:
+  api:
+    handler: src/lambda.handler
+    events:
+      - httpApi:
+          path: /{proxy+}
+          method: '*'
+      - httpApi:
+          path: /
+          method: '*'
+
+package:
+  patterns:
+    - '!.git/**'
+    - '!tests/**'
+    - '!coverage/**'
+    - '!docs/**'
+    - '!*.md'
+    - '!.env*'

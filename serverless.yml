@@ -1,0 +1,140 @@
+service: meetabl-api
+
+frameworkVersion: '3'
+
+provider:
+  name: aws
+  runtime: nodejs20.x
+  region: ${opt:region, 'us-east-1'}
+  stage: ${opt:stage, 'dev'}
+  memorySize: 512
+  timeout: 30
+  environment:
+    NODE_ENV: ${self:provider.stage}
+    DB_HOST: ${ssm:/meetabl/${self:provider.stage}/db-host}
+    DB_NAME: ${ssm:/meetabl/${self:provider.stage}/db-name}
+    DB_USERNAME: ${ssm:/meetabl/${self:provider.stage}/db-username}
+    DB_PASSWORD: ${ssm:/meetabl/${self:provider.stage}/db-password}
+    JWT_SECRET: ${ssm:/meetabl/${self:provider.stage}/jwt-secret}
+    JWT_REFRESH_SECRET: ${ssm:/meetabl/${self:provider.stage}/jwt-refresh-secret}
+    FRONTEND_URL: ${ssm:/meetabl/${self:provider.stage}/frontend-url}
+    AWS_S3_BUCKET: ${ssm:/meetabl/${self:provider.stage}/s3-bucket}
+    ALLOWED_ORIGINS: ${ssm:/meetabl/${self:provider.stage}/allowed-origins, 'https://drfmk5zqf7le1.cloudfront.net,http://localhost:5173,http://localhost:3000'}
+    REDIS_URL: ${ssm:/meetabl/${self:provider.stage}/redis-url, ''}
+    TWILIO_ACCOUNT_SID: ${ssm:/meetabl/${self:provider.stage}/twilio-account-sid}
+    TWILIO_AUTH_TOKEN: ${ssm:/meetabl/${self:provider.stage}/twilio-auth-token}
+    EMAIL_HOST: ${ssm:/meetabl/${self:provider.stage}/email-host}
+    EMAIL_PORT: ${ssm:/meetabl/${self:provider.stage}/email-port}
+    EMAIL_USER: ${ssm:/meetabl/${self:provider.stage}/email-user}
+    EMAIL_PASS: ${ssm:/meetabl/${self:provider.stage}/email-pass}
+    GOOGLE_CLIENT_ID: ${ssm:/meetabl/${self:provider.stage}/google-client-id}
+    GOOGLE_CLIENT_SECRET: ${ssm:/meetabl/${self:provider.stage}/google-client-secret}
+    MICROSOFT_CLIENT_ID: ${ssm:/meetabl/${self:provider.stage}/microsoft-client-id}
+    MICROSOFT_CLIENT_SECRET: ${ssm:/meetabl/${self:provider.stage}/microsoft-client-secret}
+    STRIPE_SECRET_KEY: ${ssm:/meetabl/${self:provider.stage}/stripe-secret-key}
+    STRIPE_PUBLISHABLE_KEY: ${ssm:/meetabl/${self:provider.stage}/stripe-publishable-key}
+    STRIPE_WEBHOOK_SECRET: ${ssm:/meetabl/${self:provider.stage}/stripe-webhook-secret}
+  
+  iam:
+    role:
+      statements:
+        - Effect: Allow
+          Action:
+            - s3:GetObject
+            - s3:PutObject
+            - s3:DeleteObject
+          Resource: "arn:aws:s3:::${ssm:/meetabl/${self:provider.stage}/s3-bucket}/*"
+        - Effect: Allow
+          Action:
+            - ssm:GetParameter
+            - ssm:GetParameters
+          Resource: "arn:aws:ssm:${self:provider.region}:*:parameter/meetabl/${self:provider.stage}/*"
+        - Effect: Allow
+          Action:
+            - rds-db:connect
+          Resource: "*"
+
+plugins:
+  - serverless-offline
+  - serverless-dotenv-plugin
+
+custom:
+  serverless-offline:
+    httpPort: 3001
+    host: localhost
+  
+functions:
+  api:
+    handler: src/lambda.handler
+    events:
+      - http:
+          path: /{proxy+}
+          method: ANY
+          cors:
+            origin: '*'
+            headers:
+              - Content-Type
+              - X-Amz-Date
+              - Authorization
+              - X-Api-Key
+              - X-Amz-Security-Token
+              - X-Amz-User-Agent
+      - http:
+          path: /
+          method: ANY
+          cors:
+            origin: '*'
+
+  notificationProcessor:
+    handler: src/jobs/notification-processor.lambdaHandler
+    events:
+      - schedule: rate(5 minutes)
+    timeout: 300
+
+  migration:
+    handler: src/simple-migrate.handler
+    timeout: 300
+    events:
+      - http:
+          path: /migrate
+          method: POST
+
+resources:
+  Resources:
+    # CloudWatch Log Group
+    ApiLogGroup:
+      Type: AWS::Logs::LogGroup
+      Properties:
+        LogGroupName: /aws/lambda/${self:service}-${self:provider.stage}-api
+        RetentionInDays: 14
+    
+    NotificationProcessorLogGroup:
+      Type: AWS::Logs::LogGroup
+      Properties:
+        LogGroupName: /aws/lambda/${self:service}-${self:provider.stage}-notificationProcessor
+        RetentionInDays: 14
+
+package:
+  individually: true
+  excludeDevDependencies: true
+  patterns:
+    - '!tests/**'
+    - '!coverage/**'
+    - '!docs/**'
+    - '!.git/**'
+    - '!.github/**'
+    - '!logs/**'
+    - '!.env*'
+    - '!README.md'
+    - '!*.test.js'
+    - '!*.spec.js'
+    - '!node_modules/aws-sdk/**'
+    - '!node_modules/.cache/**'
+    - '!node_modules/**/test/**'
+    - '!node_modules/**/tests/**'
+    - '!node_modules/**/examples/**'  
+    - '!node_modules/**/*.map'
+    - '!node_modules/**/*.ts'
+    - '!node_modules/**/*.md'
+    - '!node_modules/**/docs/**'
+    - 'node_modules/googleapis/build/src/apis/docs/**'

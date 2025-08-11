@@ -1,0 +1,821 @@
+name: Scheduled API Tests
+
+on:
+  schedule:
+    # Run comprehensive tests daily at 1 AM UTC
+    - cron: '0 1 * * *'
+    # Run load tests twice a week
+    - cron: '0 3 * * 2,5'
+  workflow_dispatch:
+    inputs:
+      test_suite:
+        description: 'Test suite to run'
+        required: true
+        default: 'all'
+        type: choice
+        options:
+          - all
+          - unit
+          - integration
+          - load
+          - security
+          - benchmarks
+
+env:
+  NODE_VERSION: '22'
+  MYSQL_VERSION: '8.0'
+
+jobs:
+  # Comprehensive unit tests across multiple Node versions
+  comprehensive-unit-tests:
+    name: Comprehensive Unit Tests
+    runs-on: ubuntu-latest
+    if: github.event.inputs.test_suite == 'all' || github.event.inputs.test_suite == 'unit' || github.event_name == 'schedule'
+    strategy:
+      matrix:
+        node-version: ['22']
+        test-group: [models, controllers, services, middlewares, routes, queue]
+    services:
+      mysql:
+        image: mysql:${{ env.MYSQL_VERSION }}
+        env:
+          MYSQL_ROOT_PASSWORD: test_password
+          MYSQL_DATABASE: meetabl_test
+          MYSQL_USER: meetabl_test
+          MYSQL_PASSWORD: meetabl_test
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=3
+
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Wait for services
+        run: |
+          for i in {1..30}; do
+            if mysqladmin ping -h 127.0.0.1 -P 3306 -u root -ptest_password && redis-cli -h 127.0.0.1 ping; then
+              echo "Services are ready"
+              break
+            fi
+            echo "Waiting for services... ($i/30)"
+            sleep 2
+          done
+
+      - name: Run database migrations
+        run: npm run db:migrate:test
+        env:
+          NODE_ENV: test
+          DB_HOST: localhost
+          DB_PORT: 3306
+          DB_NAME: meetabl_test
+          DB_USER: meetabl_test
+          DB_PASSWORD: meetabl_test
+          REDIS_URL: redis://localhost:6379
+
+      - name: Run comprehensive unit tests
+        run: |
+          case "${{ matrix.test-group }}" in
+            "models")
+              npm run test:models
+              ;;
+            "controllers")
+              npm run test:controllers
+              ;;
+            "services")
+              npm run test:services
+              ;;
+            "middlewares")
+              npm run test:middlewares
+              ;;
+            "routes")
+              npx jest "tests/unit/routes/" --forceExit
+              ;;
+            "queue")
+              npx jest "tests/unit/queue/" --forceExit
+              ;;
+          esac
+        env:
+          NODE_ENV: test
+          DB_HOST: localhost
+          DB_PORT: 3306
+          DB_NAME: meetabl_test
+          DB_USER: meetabl_test
+          DB_PASSWORD: meetabl_test
+          REDIS_URL: redis://localhost:6379
+          JWT_SECRET: test_jwt_secret
+          ENCRYPTION_KEY: test_encryption_key_32_chars_long
+
+      - name: Upload test results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: unit-comprehensive-${{ matrix.test-group }}-node-${{ matrix.node-version }}
+          path: |
+            coverage/
+            test-results/
+          retention-days: 14
+
+  # Comprehensive integration tests
+  comprehensive-integration-tests:
+    name: Comprehensive Integration Tests
+    runs-on: ubuntu-latest
+    if: github.event.inputs.test_suite == 'all' || github.event.inputs.test_suite == 'integration' || github.event_name == 'schedule'
+    strategy:
+      matrix:
+        test-group: [auth-flow, booking-flow, user-management, calendar-integration, payment-flow, team-collaboration, error-handling]
+    services:
+      mysql:
+        image: mysql:${{ env.MYSQL_VERSION }}
+        env:
+          MYSQL_ROOT_PASSWORD: test_password
+          MYSQL_DATABASE: meetabl_test
+          MYSQL_USER: meetabl_test
+          MYSQL_PASSWORD: meetabl_test
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=3
+
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Wait for services
+        run: |
+          for i in {1..30}; do
+            if mysqladmin ping -h 127.0.0.1 -P 3306 -u root -ptest_password && redis-cli -h 127.0.0.1 ping; then
+              echo "Services are ready"
+              break
+            fi
+            echo "Waiting for services... ($i/30)"
+            sleep 2
+          done
+
+      - name: Run database migrations
+        run: npm run db:migrate:test
+        env:
+          NODE_ENV: test
+          DB_HOST: localhost
+          DB_PORT: 3306
+          DB_NAME: meetabl_test
+          DB_USER: meetabl_test
+          DB_PASSWORD: meetabl_test
+          REDIS_URL: redis://localhost:6379
+
+      - name: Run database seeds
+        run: npm run db:seed
+        env:
+          NODE_ENV: test
+          DB_HOST: localhost
+          DB_PORT: 3306
+          DB_NAME: meetabl_test
+          DB_USER: meetabl_test
+          DB_PASSWORD: meetabl_test
+          REDIS_URL: redis://localhost:6379
+
+      - name: Run comprehensive integration tests
+        run: |
+          case "${{ matrix.test-group }}" in
+            "auth-flow")
+              npx jest "tests/integration/auth.routes.integration.test.js" --forceExit
+              ;;
+            "booking-flow")
+              npx jest "tests/integration/booking*.integration.test.js" --forceExit
+              ;;
+            "user-management")
+              npx jest "tests/integration/user.routes.integration.test.js" --forceExit
+              ;;
+            "calendar-integration")
+              npx jest "tests/integration/workflows/calendar-integration.test.js" --forceExit
+              ;;
+            "payment-flow")
+              npx jest "tests/integration/workflows/payment-booking.test.js" --forceExit
+              ;;
+            "team-collaboration")
+              npx jest "tests/integration/workflows/team-collaboration.test.js" --forceExit
+              ;;
+            "error-handling")
+              npx jest "tests/integration/workflows/api-error-handling.test.js" --forceExit
+              ;;
+          esac
+        env:
+          NODE_ENV: test
+          DB_HOST: localhost
+          DB_PORT: 3306
+          DB_NAME: meetabl_test
+          DB_USER: meetabl_test
+          DB_PASSWORD: meetabl_test
+          REDIS_URL: redis://localhost:6379
+          JWT_SECRET: test_jwt_secret
+          ENCRYPTION_KEY: test_encryption_key_32_chars_long
+          STRIPE_SECRET_KEY: sk_test_fake_key_for_testing
+          TWILIO_ACCOUNT_SID: test_twilio_sid
+          TWILIO_AUTH_TOKEN: test_twilio_token
+
+      - name: Upload integration test results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: integration-comprehensive-${{ matrix.test-group }}
+          path: |
+            coverage/
+            test-results/
+          retention-days: 14
+
+  # Load testing with various scenarios
+  load-testing-comprehensive:
+    name: Comprehensive Load Testing
+    runs-on: ubuntu-latest
+    if: github.event.inputs.test_suite == 'all' || github.event.inputs.test_suite == 'load' || github.event_name == 'schedule'
+    strategy:
+      matrix:
+        load-scenario: [quick-load, stress-test, endurance-test, spike-test]
+    services:
+      mysql:
+        image: mysql:${{ env.MYSQL_VERSION }}
+        env:
+          MYSQL_ROOT_PASSWORD: test_password
+          MYSQL_DATABASE: meetabl_test
+          MYSQL_USER: meetabl_test
+          MYSQL_PASSWORD: meetabl_test
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=3
+
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Wait for services
+        run: |
+          for i in {1..30}; do
+            if mysqladmin ping -h 127.0.0.1 -P 3306 -u root -ptest_password && redis-cli -h 127.0.0.1 ping; then
+              echo "Services are ready"
+              break
+            fi
+            echo "Waiting for services... ($i/30)"
+            sleep 2
+          done
+
+      - name: Run database migrations
+        run: npm run db:migrate:test
+        env:
+          NODE_ENV: test
+          DB_HOST: localhost
+          DB_PORT: 3306
+          DB_NAME: meetabl_test
+          DB_USER: meetabl_test
+          DB_PASSWORD: meetabl_test
+          REDIS_URL: redis://localhost:6379
+
+      - name: Start API server
+        run: |
+          npm start &
+          sleep 15
+        env:
+          NODE_ENV: test
+          PORT: 3001
+          DB_HOST: localhost
+          DB_PORT: 3306
+          DB_NAME: meetabl_test
+          DB_USER: meetabl_test
+          DB_PASSWORD: meetabl_test
+          REDIS_URL: redis://localhost:6379
+          JWT_SECRET: test_jwt_secret
+          ENCRYPTION_KEY: test_encryption_key_32_chars_long
+
+      - name: Run load tests
+        run: |
+          case "${{ matrix.load-scenario }}" in
+            "quick-load")
+              npm run load-test:quick
+              ;;
+            "stress-test")
+              npm run load-test:stress
+              ;;
+            "endurance-test")
+              # Custom endurance test - 30 minutes with 50 users
+              timeout 1800s npm run load-test -- -d 1800 -u 50
+              ;;
+            "spike-test")
+              # Custom spike test - quick ramp up to 200 users
+              timeout 600s npm run load-test -- -d 600 -u 200
+              ;;
+          esac
+        continue-on-error: true
+
+      - name: Upload load test results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: load-test-${{ matrix.load-scenario }}
+          path: |
+            load-test-results/
+            scripts/load-test-data.csv
+          retention-days: 14
+
+  # Security testing comprehensive
+  security-testing-comprehensive:
+    name: Comprehensive Security Testing
+    runs-on: ubuntu-latest
+    if: github.event.inputs.test_suite == 'all' || github.event.inputs.test_suite == 'security' || github.event_name == 'schedule'
+    strategy:
+      matrix:
+        security-test: [dependency-audit, code-analysis, endpoint-security, authentication-security]
+    services:
+      mysql:
+        image: mysql:${{ env.MYSQL_VERSION }}
+        env:
+          MYSQL_ROOT_PASSWORD: test_password
+          MYSQL_DATABASE: meetabl_test
+          MYSQL_USER: meetabl_test
+          MYSQL_PASSWORD: meetabl_test
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=3
+
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run security tests
+        run: |
+          case "${{ matrix.security-test }}" in
+            "dependency-audit")
+              npm audit --audit-level moderate
+              npm run security:check
+              ;;
+            "code-analysis")
+              npm run lint:js
+              # Add additional static analysis tools
+              ;;
+            "endpoint-security")
+              # Start server for endpoint testing
+              npm start &
+              sleep 10
+              # Run security-focused integration tests
+              npx jest "tests/integration/workflows/api-error-handling.test.js" --forceExit
+              ;;
+            "authentication-security")
+              # Run auth-specific security tests
+              npx jest "tests/unit/middlewares/auth.test.js" --forceExit
+              npx jest "tests/integration/auth.routes.integration.test.js" --forceExit
+              ;;
+          esac
+        env:
+          NODE_ENV: test
+          DB_HOST: localhost
+          DB_PORT: 3306
+          DB_NAME: meetabl_test
+          DB_USER: meetabl_test
+          DB_PASSWORD: meetabl_test
+          REDIS_URL: redis://localhost:6379
+          JWT_SECRET: test_jwt_secret
+          ENCRYPTION_KEY: test_encryption_key_32_chars_long
+          PORT: 3001
+        continue-on-error: true
+
+      - name: Upload security test results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: security-test-${{ matrix.security-test }}
+          path: |
+            test-results/
+            security-reports/
+          retention-days: 14
+
+  # Performance benchmarking comprehensive
+  benchmarks-comprehensive:
+    name: Comprehensive Performance Benchmarks
+    runs-on: ubuntu-latest
+    if: github.event.inputs.test_suite == 'all' || github.event.inputs.test_suite == 'benchmarks' || github.event_name == 'schedule'
+    strategy:
+      matrix:
+        benchmark-type: [api-benchmarks, database-benchmarks, memory-benchmarks, comparison-benchmarks]
+    services:
+      mysql:
+        image: mysql:${{ env.MYSQL_VERSION }}
+        env:
+          MYSQL_ROOT_PASSWORD: test_password
+          MYSQL_DATABASE: meetabl_test
+          MYSQL_USER: meetabl_test
+          MYSQL_PASSWORD: meetabl_test
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=3
+
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Wait for services
+        run: |
+          for i in {1..30}; do
+            if mysqladmin ping -h 127.0.0.1 -P 3306 -u root -ptest_password && redis-cli -h 127.0.0.1 ping; then
+              echo "Services are ready"
+              break
+            fi
+            echo "Waiting for services... ($i/30)"
+            sleep 2
+          done
+
+      - name: Run database migrations
+        run: npm run db:migrate:test
+        env:
+          NODE_ENV: test
+          DB_HOST: localhost
+          DB_PORT: 3306
+          DB_NAME: meetabl_test
+          DB_USER: meetabl_test
+          DB_PASSWORD: meetabl_test
+          REDIS_URL: redis://localhost:6379
+
+      - name: Run comprehensive benchmarks
+        run: |
+          case "${{ matrix.benchmark-type }}" in
+            "api-benchmarks")
+              npm run benchmark:api
+              ;;
+            "database-benchmarks")
+              npm run benchmark:db
+              ;;
+            "memory-benchmarks")
+              # Custom memory profiling
+              node --max-old-space-size=4096 scripts/performance-benchmark.js memory
+              ;;
+            "comparison-benchmarks")
+              npm run benchmark:compare
+              ;;
+          esac
+        env:
+          NODE_ENV: test
+          DB_HOST: localhost
+          DB_PORT: 3306
+          DB_NAME: meetabl_test
+          DB_USER: meetabl_test
+          DB_PASSWORD: meetabl_test
+          REDIS_URL: redis://localhost:6379
+          JWT_SECRET: test_jwt_secret
+          ENCRYPTION_KEY: test_encryption_key_32_chars_long
+
+      - name: Upload benchmark results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: benchmark-${{ matrix.benchmark-type }}
+          path: |
+            benchmark-results/
+            node22-performance-report.json
+          retention-days: 30
+
+  # Data-driven testing scenarios
+  data-driven-scenarios:
+    name: Data-Driven Test Scenarios
+    runs-on: ubuntu-latest
+    if: github.event_name == 'schedule' || github.event.inputs.test_suite == 'all'
+    strategy:
+      matrix:
+        scenario: [
+          'user-registration-flow',
+          'booking-lifecycle',
+          'payment-processing',
+          'calendar-sync',
+          'notification-delivery',
+          'team-management',
+          'error-recovery'
+        ]
+    services:
+      mysql:
+        image: mysql:${{ env.MYSQL_VERSION }}
+        env:
+          MYSQL_ROOT_PASSWORD: test_password
+          MYSQL_DATABASE: meetabl_test
+          MYSQL_USER: meetabl_test
+          MYSQL_PASSWORD: meetabl_test
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=3
+
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Wait for services
+        run: |
+          for i in {1..30}; do
+            if mysqladmin ping -h 127.0.0.1 -P 3306 -u root -ptest_password && redis-cli -h 127.0.0.1 ping; then
+              echo "Services are ready"
+              break
+            fi
+            echo "Waiting for services... ($i/30)"
+            sleep 2
+          done
+
+      - name: Run database migrations
+        run: npm run db:migrate:test
+        env:
+          NODE_ENV: test
+          DB_HOST: localhost
+          DB_PORT: 3306
+          DB_NAME: meetabl_test
+          DB_USER: meetabl_test
+          DB_PASSWORD: meetabl_test
+          REDIS_URL: redis://localhost:6379
+
+      - name: Run database seeds
+        run: npm run db:seed
+        env:
+          NODE_ENV: test
+          DB_HOST: localhost
+          DB_PORT: 3306
+          DB_NAME: meetabl_test
+          DB_USER: meetabl_test
+          DB_PASSWORD: meetabl_test
+          REDIS_URL: redis://localhost:6379
+
+      - name: Run data-driven scenarios
+        run: |
+          case "${{ matrix.scenario }}" in
+            "user-registration-flow")
+              npx jest "tests/integration/workflows/complete-user-onboarding.test.js" --forceExit
+              ;;
+            "booking-lifecycle")
+              npx jest "tests/integration/workflows/advanced-booking-scenarios.test.js" --forceExit
+              ;;
+            "payment-processing")
+              npx jest "tests/integration/workflows/payment-booking.test.js" --forceExit
+              ;;
+            "calendar-sync")
+              npx jest "tests/integration/workflows/calendar-integration.test.js" --forceExit
+              ;;
+            "notification-delivery")
+              npx jest "tests/unit/services/notification.service.comprehensive.unit.test.js" --forceExit
+              ;;
+            "team-management")
+              npx jest "tests/integration/workflows/team-collaboration.test.js" --forceExit
+              ;;
+            "error-recovery")
+              npx jest "tests/integration/workflows/api-error-handling.test.js" --forceExit
+              ;;
+          esac
+        env:
+          NODE_ENV: test
+          DB_HOST: localhost
+          DB_PORT: 3306
+          DB_NAME: meetabl_test
+          DB_USER: meetabl_test
+          DB_PASSWORD: meetabl_test
+          REDIS_URL: redis://localhost:6379
+          JWT_SECRET: test_jwt_secret
+          ENCRYPTION_KEY: test_encryption_key_32_chars_long
+          STRIPE_SECRET_KEY: sk_test_fake_key_for_testing
+          TWILIO_ACCOUNT_SID: test_twilio_sid
+          TWILIO_AUTH_TOKEN: test_twilio_token
+
+      - name: Upload scenario results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: data-driven-${{ matrix.scenario }}
+          path: |
+            test-results/
+            coverage/
+          retention-days: 14
+
+  # Generate comprehensive test report
+  generate-comprehensive-report:
+    name: Generate Comprehensive Report
+    runs-on: ubuntu-latest
+    needs: [
+      comprehensive-unit-tests,
+      comprehensive-integration-tests,
+      load-testing-comprehensive,
+      security-testing-comprehensive,
+      benchmarks-comprehensive,
+      data-driven-scenarios
+    ]
+    if: always()
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Download all test artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: all-scheduled-api-results/
+
+      - name: Generate comprehensive report
+        run: |
+          mkdir -p scheduled-api-report
+          echo "# Scheduled API Test Results - $(date)" > scheduled-api-report/README.md
+          echo "" >> scheduled-api-report/README.md
+          echo "## Test Summary" >> scheduled-api-report/README.md
+          echo "" >> scheduled-api-report/README.md
+          
+          # Count test artifacts
+          UNIT_COUNT=$(find all-scheduled-api-results -name "*unit-comprehensive*" -type d | wc -l)
+          INTEGRATION_COUNT=$(find all-scheduled-api-results -name "*integration-comprehensive*" -type d | wc -l)
+          LOAD_COUNT=$(find all-scheduled-api-results -name "*load-test*" -type d | wc -l)
+          SECURITY_COUNT=$(find all-scheduled-api-results -name "*security-test*" -type d | wc -l)
+          BENCHMARK_COUNT=$(find all-scheduled-api-results -name "*benchmark*" -type d | wc -l)
+          SCENARIO_COUNT=$(find all-scheduled-api-results -name "*data-driven*" -type d | wc -l)
+          
+          echo "- Unit Test Runs: $UNIT_COUNT" >> scheduled-api-report/README.md
+          echo "- Integration Test Runs: $INTEGRATION_COUNT" >> scheduled-api-report/README.md
+          echo "- Load Test Runs: $LOAD_COUNT" >> scheduled-api-report/README.md
+          echo "- Security Test Runs: $SECURITY_COUNT" >> scheduled-api-report/README.md
+          echo "- Benchmark Runs: $BENCHMARK_COUNT" >> scheduled-api-report/README.md
+          echo "- Scenario Test Runs: $SCENARIO_COUNT" >> scheduled-api-report/README.md
+          echo "" >> scheduled-api-report/README.md
+          echo "## Detailed Results" >> scheduled-api-report/README.md
+          echo "" >> scheduled-api-report/README.md
+          ls -la all-scheduled-api-results/ >> scheduled-api-report/README.md
+          
+          # Generate job status summary
+          echo "" >> scheduled-api-report/README.md
+          echo "## Job Status Summary" >> scheduled-api-report/README.md
+          echo "- Unit Tests: ${{ needs.comprehensive-unit-tests.result }}" >> scheduled-api-report/README.md
+          echo "- Integration Tests: ${{ needs.comprehensive-integration-tests.result }}" >> scheduled-api-report/README.md
+          echo "- Load Tests: ${{ needs.load-testing-comprehensive.result }}" >> scheduled-api-report/README.md
+          echo "- Security Tests: ${{ needs.security-testing-comprehensive.result }}" >> scheduled-api-report/README.md
+          echo "- Benchmarks: ${{ needs.benchmarks-comprehensive.result }}" >> scheduled-api-report/README.md
+          echo "- Data-Driven Scenarios: ${{ needs.data-driven-scenarios.result }}" >> scheduled-api-report/README.md
+
+      - name: Upload comprehensive report
+        uses: actions/upload-artifact@v4
+        with:
+          name: scheduled-api-comprehensive-report
+          path: scheduled-api-report/
+          retention-days: 60
+
+  # Notify team about scheduled test results
+  notify-results:
+    name: Notify API Test Results
+    runs-on: ubuntu-latest
+    needs: [generate-comprehensive-report]
+    if: always()
+    steps:
+      - name: Check test results and notify
+        run: |
+          if [ "${{ needs.comprehensive-unit-tests.result }}" = "failure" ] || 
+             [ "${{ needs.comprehensive-integration-tests.result }}" = "failure" ] ||
+             [ "${{ needs.load-testing-comprehensive.result }}" = "failure" ] ||
+             [ "${{ needs.security-testing-comprehensive.result }}" = "failure" ] ||
+             [ "${{ needs.benchmarks-comprehensive.result }}" = "failure" ] ||
+             [ "${{ needs.data-driven-scenarios.result }}" = "failure" ]; then
+            echo "Some scheduled API tests failed. Team notification required."
+            # Add notification logic here
+          else
+            echo "All scheduled API tests passed successfully."
+          fi
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}

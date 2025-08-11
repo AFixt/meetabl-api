@@ -7,10 +7,14 @@
  */
 
 const { v4: uuidv4 } = require('uuid');
-const moment = require('moment');
+const { parse, isValid, getDay, startOfDay, endOfDay, setHours, setMinutes, setSeconds, addMinutes, compareAsc, isBefore, isAfter, isEqual, format, toDate } = require('date-fns');
+
+// Helper function to check if date1 is same or before date2
+const isSameOrBefore = (date1, date2) => isEqual(date1, date2) || isBefore(date1, date2);
 const logger = require('../config/logger');
 const { AvailabilityRule, Booking, AuditLog } = require('../models');
 const { sequelize } = require('../config/database');
+const { Op } = require('sequelize');
 
 /**
  * Get availability rules for current user
@@ -23,7 +27,7 @@ const getAvailabilityRules = async (req, res) => {
 
     // Find all rules for this user
     const rules = await AvailabilityRule.findAll({
-      where: { user_id: userId }
+      where: { userId: userId }
     });
 
     // Calculate pagination headers
@@ -37,7 +41,7 @@ const getAvailabilityRules = async (req, res) => {
       'X-Current-Page': 1
     });
 
-    return res.status(200).json(rules);
+    return res.status(200).json({ rules });
   } catch (error) {
     logger.error('Error getting availability rules:', error);
 
@@ -58,12 +62,40 @@ const getAvailabilityRules = async (req, res) => {
 const createAvailabilityRule = async (req, res) => {
   try {
     const userId = req.user.id;
+    
+    // Log the incoming request body for debugging
+    logger.info('Create availability rule request:', {
+      userId,
+      body: req.body,
+      headers: req.headers['content-type']
+    });
+    
+    // Handle both snake_case and camelCase field names
     const {
-      day_of_week, start_time, end_time, buffer_minutes, max_bookings_per_day
+      day_of_week,
+      dayOfWeek,
+      start_time,
+      startTime,
+      end_time,
+      endTime,
+      buffer_minutes,
+      bufferMinutes,
+      max_bookings_per_day,
+      maxBookingsPerDay,
+      isActive
     } = req.body;
+    
+    // Use the value that exists (prefer snake_case from body)
+    const ruleData = {
+      dayOfWeek: day_of_week !== undefined ? day_of_week : dayOfWeek,
+      startTime: start_time !== undefined ? start_time : startTime,
+      endTime: end_time !== undefined ? end_time : endTime,
+      bufferMinutes: buffer_minutes !== undefined ? buffer_minutes : bufferMinutes,
+      maxBookingsPerDay: max_bookings_per_day !== undefined ? max_bookings_per_day : maxBookingsPerDay
+    };
 
     // Validate time range
-    if (start_time >= end_time) {
+    if (ruleData.startTime >= ruleData.endTime) {
       return res.status(400).json({
         error: {
           code: 'bad_request',
@@ -81,40 +113,46 @@ const createAvailabilityRule = async (req, res) => {
     // Create rule
     const rule = await AvailabilityRule.create({
       id: uuidv4(),
-      user_id: userId,
-      day_of_week,
-      start_time,
-      end_time,
-      buffer_minutes,
-      max_bookings_per_day
+      userId: userId,
+      dayOfWeek: ruleData.dayOfWeek,
+      startTime: ruleData.startTime,
+      endTime: ruleData.endTime,
+      bufferMinutes: ruleData.bufferMinutes || 0,
+      maxBookingsPerDay: ruleData.maxBookingsPerDay || null
     });
 
     // Create audit log
     await AuditLog.create({
       id: uuidv4(),
-      user_id: userId,
+      userId: userId,
       action: 'availability.rule.create',
       metadata: {
         ruleId: rule.id,
-        day_of_week,
-        start_time,
-        end_time,
-        buffer_minutes,
-        max_bookings_per_day
+        day_of_week: ruleData.dayOfWeek,
+        start_time: ruleData.startTime,
+        end_time: ruleData.endTime,
+        buffer_minutes: ruleData.bufferMinutes || 0,
+        max_bookings_per_day: ruleData.maxBookingsPerDay || null
       }
     });
 
     // Log creation
     logger.info(`Availability rule created: ${rule.id}`);
 
-    return res.status(201).json(rule);
+    return res.status(201).json({ rule });
   } catch (error) {
-    logger.error('Error creating availability rule:', error);
+    logger.error('Error creating availability rule:', {
+      error: error.message,
+      stack: error.stack,
+      userId: req.user?.id,
+      body: req.body
+    });
 
     return res.status(500).json({
       error: {
         code: 'internal_server_error',
-        message: 'Failed to create availability rule'
+        message: 'Failed to create availability rule',
+        details: error.message // Include error details for debugging
       }
     });
   }
@@ -132,7 +170,7 @@ const getAvailabilityRule = async (req, res) => {
 
     // Find rule
     const rule = await AvailabilityRule.findOne({
-      where: { id, user_id: userId }
+      where: { id, userId: userId }
     });
 
     if (!rule) {
@@ -144,7 +182,7 @@ const getAvailabilityRule = async (req, res) => {
       });
     }
 
-    return res.status(200).json(rule);
+    return res.status(200).json({ rule });
   } catch (error) {
     logger.error('Error getting availability rule:', error);
 
@@ -166,13 +204,33 @@ const updateAvailabilityRule = async (req, res) => {
   try {
     const userId = req.user.id;
     const { id } = req.params;
+    // Handle both snake_case and camelCase field names
     const {
-      day_of_week, start_time, end_time, buffer_minutes, max_bookings_per_day
+      day_of_week,
+      dayOfWeek,
+      start_time,
+      startTime,
+      end_time,
+      endTime,
+      buffer_minutes,
+      bufferMinutes,
+      max_bookings_per_day,
+      maxBookingsPerDay,
+      isActive
     } = req.body;
+    
+    // Use the value that exists (prefer snake_case from body)
+    const ruleData = {
+      dayOfWeek: day_of_week !== undefined ? day_of_week : dayOfWeek,
+      startTime: start_time !== undefined ? start_time : startTime,
+      endTime: end_time !== undefined ? end_time : endTime,
+      bufferMinutes: buffer_minutes !== undefined ? buffer_minutes : bufferMinutes,
+      maxBookingsPerDay: max_bookings_per_day !== undefined ? max_bookings_per_day : maxBookingsPerDay
+    };
 
     // Find rule
     const rule = await AvailabilityRule.findOne({
-      where: { id, user_id: userId }
+      where: { id, userId: userId }
     });
 
     if (!rule) {
@@ -185,7 +243,7 @@ const updateAvailabilityRule = async (req, res) => {
     }
 
     // Validate time range if both times are provided
-    if (start_time && end_time && start_time >= end_time) {
+    if (ruleData.startTime && ruleData.endTime && ruleData.startTime >= ruleData.endTime) {
       return res.status(400).json({
         error: {
           code: 'bad_request',
@@ -201,27 +259,27 @@ const updateAvailabilityRule = async (req, res) => {
     }
 
     // Update fields
-    if (day_of_week !== undefined) rule.day_of_week = day_of_week;
-    if (start_time !== undefined) rule.start_time = start_time;
-    if (end_time !== undefined) rule.end_time = end_time;
-    if (buffer_minutes !== undefined) rule.buffer_minutes = buffer_minutes;
-    if (max_bookings_per_day !== undefined) rule.max_bookings_per_day = max_bookings_per_day;
+    if (ruleData.dayOfWeek !== undefined) rule.dayOfWeek = ruleData.dayOfWeek;
+    if (ruleData.startTime !== undefined) rule.startTime = ruleData.startTime;
+    if (ruleData.endTime !== undefined) rule.endTime = ruleData.endTime;
+    if (ruleData.bufferMinutes !== undefined) rule.bufferMinutes = ruleData.bufferMinutes;
+    if (ruleData.maxBookingsPerDay !== undefined) rule.maxBookingsPerDay = ruleData.maxBookingsPerDay;
 
     await rule.save();
 
     // Create audit log
     await AuditLog.create({
       id: uuidv4(),
-      user_id: userId,
+      userId: userId,
       action: 'availability.rule.update',
       metadata: {
         ruleId: rule.id,
         updated: {
-          day_of_week,
-          start_time,
-          end_time,
-          buffer_minutes,
-          max_bookings_per_day
+          day_of_week: ruleData.dayOfWeek,
+          start_time: ruleData.startTime,
+          end_time: ruleData.endTime,
+          buffer_minutes: ruleData.bufferMinutes,
+          max_bookings_per_day: ruleData.maxBookingsPerDay
         }
       }
     });
@@ -229,7 +287,7 @@ const updateAvailabilityRule = async (req, res) => {
     // Log update
     logger.info(`Availability rule updated: ${rule.id}`);
 
-    return res.status(200).json(rule);
+    return res.status(200).json({ rule });
   } catch (error) {
     logger.error('Error updating availability rule:', error);
 
@@ -254,7 +312,7 @@ const deleteAvailabilityRule = async (req, res) => {
 
     // Find rule
     const rule = await AvailabilityRule.findOne({
-      where: { id, user_id: userId }
+      where: { id, userId: userId }
     });
 
     if (!rule) {
@@ -272,7 +330,7 @@ const deleteAvailabilityRule = async (req, res) => {
     // Create audit log
     await AuditLog.create({
       id: uuidv4(),
-      user_id: userId,
+      userId: userId,
       action: 'availability.rule.delete',
       metadata: {
         ruleId: id
@@ -306,7 +364,8 @@ const getAvailableTimeSlots = async (req, res) => {
     const { date, duration } = req.query;
 
     // Validate date
-    if (!date || !moment(date, 'YYYY-MM-DD').isValid()) {
+    const parsedDate = parse(date, 'yyyy-MM-dd', new Date());
+    if (!date || !isValid(parsedDate)) {
       return res.status(400).json({
         error: {
           code: 'bad_request',
@@ -322,7 +381,7 @@ const getAvailableTimeSlots = async (req, res) => {
     }
 
     // Validate duration
-    const slotDuration = parseInt(duration) || 60; // Default 60 minutes
+    const slotDuration = parseInt(duration, 10) || 60; // Default 60 minutes
     if (slotDuration < 15 || slotDuration > 240) {
       return res.status(400).json({
         error: {
@@ -339,12 +398,12 @@ const getAvailableTimeSlots = async (req, res) => {
     }
 
     // Parse date and get day of week (0 = Sunday, 6 = Saturday)
-    const targetDate = moment(date, 'YYYY-MM-DD');
-    const dayOfWeek = targetDate.day();
+    const targetDate = parse(date, 'yyyy-MM-dd', new Date());
+    const dayOfWeek = getDay(targetDate);
 
     // Get availability rules for this day of week
     const rules = await AvailabilityRule.findAll({
-      where: { user_id: userId, day_of_week: dayOfWeek }
+      where: { userId: userId, dayOfWeek: dayOfWeek }
     });
 
     if (rules.length === 0) {
@@ -352,14 +411,14 @@ const getAvailableTimeSlots = async (req, res) => {
     }
 
     // Get bookings for this date
-    const startOfDay = moment(date).startOf('day').toDate();
-    const endOfDay = moment(date).endOf('day').toDate();
+    const dayStart = startOfDay(targetDate);
+    const dayEnd = endOfDay(targetDate);
 
     const bookings = await Booking.findAll({
       where: {
-        user_id: userId,
-        start_time: { [sequelize.Op.gte]: startOfDay },
-        end_time: { [sequelize.Op.lte]: endOfDay },
+        userId: userId,
+        start_time: { [Op.gte]: dayStart },
+        end_time: { [Op.lte]: dayEnd },
         status: 'confirmed'
       }
     });
@@ -367,43 +426,51 @@ const getAvailableTimeSlots = async (req, res) => {
     // Calculate available slots for each rule
     const allSlots = [];
 
-    for (const rule of rules) {
+    // Use forEach instead of for...of
+    rules.forEach((rule) => {
       // Parse rule times
-      const startTime = moment(rule.start_time, 'HH:mm:ss');
-      const endTime = moment(rule.end_time, 'HH:mm:ss');
+      const startTime = parse(rule.startTime, 'HH:mm:ss', new Date());
+      const endTime = parse(rule.endTime, 'HH:mm:ss', new Date());
 
       // Create slots with specified duration
-      const slotStart = moment(targetDate).hours(startTime.hours()).minutes(startTime.minutes()).seconds(0);
-      const ruleEnd = moment(targetDate).hours(endTime.hours()).minutes(endTime.minutes()).seconds(0);
+      let slotStart = setSeconds(setMinutes(setHours(targetDate, startTime.getHours()), startTime.getMinutes()), 0);
+      const ruleEnd = setSeconds(setMinutes(setHours(targetDate, endTime.getHours()), endTime.getMinutes()), 0);
 
-      while (slotStart.add(slotDuration, 'minutes').isSameOrBefore(ruleEnd)) {
+      while (isSameOrBefore(addMinutes(slotStart, slotDuration), ruleEnd)) {
         const slot = {
-          start: moment(slotStart).subtract(slotDuration, 'minutes').toISOString(),
-          end: slotStart.toISOString()
+          start: slotStart.toISOString(),
+          end: addMinutes(slotStart, slotDuration).toISOString()
         };
 
         // Check if slot conflicts with any booking
         const isConflict = bookings.some((booking) => {
-          const bookingStart = moment(booking.start_time);
-          const bookingEnd = moment(booking.end_time);
+          const bookingStart = new Date(booking.start_time);
+          const bookingEnd = new Date(booking.end_time);
+          const slotStartDate = new Date(slot.start);
+          const slotEndDate = new Date(slot.end);
 
           // Check for overlap
-          return (
-            (moment(slot.start).isBefore(bookingEnd) && moment(slot.end).isAfter(bookingStart))
-            || (moment(slot.start).add(rule.buffer_minutes, 'minutes').isBefore(bookingEnd)
-            && moment(slot.end).subtract(rule.buffer_minutes, 'minutes').isAfter(bookingStart))
-          );
+          const normalOverlap = isBefore(slotStartDate, bookingEnd)
+            && isAfter(slotEndDate, bookingStart);
+
+          const bufferOverlap = isBefore(addMinutes(slotStartDate, rule.bufferMinutes), bookingEnd)
+            && isAfter(addMinutes(slotEndDate, -rule.bufferMinutes), bookingStart);
+
+          return normalOverlap || bufferOverlap;
         });
 
         // Add slot if no conflict
         if (!isConflict) {
           allSlots.push(slot);
         }
+        
+        // Move to next slot
+        slotStart = addMinutes(slotStart, slotDuration);
       }
-    }
+    });
 
     // Sort slots by start time
-    allSlots.sort((a, b) => moment(a.start).diff(moment(b.start)));
+    allSlots.sort((a, b) => compareAsc(new Date(a.start), new Date(b.start)));
 
     return res.status(200).json(allSlots);
   } catch (error) {

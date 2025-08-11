@@ -1,0 +1,278 @@
+# Artillery Load Test Configuration for Meetabl API
+# This configuration tests the booking system performance under Node.js 22
+
+config:
+  target: "http://localhost:3000"
+  phases:
+    # Warm-up phase
+    - duration: 30
+      arrivalRate: 5
+      name: "Warm-up"
+    
+    # Ramp-up phase
+    - duration: 60
+      arrivalRate: 5
+      rampTo: 50
+      name: "Ramp-up"
+    
+    # Sustained load phase
+    - duration: 300
+      arrivalRate: 50
+      name: "Sustained Load"
+    
+    # Spike test phase
+    - duration: 60
+      arrivalRate: 100
+      name: "Spike Test"
+    
+    # Cool-down phase
+    - duration: 30
+      arrivalRate: 5
+      name: "Cool-down"
+  
+  payload:
+    path: "./load-test-data.csv"
+    fields:
+      - "email"
+      - "password"
+      - "firstName"
+      - "lastName"
+      - "username"
+  
+  variables:
+    baseUrl: ""
+  
+  processor: "./load-test-processor.js"
+
+scenarios:
+  # Scenario 1: Anonymous user browsing
+  - name: "Anonymous Browsing"
+    weight: 20
+    flow:
+      - get:
+          url: "/"
+          expect:
+            - statusCode: 200
+      
+      - think: 2
+      
+      - get:
+          url: "/api/health"
+          expect:
+            - statusCode: 200
+            - contentType: json
+            - hasProperty: status
+      
+      - think: 3
+      
+      - get:
+          url: "/api/users/demo/availability"
+          expect:
+            - statusCode: 200
+            - contentType: json
+  
+  # Scenario 2: User Registration and Login
+  - name: "User Registration Flow"
+    weight: 10
+    flow:
+      - post:
+          url: "/api/auth/register"
+          json:
+            firstName: "{{ firstName }}"
+            lastName: "{{ lastName }}"
+            email: "{{ $randomString() }}@loadtest.com"
+            password: "LoadTest123!"
+            username: "{{ $randomString() }}"
+            timezone: "America/New_York"
+          capture:
+            - json: "$.token"
+              as: "authToken"
+            - json: "$.user.id"
+              as: "userId"
+          expect:
+            - statusCode: 201
+            - contentType: json
+            - hasProperty: token
+      
+      - think: 2
+      
+      - get:
+          url: "/api/users/me"
+          headers:
+            Authorization: "Bearer {{ authToken }}"
+          expect:
+            - statusCode: 200
+            - contentType: json
+            - hasProperty: email
+  
+  # Scenario 3: Authenticated User Booking Flow
+  - name: "Booking Creation Flow"
+    weight: 30
+    flow:
+      # Login
+      - post:
+          url: "/api/auth/login"
+          json:
+            email: "{{ email }}"
+            password: "{{ password }}"
+          capture:
+            - json: "$.token"
+              as: "authToken"
+            - json: "$.user.id"
+              as: "userId"
+          expect:
+            - statusCode: 200
+      
+      - think: 2
+      
+      # Get availability
+      - get:
+          url: "/api/availability"
+          headers:
+            Authorization: "Bearer {{ authToken }}"
+          expect:
+            - statusCode: 200
+            - contentType: json
+      
+      - think: 3
+      
+      # Create booking
+      - post:
+          url: "/api/bookings/my"
+          headers:
+            Authorization: "Bearer {{ authToken }}"
+          json:
+            title: "Load Test Meeting {{ $randomNumber(1, 1000) }}"
+            customerName: "Load Test Customer"
+            customerEmail: "customer{{ $randomString() }}@test.com"
+            startTime: "{{ $dateOffset(1, 'days') }}"
+            endTime: "{{ $dateOffset(1, 'days', 1, 'hours') }}"
+            timezone: "America/New_York"
+            description: "Load test booking"
+          capture:
+            - json: "$.id"
+              as: "bookingId"
+          expect:
+            - statusCode: 201
+            - contentType: json
+            - hasProperty: id
+      
+      - think: 2
+      
+      # Get bookings
+      - get:
+          url: "/api/bookings/my"
+          headers:
+            Authorization: "Bearer {{ authToken }}"
+          expect:
+            - statusCode: 200
+            - contentType: json
+            - hasProperty: bookings
+  
+  # Scenario 4: Booking Management
+  - name: "Booking Management"
+    weight: 20
+    flow:
+      # Login
+      - post:
+          url: "/api/auth/login"
+          json:
+            email: "{{ email }}"
+            password: "{{ password }}"
+          capture:
+            - json: "$.token"
+              as: "authToken"
+          expect:
+            - statusCode: 200
+      
+      - think: 1
+      
+      # Get all bookings
+      - get:
+          url: "/api/bookings/my"
+          headers:
+            Authorization: "Bearer {{ authToken }}"
+          capture:
+            - json: "$.bookings[0].id"
+              as: "bookingId"
+          expect:
+            - statusCode: 200
+      
+      - think: 2
+      
+      # Get specific booking (if exists)
+      - get:
+          url: "/api/bookings/my/{{ bookingId }}"
+          headers:
+            Authorization: "Bearer {{ authToken }}"
+          ifTrue: "bookingId"
+          expect:
+            - statusCode: 200
+      
+      - think: 3
+      
+      # Update booking (if exists)
+      - put:
+          url: "/api/bookings/my/{{ bookingId }}"
+          headers:
+            Authorization: "Bearer {{ authToken }}"
+          json:
+            title: "Updated Load Test Meeting"
+            description: "Updated during load test"
+          ifTrue: "bookingId"
+          expect:
+            - statusCode: 200
+  
+  # Scenario 5: Heavy API Usage
+  - name: "Heavy API Usage"
+    weight: 20
+    flow:
+      # Login
+      - post:
+          url: "/api/auth/login"
+          json:
+            email: "{{ email }}"
+            password: "{{ password }}"
+          capture:
+            - json: "$.token"
+              as: "authToken"
+          expect:
+            - statusCode: 200
+      
+      - think: 1
+      
+      # Rapid API calls
+      - loop:
+          - get:
+              url: "/api/users/me"
+              headers:
+                Authorization: "Bearer {{ authToken }}"
+          
+          - get:
+              url: "/api/bookings/my"
+              headers:
+                Authorization: "Bearer {{ authToken }}"
+          
+          - get:
+              url: "/api/availability"
+              headers:
+                Authorization: "Bearer {{ authToken }}"
+          
+          - get:
+              url: "/api/notifications"
+              headers:
+                Authorization: "Bearer {{ authToken }}"
+          
+          - think: 0.5
+        count: 5
+
+# Reporting configuration
+reporting:
+  - type: "json"
+    filename: "load-test-results.json"
+  
+  - type: "html"
+    filename: "load-test-results.html"
+  
+  - type: "junit"
+    filename: "load-test-results.xml"

@@ -9,8 +9,12 @@
 // Load environment variables
 require('dotenv').config();
 
+// Initialize telemetry first (must be before other imports)
+require('./telemetry');
+
 const logger = require('./config/logger');
 const { initializeApp } = require('./app');
+const { startMonitoringJob } = require('./jobs/db-monitor-job');
 
 // Define port
 const PORT = process.env.PORT || 3000;
@@ -25,6 +29,10 @@ const PORT = process.env.PORT || 3000;
     app.listen(PORT, () => {
       logger.info(`meetabl API server running on port ${PORT}`);
       logger.info(`Environment: ${process.env.NODE_ENV || 'development'}`);
+      
+      // Start database monitoring job
+      const monitoringInterval = parseInt(process.env.DB_MONITOR_INTERVAL) || 5;
+      startMonitoringJob(monitoringInterval);
     });
 
     // Handle uncaught exceptions

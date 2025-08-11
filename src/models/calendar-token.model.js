@@ -10,19 +10,19 @@
 const { DataTypes } = require('sequelize');
 const { v4: uuidv4 } = require('uuid');
 const { sequelize } = require('../config/database');
-const User = require('./user.model');
 
 const CalendarToken = sequelize.define('CalendarToken', {
   id: {
-    type: DataTypes.STRING(36),
+    type: DataTypes.UUID,
     primaryKey: true,
     defaultValue: () => uuidv4()
   },
-  user_id: {
-    type: DataTypes.STRING(36),
+  userId: {
+    type: DataTypes.UUID,
     allowNull: false,
+    field: 'user_id',
     references: {
-      model: User,
+      model: 'users',
       key: 'id'
     }
   },
@@ -30,29 +30,49 @@ const CalendarToken = sequelize.define('CalendarToken', {
     type: DataTypes.ENUM('google', 'microsoft'),
     allowNull: false
   },
-  access_token: {
-    type: DataTypes.TEXT,
-    allowNull: false
+  email: {
+    type: DataTypes.STRING(255),
+    allowNull: true
   },
-  refresh_token: {
+  accessToken: {
     type: DataTypes.TEXT,
-    allowNull: false
+    allowNull: false,
+    field: 'access_token'
   },
-  expires_at: {
+  refreshToken: {
+    type: DataTypes.TEXT,
+    allowNull: false,
+    field: 'refresh_token'
+  },
+  expiresAt: {
     type: DataTypes.DATE,
-    allowNull: false
+    allowNull: false,
+    field: 'expires_at'
   },
   scope: {
     type: DataTypes.TEXT,
     allowNull: true
+  },
+  createdAt: {
+    type: DataTypes.DATE,
+    allowNull: false,
+    defaultValue: DataTypes.NOW,
+    field: 'createdAt'
+  },
+  updatedAt: {
+    type: DataTypes.DATE,
+    allowNull: false,
+    defaultValue: DataTypes.NOW,
+    field: 'updatedAt'
   }
 }, {
   tableName: 'calendar_tokens',
-  timestamps: false
+  timestamps: true,
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt',
+  underscored: true
 });
 
-// Define relationships
-User.hasMany(CalendarToken, { foreignKey: 'user_id', onDelete: 'CASCADE' });
-CalendarToken.belongsTo(User, { foreignKey: 'user_id' });
+// Relationships are defined in associations.js to avoid circular dependencies
 
 module.exports = CalendarToken;

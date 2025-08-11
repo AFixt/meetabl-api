@@ -23,8 +23,37 @@ const processNotifications = async () => {
   }
 };
 
+/**
+ * AWS Lambda handler for notification processing
+ * @param {Object} event - AWS Lambda event object
+ * @param {Object} context - AWS Lambda context object
+ */
+const lambdaHandler = async (event, context) => {
+  try {
+    logger.info('Lambda notification processor started', { event, context });
+    await processNotifications();
+    
+    return {
+      statusCode: 200,
+      body: JSON.stringify({
+        message: 'Notification processing completed successfully'
+      })
+    };
+  } catch (error) {
+    logger.error('Lambda notification processor error:', error);
+    
+    return {
+      statusCode: 500,
+      body: JSON.stringify({
+        message: 'Notification processing failed',
+        error: error.message
+      })
+    };
+  }
+};
+
 // Export for manual triggering or scheduling
-module.exports = { processNotifications };
+module.exports = { processNotifications, lambdaHandler };
 
 // Run directly if this file is executed directly
 if (require.main === module) {

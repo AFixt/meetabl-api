@@ -10,48 +10,52 @@
 const { DataTypes } = require('sequelize');
 const { v4: uuidv4 } = require('uuid');
 const { sequelize } = require('../config/database');
-const User = require('./user.model');
 
 const AvailabilityRule = sequelize.define('AvailabilityRule', {
   id: {
-    type: DataTypes.STRING(36),
+    type: DataTypes.UUID,
     primaryKey: true,
     defaultValue: () => uuidv4()
   },
-  user_id: {
-    type: DataTypes.STRING(36),
+  userId: {
+    type: DataTypes.UUID,
     allowNull: false,
     references: {
-      model: User,
+      model: 'users',
       key: 'id'
     }
   },
-  day_of_week: {
+  dayOfWeek: {
     type: DataTypes.SMALLINT,
     allowNull: false,
+    field: 'day_of_week',
     validate: {
       min: 0,
       max: 6
     }
   },
-  start_time: {
+  startTime: {
     type: DataTypes.TIME,
-    allowNull: false
+    allowNull: false,
+    field: 'start_time'
   },
-  end_time: {
+  endTime: {
     type: DataTypes.TIME,
-    allowNull: false
+    allowNull: false,
+    field: 'end_time'
   },
-  buffer_minutes: {
+  bufferMinutes: {
     type: DataTypes.SMALLINT,
     defaultValue: 0,
+    field: 'buffer_minutes',
     validate: {
       min: 0
     }
   },
-  max_bookings_per_day: {
+  maxBookingsPerDay: {
     type: DataTypes.SMALLINT,
     allowNull: true,
+    field: 'max_bookings_per_day',
     validate: {
       min: 1
     }
@@ -61,8 +65,6 @@ const AvailabilityRule = sequelize.define('AvailabilityRule', {
   timestamps: false
 });
 
-// Define relationships
-User.hasMany(AvailabilityRule, { foreignKey: 'user_id', onDelete: 'CASCADE' });
-AvailabilityRule.belongsTo(User, { foreignKey: 'user_id' });
+// Relationships are defined in associations.js to avoid circular dependencies
 
 module.exports = AvailabilityRule;

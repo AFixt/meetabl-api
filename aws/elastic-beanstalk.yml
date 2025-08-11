@@ -1,0 +1,178 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'meetabl API - Elastic Beanstalk Deployment'
+
+Parameters:
+  Environment:
+    Type: String
+    Default: dev
+    AllowedValues:
+      - dev
+      - staging
+      - prod
+    Description: Environment name
+
+Resources:
+  # Elastic Beanstalk Application
+  Application:
+    Type: AWS::ElasticBeanstalk::Application
+    Properties:
+      ApplicationName: !Sub 'meetabl-${Environment}'
+      Description: meetabl API Application
+
+  # Elastic Beanstalk Application Version
+  ApplicationVersion:
+    Type: AWS::ElasticBeanstalk::ApplicationVersion
+    Properties:
+      ApplicationName: !Ref Application
+      Description: Initial Version
+      SourceBundle:
+        S3Bucket: !Sub 'elasticbeanstalk-${AWS::Region}-${AWS::AccountId}'
+        S3Key: !Sub 'meetabl-${Environment}/app.zip'
+
+  # IAM Role for EC2 instances
+  EC2Role:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ec2.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AWSElasticBeanstalkWebTier
+        - arn:aws:iam::aws:policy/AWSElasticBeanstalkWorkerTier
+      Policies:
+        - PolicyName: SSMParameterAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - ssm:GetParameter
+                  - ssm:GetParameters
+                Resource: !Sub 'arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/meetabl/${Environment}/*'
+        - PolicyName: S3Access
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:PutObject
+                  - s3:DeleteObject
+                Resource: '*'
+
+  # Instance Profile
+  InstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Roles:
+        - !Ref EC2Role
+
+  # Elastic Beanstalk Environment
+  EBEnvironment:
+    Type: AWS::ElasticBeanstalk::Environment
+    Properties:
+      ApplicationName: !Ref Application
+      EnvironmentName: !Sub 'meetabl-${Environment}-env'
+      Description: !Sub 'meetabl ${Environment} Environment'
+      VersionLabel: !Ref ApplicationVersion
+      SolutionStackName: '64bit Amazon Linux 2023 v6.3.0 running Node.js 20'
+      OptionSettings:
+        # Environment Type
+        - Namespace: aws:elasticbeanstalk:environment
+          OptionName: EnvironmentType
+          Value: LoadBalanced
+        
+        # Instance Configuration
+        - Namespace: aws:autoscaling:launchconfiguration
+          OptionName: InstanceType
+          Value: t3.small
+        - Namespace: aws:autoscaling:launchconfiguration
+          OptionName: IamInstanceProfile
+          Value: !Ref InstanceProfile
+        
+        # Auto Scaling
+        - Namespace: aws:autoscaling:asg
+          OptionName: MinSize
+          Value: '1'
+        - Namespace: aws:autoscaling:asg
+          OptionName: MaxSize
+          Value: '3'
+        
+        # Load Balancer
+        - Namespace: aws:elasticbeanstalk:environment
+          OptionName: LoadBalancerType
+          Value: application
+        
+        # Health Check
+        - Namespace: aws:elasticbeanstalk:environment:process:default
+          OptionName: HealthCheckPath
+          Value: /api/health
+        
+        # Node.js Configuration
+        - Namespace: aws:elasticbeanstalk:container:nodejs
+          OptionName: NodeCommand
+          Value: node src/index.js
+        - Namespace: aws:elasticbeanstalk:container:nodejs
+          OptionName: NodeVersion
+          Value: '20.x'
+        
+        # Environment Variables (using SSM Parameter Store)
+        - Namespace: aws:elasticbeanstalk:application:environment
+          OptionName: NODE_ENV
+          Value: !Ref Environment
+        - Namespace: aws:elasticbeanstalk:application:environment
+          OptionName: PORT
+          Value: '8080'
+        
+        # Database Configuration
+        - Namespace: aws:elasticbeanstalk:application:environment
+          OptionName: DB_HOST
+          Value: !Sub '{{resolve:ssm:/meetabl/${Environment}/db-host}}'
+        - Namespace: aws:elasticbeanstalk:application:environment
+          OptionName: DB_NAME
+          Value: !Sub '{{resolve:ssm:/meetabl/${Environment}/db-name}}'
+        - Namespace: aws:elasticbeanstalk:application:environment
+          OptionName: DB_USERNAME
+          Value: !Sub '{{resolve:ssm:/meetabl/${Environment}/db-username}}'
+        - Namespace: aws:elasticbeanstalk:application:environment
+          OptionName: DB_PASSWORD
+          Value: !Sub '{{resolve:ssm:/meetabl/${Environment}/db-password}}'
+        
+        # Application Secrets
+        - Namespace: aws:elasticbeanstalk:application:environment
+          OptionName: JWT_SECRET
+          Value: !Sub '{{resolve:ssm:/meetabl/${Environment}/jwt-secret}}'
+        - Namespace: aws:elasticbeanstalk:application:environment
+          OptionName: JWT_REFRESH_SECRET
+          Value: !Sub '{{resolve:ssm:/meetabl/${Environment}/jwt-refresh-secret}}'
+        - Namespace: aws:elasticbeanstalk:application:environment
+          OptionName: FRONTEND_URL
+          Value: !Sub '{{resolve:ssm:/meetabl/${Environment}/frontend-url}}'
+        
+        # Stripe Configuration
+        - Namespace: aws:elasticbeanstalk:application:environment
+          OptionName: STRIPE_SECRET_KEY
+          Value: !Sub '{{resolve:ssm:/meetabl/${Environment}/stripe-secret-key}}'
+        - Namespace: aws:elasticbeanstalk:application:environment
+          OptionName: STRIPE_PUBLISHABLE_KEY
+          Value: !Sub '{{resolve:ssm:/meetabl/${Environment}/stripe-publishable-key}}'
+        - Namespace: aws:elasticbeanstalk:application:environment
+          OptionName: STRIPE_WEBHOOK_SECRET
+          Value: !Sub '{{resolve:ssm:/meetabl/${Environment}/stripe-webhook-secret}}'
+
+Outputs:
+  ApplicationURL:
+    Description: URL of the Elastic Beanstalk Application
+    Value: !GetAtt EBEnvironment.EndpointURL
+    Export:
+      Name: !Sub '${AWS::StackName}-URL'
+  
+  EnvironmentName:
+    Description: Name of the Elastic Beanstalk Environment
+    Value: !Ref EBEnvironment
+    Export:
+      Name: !Sub '${AWS::StackName}-EnvironmentName'

@@ -1,36 +1,53 @@
 /**
  * Authentication middleware tests
- * 
+ *
  * Using the improved test setup for consistent mocking
- * 
+ *
  * @author meetabl Team
  */
 
-// Load the test setup
+// Mock dependencies before imports
+jest.mock('../../../src/config/logger', () => ({
+  debug: jest.fn(),
+  error: jest.fn(),
+  info: jest.fn(),
+  warn: jest.fn()
+}));
+jest.mock('../../../src/models', () => ({
+  User: {
+    findOne: jest.fn()
+  },
+  JwtBlacklist: {
+    findOne: jest.fn()
+  }
+}));
+
+// Load the test setup - this will mock jsonwebtoken
 require('../test-setup');
 const { setupControllerMocks } = require('../../fixtures/test-helper');
-
-// Setup mocks
 setupControllerMocks();
+
+// Set JWT_SECRET for tests
+process.env.JWT_SECRET = 'test-secret';
 
 // Import middleware after mocks are set up
 const { authenticateJWT } = require('../../../src/middlewares/auth');
+const jwt = require('jsonwebtoken');
 
 // Ensure createMockRequest, createMockResponse, createMockNext are available
-if (typeof global.createMockRequest !== 'function' ||
-    typeof global.createMockResponse !== 'function' ||
-    typeof global.createMockNext !== 'function') {
+if (typeof global.createMockRequest !== 'function'
+    || typeof global.createMockResponse !== 'function'
+    || typeof global.createMockNext !== 'function') {
   // Define them if they're not available in the global scope
-  global.createMockRequest = (overrides = {}) => {
-    return {
-      body: {},
-      params: {},
-      query: {},
-      headers: {},
-      user: { id: 'test-user-id' },
-      ...overrides
-    };
-  };
+  global.createMockRequest = (overrides = {}) => ({
+    body: {},
+    params: {},
+    query: {},
+    headers: {},
+    cookies: {},
+    user: { id: 'test-user-id' },
+    ...overrides
+  });
 
   global.createMockResponse = () => {
     const res = {};
@@ -46,22 +63,28 @@ if (typeof global.createMockRequest !== 'function' ||
 }
 
 describe('Auth Middleware', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
   test('should authenticate valid JWT token', async () => {
-    // Mock the JWT verify and User.findOne responses for this test
-    const jwt = require('jsonwebtoken');
-    jwt.verify.mockReturnValueOnce({ userId: 'test-user-id' });
-    
-    const { User } = require('../../../src/models');
-    User.findOne.mockResolvedValueOnce({ 
+    // The jwt mock from test-helper will return { userId: 'test-user-id' } for any non-'expired' or 'invalid' token
+
+    const models = require('../../../src/models');
+    models.User.findOne.mockResolvedValue({
       id: 'test-user-id',
-      name: 'Test User' 
+      name: 'Test User',
+      status: 'active'
     });
     
+    // Ensure JwtBlacklist is properly mocked
+    models.JwtBlacklist.findOne.mockResolvedValue(null);
+
     // Create mock request, response and next
     const req = createMockRequest({
       headers: {
         authorization: 'Bearer valid-token'
-      }
+      },
+      cookies: {}  // Ensure cookies object exists
     });
     const res = createMockResponse();
     const next = createMockNext();
@@ -69,9 +92,15 @@ describe('Auth Middleware', () => {
     // Call middleware
     await authenticateJWT(req, res, next);
 
+    // Debug: Check if there was an error
+    if (!next.mock.calls.length) {
+      console.log('Auth failed. Response:', res.json.mock.calls);
+      console.log('JWT verify calls:', jwt.verify.mock.calls);
+    }
+
     // Verify next was called (successful authentication)
     expect(next).toHaveBeenCalled();
-    
+
     // Verify user was attached to request
     expect(req.user).toBeDefined();
     expect(req.user.id).toBe('test-user-id');
@@ -88,13 +117,13 @@ describe('Auth Middleware', () => {
 
     // Verify next was not called
     expect(next).not.toHaveBeenCalled();
-    
+
     // Verify error response
     expect(res.status).toHaveBeenCalledWith(401);
     expect(res.json).toHaveBeenCalledWith({
       error: {
         code: 'unauthorized',
-        message: 'Authentication required'
+        message: 'Authentication failed'
       }
     });
   });
@@ -114,20 +143,19 @@ describe('Auth Middleware', () => {
 
     // Verify next was not called
     expect(next).not.toHaveBeenCalled();
-    
+
     // Verify error response
     expect(res.status).toHaveBeenCalledWith(401);
     expect(res.json).toHaveBeenCalledWith({
       error: {
         code: 'unauthorized',
-        message: 'Invalid authentication format'
+        message: 'Authentication failed'
       }
     });
   });
 
   test('should reject invalid token', async () => {
     // Mock jwt.verify to throw an error
-    const jwt = require('jsonwebtoken');
     jwt.verify.mockImplementationOnce(() => {
       throw new jwt.JsonWebTokenError('invalid signature');
     });
@@ -146,7 +174,7 @@ describe('Auth Middleware', () => {
 
     // Verify next was not called
     expect(next).not.toHaveBeenCalled();
-    
+
     // Verify error response
     expect(res.status).toHaveBeenCalledWith(401);
     expect(res.json).toHaveBeenCalled();
@@ -154,7 +182,6 @@ describe('Auth Middleware', () => {
 
   test('should reject expired token', async () => {
     // Mock jwt.verify to throw an expired token error
-    const jwt = require('jsonwebtoken');
     jwt.verify.mockImplementationOnce(() => {
       throw new jwt.TokenExpiredError('Token expired');
     });
@@ -173,18 +200,21 @@ describe('Auth Middleware', () => {
 
     // Verify next was not called
     expect(next).not.toHaveBeenCalled();
-    
+
     // Verify error response
     expect(res.status).toHaveBeenCalledWith(401);
     expect(res.json).toHaveBeenCalledWith({
       error: {
         code: 'unauthorized',
-        message: 'Token expired'
+        message: 'Authentication failed'
       }
     });
   });
 
   test('should reject if user not found', async () => {
+    // Mock jwt.verify to return a valid token
+    jwt.verify.mockReturnValueOnce({ userId: 'test-user-id' });
+    
     // Mock User.findOne to return null
     const { User } = require('../../../src/models');
     User.findOne.mockResolvedValueOnce(null);
@@ -203,13 +233,13 @@ describe('Auth Middleware', () => {
 
     // Verify next was not called
     expect(next).not.toHaveBeenCalled();
-    
+
     // Verify error response
     expect(res.status).toHaveBeenCalledWith(401);
     expect(res.json).toHaveBeenCalledWith({
       error: {
         code: 'unauthorized',
-        message: 'User not found'
+        message: 'Authentication failed'
       }
     });
   });

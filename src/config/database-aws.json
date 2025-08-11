@@ -1,0 +1,31 @@
+{
+  "dev": {
+    "username": "meetabl_admin",
+    "password": "L;lK^xD_(GJ6VuC~4~:2.thH-!T>dDd}",
+    "database": "meetabl",
+    "host": "meetabl-dev-cluster.cluster-crumay2yc1su.us-east-1.rds.amazonaws.com",
+    "port": 3306,
+    "dialect": "mysql",
+    "logging": false,
+    "define": {
+      "timestamps": true,
+      "underscored": false,
+      "createdAt": "created",
+      "updatedAt": "updated"
+    },
+    "dialectOptions": {
+      "dateStrings": true,
+      "typeCast": true,
+      "connectTimeout": 60000,
+      "acquireTimeout": 60000,
+      "timeout": 60000,
+      "charset": "utf8mb4"
+    },
+    "pool": {
+      "max": 10,
+      "min": 0,
+      "acquire": 30000,
+      "idle": 10000
+    }
+  }
+}

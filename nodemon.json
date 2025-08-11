@@ -1,0 +1,31 @@
+{
+  "watch": [
+    "src/**/*.js",
+    ".env"
+  ],
+  "ignore": [
+    "node_modules/**/*",
+    "logs/**/*",
+    "coverage/**/*",
+    "tests/**/*",
+    "*.test.js",
+    "*.spec.js",
+    "dist/**/*",
+    "build/**/*"
+  ],
+  "ext": "js,json,env",
+  "delay": 1000,
+  "env": {
+    "NODE_ENV": "development",
+    "DEBUG": "meetabl:*"
+  },
+  "exec": "node --inspect=0.0.0.0:9229 src/index.js",
+  "verbose": true,
+  "restartable": "rs",
+  "colours": true,
+  "events": {
+    "start": "echo '🚀 meetabl API development server starting...'",
+    "restart": "echo '🔄 meetabl API restarting due to file changes...'",
+    "crash": "echo '💥 meetabl API crashed - waiting for file changes to restart...'"
+  }
+}

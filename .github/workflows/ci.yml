@@ -1,0 +1,783 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+  schedule:
+    # Run tests daily at 2 AM UTC to catch any regressions
+    - cron: '0 2 * * *'
+
+env:
+  NODE_VERSION: '22'
+  MYSQL_VERSION: '8.0'
+
+jobs:
+  # Security and dependency scanning
+  security:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run security audit
+        run: npm audit --audit-level high
+
+      - name: Run Snyk security check
+        run: npm run security:check
+        continue-on-error: true
+
+  # Code quality and linting
+  lint:
+    name: Code Quality
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run JavaScript linting
+        run: npm run lint:js
+
+      - name: Run Markdown linting
+        run: npm run lint:md
+
+  # Database setup for testing
+  database-setup:
+    name: Database Setup
+    runs-on: ubuntu-latest
+    services:
+      mysql:
+        image: mysql:${{ env.MYSQL_VERSION }}
+        env:
+          MYSQL_ROOT_PASSWORD: test_password
+          MYSQL_DATABASE: meetabl_test
+          MYSQL_USER: meetabl_test
+          MYSQL_PASSWORD: meetabl_test
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=3
+
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Wait for MySQL to be ready
+        run: |
+          for i in {1..30}; do
+            if mysqladmin ping -h 127.0.0.1 -P 3306 -u root -ptest_password; then
+              echo "MySQL is ready"
+              break
+            fi
+            echo "Waiting for MySQL... ($i/30)"
+            sleep 2
+          done
+
+      - name: Run database migrations
+        run: npm run db:migrate:test
+        env:
+          NODE_ENV: test
+          DB_HOST: localhost
+          DB_PORT: 3306
+          DB_NAME: meetabl_test
+          DB_USER: meetabl_test
+          DB_PASSWORD: meetabl_test
+          REDIS_URL: redis://localhost:6379
+
+      - name: Run database seeds
+        run: npm run db:seed
+        env:
+          NODE_ENV: test
+          DB_HOST: localhost
+          DB_PORT: 3306
+          DB_NAME: meetabl_test
+          DB_USER: meetabl_test
+          DB_PASSWORD: meetabl_test
+          REDIS_URL: redis://localhost:6379
+
+  # Unit tests
+  unit-tests:
+    name: Unit Tests
+    runs-on: ubuntu-latest
+    needs: [database-setup]
+    strategy:
+      matrix:
+        node-version: ['22']
+        test-suite: ['models', 'controllers', 'services', 'middlewares']
+    services:
+      mysql:
+        image: mysql:${{ env.MYSQL_VERSION }}
+        env:
+          MYSQL_ROOT_PASSWORD: test_password
+          MYSQL_DATABASE: meetabl_test
+          MYSQL_USER: meetabl_test
+          MYSQL_PASSWORD: meetabl_test
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=3
+
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Wait for services
+        run: |
+          for i in {1..30}; do
+            if mysqladmin ping -h 127.0.0.1 -P 3306 -u root -ptest_password && redis-cli -h 127.0.0.1 ping; then
+              echo "Services are ready"
+              break
+            fi
+            echo "Waiting for services... ($i/30)"
+            sleep 2
+          done
+
+      - name: Run database migrations
+        run: npm run db:migrate:test
+        env:
+          NODE_ENV: test
+          DB_HOST: localhost
+          DB_PORT: 3306
+          DB_NAME: meetabl_test
+          DB_USER: meetabl_test
+          DB_PASSWORD: meetabl_test
+          REDIS_URL: redis://localhost:6379
+
+      - name: Run unit tests for ${{ matrix.test-suite }}
+        run: npm run test:${{ matrix.test-suite }}
+        env:
+          NODE_ENV: test
+          DB_HOST: localhost
+          DB_PORT: 3306
+          DB_NAME: meetabl_test
+          DB_USER: meetabl_test
+          DB_PASSWORD: meetabl_test
+          REDIS_URL: redis://localhost:6379
+          JWT_SECRET: test_jwt_secret
+          ENCRYPTION_KEY: test_encryption_key_32_chars_long
+
+      - name: Upload test results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: unit-test-results-${{ matrix.test-suite }}-node-${{ matrix.node-version }}
+          path: |
+            coverage/
+            test-results/
+          retention-days: 7
+
+  # Integration tests
+  integration-tests:
+    name: Integration Tests
+    runs-on: ubuntu-latest
+    needs: [unit-tests]
+    strategy:
+      matrix:
+        test-suite: ['routes', 'workflows']
+    services:
+      mysql:
+        image: mysql:${{ env.MYSQL_VERSION }}
+        env:
+          MYSQL_ROOT_PASSWORD: test_password
+          MYSQL_DATABASE: meetabl_test
+          MYSQL_USER: meetabl_test
+          MYSQL_PASSWORD: meetabl_test
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=3
+
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Wait for services
+        run: |
+          for i in {1..30}; do
+            if mysqladmin ping -h 127.0.0.1 -P 3306 -u root -ptest_password && redis-cli -h 127.0.0.1 ping; then
+              echo "Services are ready"
+              break
+            fi
+            echo "Waiting for services... ($i/30)"
+            sleep 2
+          done
+
+      - name: Run database migrations
+        run: npm run db:migrate:test
+        env:
+          NODE_ENV: test
+          DB_HOST: localhost
+          DB_PORT: 3306
+          DB_NAME: meetabl_test
+          DB_USER: meetabl_test
+          DB_PASSWORD: meetabl_test
+          REDIS_URL: redis://localhost:6379
+
+      - name: Run database seeds
+        run: npm run db:seed
+        env:
+          NODE_ENV: test
+          DB_HOST: localhost
+          DB_PORT: 3306
+          DB_NAME: meetabl_test
+          DB_USER: meetabl_test
+          DB_PASSWORD: meetabl_test
+          REDIS_URL: redis://localhost:6379
+
+      - name: Run integration tests for ${{ matrix.test-suite }}
+        run: npm run test:${{ matrix.test-suite }}
+        env:
+          NODE_ENV: test
+          DB_HOST: localhost
+          DB_PORT: 3306
+          DB_NAME: meetabl_test
+          DB_USER: meetabl_test
+          DB_PASSWORD: meetabl_test
+          REDIS_URL: redis://localhost:6379
+          JWT_SECRET: test_jwt_secret
+          ENCRYPTION_KEY: test_encryption_key_32_chars_long
+          STRIPE_SECRET_KEY: sk_test_fake_key_for_testing
+          TWILIO_ACCOUNT_SID: test_twilio_sid
+          TWILIO_AUTH_TOKEN: test_twilio_token
+
+      - name: Upload integration test results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: integration-test-results-${{ matrix.test-suite }}
+          path: |
+            coverage/
+            test-results/
+          retention-days: 7
+
+  # Test coverage reporting
+  coverage:
+    name: Test Coverage
+    runs-on: ubuntu-latest
+    needs: [unit-tests, integration-tests]
+    services:
+      mysql:
+        image: mysql:${{ env.MYSQL_VERSION }}
+        env:
+          MYSQL_ROOT_PASSWORD: test_password
+          MYSQL_DATABASE: meetabl_test
+          MYSQL_USER: meetabl_test
+          MYSQL_PASSWORD: meetabl_test
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=3
+
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Wait for services
+        run: |
+          for i in {1..30}; do
+            if mysqladmin ping -h 127.0.0.1 -P 3306 -u root -ptest_password && redis-cli -h 127.0.0.1 ping; then
+              echo "Services are ready"
+              break
+            fi
+            echo "Waiting for services... ($i/30)"
+            sleep 2
+          done
+
+      - name: Run database migrations
+        run: npm run db:migrate:test
+        env:
+          NODE_ENV: test
+          DB_HOST: localhost
+          DB_PORT: 3306
+          DB_NAME: meetabl_test
+          DB_USER: meetabl_test
+          DB_PASSWORD: meetabl_test
+          REDIS_URL: redis://localhost:6379
+
+      - name: Run all tests with coverage
+        run: npm run test:coverage
+        env:
+          NODE_ENV: test
+          DB_HOST: localhost
+          DB_PORT: 3306
+          DB_NAME: meetabl_test
+          DB_USER: meetabl_test
+          DB_PASSWORD: meetabl_test
+          REDIS_URL: redis://localhost:6379
+          JWT_SECRET: test_jwt_secret
+          ENCRYPTION_KEY: test_encryption_key_32_chars_long
+          STRIPE_SECRET_KEY: sk_test_fake_key_for_testing
+          TWILIO_ACCOUNT_SID: test_twilio_sid
+          TWILIO_AUTH_TOKEN: test_twilio_token
+
+      - name: Generate coverage badges
+        run: npm run coverage:report
+        continue-on-error: true
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          file: ./coverage/lcov.info
+          flags: api-tests
+          name: meetabl-api-codecov
+          fail_ci_if_error: false
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+
+      - name: Upload coverage reports
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: |
+            coverage/
+            docs/badges/
+          retention-days: 30
+
+  # Load testing
+  load-tests:
+    name: Load Tests
+    runs-on: ubuntu-latest
+    needs: [integration-tests]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    services:
+      mysql:
+        image: mysql:${{ env.MYSQL_VERSION }}
+        env:
+          MYSQL_ROOT_PASSWORD: test_password
+          MYSQL_DATABASE: meetabl_test
+          MYSQL_USER: meetabl_test
+          MYSQL_PASSWORD: meetabl_test
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=3
+
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Wait for services
+        run: |
+          for i in {1..30}; do
+            if mysqladmin ping -h 127.0.0.1 -P 3306 -u root -ptest_password && redis-cli -h 127.0.0.1 ping; then
+              echo "Services are ready"
+              break
+            fi
+            echo "Waiting for services... ($i/30)"
+            sleep 2
+          done
+
+      - name: Run database migrations
+        run: npm run db:migrate:test
+        env:
+          NODE_ENV: test
+          DB_HOST: localhost
+          DB_PORT: 3306
+          DB_NAME: meetabl_test
+          DB_USER: meetabl_test
+          DB_PASSWORD: meetabl_test
+          REDIS_URL: redis://localhost:6379
+
+      - name: Start API server
+        run: |
+          npm start &
+          sleep 10
+        env:
+          NODE_ENV: test
+          PORT: 3001
+          DB_HOST: localhost
+          DB_PORT: 3306
+          DB_NAME: meetabl_test
+          DB_USER: meetabl_test
+          DB_PASSWORD: meetabl_test
+          REDIS_URL: redis://localhost:6379
+          JWT_SECRET: test_jwt_secret
+          ENCRYPTION_KEY: test_encryption_key_32_chars_long
+
+      - name: Run quick load test
+        run: npm run load-test:quick
+        continue-on-error: true
+
+      - name: Upload load test results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: load-test-results
+          path: |
+            load-test-results/
+            scripts/load-test-data.csv
+          retention-days: 14
+
+  # Performance benchmarks
+  benchmarks:
+    name: Performance Benchmarks
+    runs-on: ubuntu-latest
+    needs: [integration-tests]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    services:
+      mysql:
+        image: mysql:${{ env.MYSQL_VERSION }}
+        env:
+          MYSQL_ROOT_PASSWORD: test_password
+          MYSQL_DATABASE: meetabl_test
+          MYSQL_USER: meetabl_test
+          MYSQL_PASSWORD: meetabl_test
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=3
+
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Wait for services
+        run: |
+          for i in {1..30}; do
+            if mysqladmin ping -h 127.0.0.1 -P 3306 -u root -ptest_password && redis-cli -h 127.0.0.1 ping; then
+              echo "Services are ready"
+              break
+            fi
+            echo "Waiting for services... ($i/30)"
+            sleep 2
+          done
+
+      - name: Run database migrations
+        run: npm run db:migrate:test
+        env:
+          NODE_ENV: test
+          DB_HOST: localhost
+          DB_PORT: 3306
+          DB_NAME: meetabl_test
+          DB_USER: meetabl_test
+          DB_PASSWORD: meetabl_test
+          REDIS_URL: redis://localhost:6379
+
+      - name: Run API benchmarks
+        run: npm run benchmark:api
+        env:
+          NODE_ENV: test
+          DB_HOST: localhost
+          DB_PORT: 3306
+          DB_NAME: meetabl_test
+          DB_USER: meetabl_test
+          DB_PASSWORD: meetabl_test
+          REDIS_URL: redis://localhost:6379
+          JWT_SECRET: test_jwt_secret
+          ENCRYPTION_KEY: test_encryption_key_32_chars_long
+
+      - name: Run database benchmarks
+        run: npm run benchmark:db
+        env:
+          NODE_ENV: test
+          DB_HOST: localhost
+          DB_PORT: 3306
+          DB_NAME: meetabl_test
+          DB_USER: meetabl_test
+          DB_PASSWORD: meetabl_test
+          REDIS_URL: redis://localhost:6379
+
+      - name: Upload benchmark results
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-results
+          path: |
+            benchmark-results/
+            node22-performance-report.json
+          retention-days: 30
+
+  # Build and packaging
+  build:
+    name: Build and Package
+    runs-on: ubuntu-latest
+    needs: [lint, unit-tests]
+    strategy:
+      matrix:
+        environment: [development, staging, production]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci --only=production
+
+      - name: Create build package for ${{ matrix.environment }}
+        run: |
+          mkdir -p build-${{ matrix.environment }}
+          cp -r src/ build-${{ matrix.environment }}/
+          cp package.json package-lock.json build-${{ matrix.environment }}/
+          
+          # Copy environment-specific files
+          if [ -f ".env.${{ matrix.environment }}" ]; then
+            cp .env.${{ matrix.environment }} build-${{ matrix.environment }}/.env
+          fi
+          
+          # Create deployment package
+          cd build-${{ matrix.environment }}
+          tar -czf ../meetabl-api-${{ matrix.environment }}.tar.gz .
+          cd ..
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-${{ matrix.environment }}
+          path: meetabl-api-${{ matrix.environment }}.tar.gz
+          retention-days: 14
+
+  # Generate consolidated test report
+  report:
+    name: Generate Test Report
+    runs-on: ubuntu-latest
+    needs: [unit-tests, integration-tests, coverage, load-tests, benchmarks]
+    if: always()
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Download all test artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: all-api-test-results/
+
+      - name: Generate consolidated report
+        run: |
+          mkdir -p api-test-report
+          echo "# API Test Results Summary" > api-test-report/README.md
+          echo "Generated on: $(date)" >> api-test-report/README.md
+          echo "" >> api-test-report/README.md
+          echo "## Test Summary" >> api-test-report/README.md
+          echo "" >> api-test-report/README.md
+          echo "### Available Reports:" >> api-test-report/README.md
+          ls -la all-api-test-results/ >> api-test-report/README.md
+          
+          # Count various test types
+          UNIT_TESTS=$(find all-api-test-results -name "*unit-test*" -type d | wc -l)
+          INTEGRATION_TESTS=$(find all-api-test-results -name "*integration-test*" -type d | wc -l)
+          COVERAGE_REPORTS=$(find all-api-test-results -name "*coverage*" -type d | wc -l)
+          
+          echo "" >> api-test-report/README.md
+          echo "### Test Counts:" >> api-test-report/README.md
+          echo "- Unit Test Runs: $UNIT_TESTS" >> api-test-report/README.md
+          echo "- Integration Test Runs: $INTEGRATION_TESTS" >> api-test-report/README.md
+          echo "- Coverage Reports: $COVERAGE_REPORTS" >> api-test-report/README.md
+
+      - name: Upload consolidated report
+        uses: actions/upload-artifact@v4
+        with:
+          name: api-consolidated-test-report
+          path: api-test-report/
+          retention-days: 30
+
+  # Deployment (only on main branch)
+  deploy:
+    name: Deploy to Staging
+    runs-on: ubuntu-latest
+    needs: [build, coverage]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && success()
+    environment: staging
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download staging build
+        uses: actions/download-artifact@v4
+        with:
+          name: build-staging
+          path: ./
+
+      - name: Deploy to staging
+        run: |
+          echo "Deploying API to staging environment..."
+          # Add your deployment commands here
+          # For example: serverless deploy --stage staging
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          SERVERLESS_ACCESS_KEY: ${{ secrets.SERVERLESS_ACCESS_KEY }}
+
+      - name: Run post-deployment health check
+        run: |
+          echo "Running post-deployment health checks..."
+          # Add health check commands here
+        continue-on-error: true
+
+  # Notify on failure
+  notify:
+    name: Notify on Failure
+    runs-on: ubuntu-latest
+    needs: [security, lint, unit-tests, integration-tests, coverage, build]
+    if: failure()
+    steps:
+      - name: Send notification
+        run: |
+          echo "API CI/CD pipeline failed. Please check the logs."
+          # Add notification logic here (Slack, email, etc.)
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}

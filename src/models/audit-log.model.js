@@ -10,19 +10,19 @@
 const { DataTypes } = require('sequelize');
 const { v4: uuidv4 } = require('uuid');
 const { sequelize } = require('../config/database');
-const User = require('./user.model');
 
 const AuditLog = sequelize.define('AuditLog', {
   id: {
-    type: DataTypes.STRING(36),
+    type: DataTypes.UUID,
     primaryKey: true,
     defaultValue: () => uuidv4()
   },
-  user_id: {
-    type: DataTypes.STRING(36),
+  userId: {
+    type: DataTypes.UUID,
     allowNull: false,
+    field: 'user_id',
     references: {
-      model: User,
+      model: 'users',
       key: 'id'
     }
   },
@@ -45,8 +45,6 @@ const AuditLog = sequelize.define('AuditLog', {
   updatedAt: false
 });
 
-// Define relationships
-User.hasMany(AuditLog, { foreignKey: 'user_id', onDelete: 'CASCADE' });
-AuditLog.belongsTo(User, { foreignKey: 'user_id' });
+// Relationships are defined in associations.js to avoid circular dependencies
 
 module.exports = AuditLog;
