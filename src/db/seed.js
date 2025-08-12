@@ -20,7 +20,8 @@ const seedData = {
       firstName: 'Admin',
       lastName: 'User',
       role: 'admin',
-      status: 'active'
+      status: 'active',
+      email_verified: true // Set as verified for demo user
     },
     {
       email: 'user@example.com',
@@ -28,7 +29,8 @@ const seedData = {
       firstName: 'Test',
       lastName: 'User',
       role: 'user',
-      status: 'active'
+      status: 'active',
+      email_verified: true // Set as verified for demo user
     }
   ],
   availabilityRules: [

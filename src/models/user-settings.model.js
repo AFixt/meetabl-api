@@ -175,6 +175,12 @@ const UserSettings = sequelize.define('UserSettings', {
     allowNull: false,
     defaultValue: '30_minutes',
     field: 'reminder_time'
+  },
+  requiresConfirmation: {
+    type: DataTypes.BOOLEAN,
+    allowNull: false,
+    defaultValue: false,
+    field: 'requires_confirmation'
   }
 }, {
   tableName: 'user_settings',

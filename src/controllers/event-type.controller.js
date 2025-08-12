@@ -64,6 +64,33 @@ const getEventType = async (req, res, next) => {
 };
 
 /**
+ * Transform snake_case fields to camelCase for Sequelize
+ */
+const transformRequestBody = (body) => {
+  const transformed = {};
+  
+  // Map snake_case fields to camelCase
+  const fieldMapping = {
+    'location_type': 'locationType',
+    'requires_confirmation': 'requiresConfirmation',
+    'buffer_before': 'bufferBefore',
+    'buffer_after': 'bufferAfter',
+    'minimum_notice': 'minimumNotice',
+    'maximum_advance': 'maximumAdvance',
+    'reminder_minutes': 'reminderMinutes',
+    'is_active': 'isActive'
+  };
+  
+  // Copy all fields, transforming snake_case to camelCase where needed
+  Object.keys(body).forEach(key => {
+    const mappedKey = fieldMapping[key] || key;
+    transformed[mappedKey] = body[key];
+  });
+  
+  return transformed;
+};
+
+/**
  * Create a new event type
  */
 const createEventType = async (req, res, next) => {
@@ -75,14 +102,20 @@ const createEventType = async (req, res, next) => {
 
     const user = await User.findByPk(req.user.id);
     if (!user.canAddEventTypes(currentCount)) {
+      const { PLAN_LIMITS } = require('../config/stripe-products');
+      const planType = user.plan_type?.toUpperCase() || 'FREE';
+      const planLimits = PLAN_LIMITS[planType] || PLAN_LIMITS.FREE;
       return res.status(403).json({
         success: false,
-        message: `You have reached your event type limit of ${user.max_event_types}. Please upgrade your plan to add more event types.`
+        message: `You have reached your event type limit of ${planLimits.maxEventTypes}. Please upgrade your plan to add more event types.`
       });
     }
 
+    // Transform request body from snake_case to camelCase
+    const transformedBody = transformRequestBody(req.body);
+
     // Generate unique slug
-    const slug = await EventType.generateSlug(req.body.name, req.user.id);
+    const slug = await EventType.generateSlug(transformedBody.name, req.user.id);
 
     // Get next position
     const maxPosition = await EventType.max('position', {
@@ -90,7 +123,7 @@ const createEventType = async (req, res, next) => {
     });
 
     const eventType = await EventType.create({
-      ...req.body,
+      ...transformedBody,
       id: uuidv4(),
       userId: req.user.id,
       slug,
@@ -114,6 +147,13 @@ const updateEventType = async (req, res, next) => {
   try {
     const { id } = req.params;
 
+    // Transform request body from snake_case to camelCase
+    const transformedBody = transformRequestBody(req.body);
+
+    // Debug logging
+    logger.info('Update event type request body:', req.body);
+    logger.info('Transformed body:', transformedBody);
+    
     const eventType = await EventType.findOne({
       where: {
         id,
@@ -129,11 +169,14 @@ const updateEventType = async (req, res, next) => {
     }
 
     // If name is being changed, regenerate slug
-    if (req.body.name && req.body.name !== eventType.name) {
-      req.body.slug = await EventType.generateSlug(req.body.name, req.user.id);
+    if (transformedBody.name && transformedBody.name !== eventType.name) {
+      transformedBody.slug = await EventType.generateSlug(transformedBody.name, req.user.id);
     }
 
-    await eventType.update(req.body);
+    // Log before and after update
+    logger.info('Before update - reminderMinutes:', eventType.reminderMinutes);
+    await eventType.update(transformedBody);
+    logger.info('After update - reminderMinutes:', eventType.reminderMinutes);
 
     res.json({
       success: true,

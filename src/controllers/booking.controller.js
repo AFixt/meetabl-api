@@ -334,15 +334,22 @@ const getBooking = asyncHandler(async (req, res) => {
  * @param {Object} res - Express response object
  */
 const cancelBooking = asyncHandler(async (req, res) => {
-  const transaction = await sequelize.transaction();
+  let transaction;
 
   try {
     const userId = req.user.id;
+    const userEmail = req.user.email;
     const { id } = req.params;
 
-    // Find booking
+    // Find booking - allow cancellation if user is either the host or the attendee
     const booking = await Booking.findOne({
-      where: { id, userId: userId }
+      where: { 
+        id,
+        [Op.or]: [
+          { userId: userId }, // User is the host
+          { customerEmail: userEmail } // User is the attendee
+        ]
+      }
     });
 
     if (!booking) {
@@ -356,6 +363,9 @@ const cancelBooking = asyncHandler(async (req, res) => {
         message: 'Booking is already cancelled'
       }]);
     }
+
+    // Start transaction after validation
+    transaction = await sequelize.transaction();
 
     // Update booking status
     booking.status = 'cancelled';
@@ -381,12 +391,18 @@ const cancelBooking = asyncHandler(async (req, res) => {
 
     // Commit transaction
     await transaction.commit();
+    transaction = null; // Mark as committed
 
     // Log cancellation
     logger.info(`Booking cancelled: ${id}`);
 
     // Queue email notification job for cancellation
-    await notificationService.queueNotification(id, 'email');
+    try {
+      await notificationService.queueNotification(id, 'email');
+    } catch (notificationError) {
+      logger.error(`Failed to queue notification for booking ${id}:`, notificationError);
+      // Non-critical error, don't fail the cancellation
+    }
 
     // Cancel any scheduled reminder notifications
     try {
@@ -409,8 +425,10 @@ const cancelBooking = asyncHandler(async (req, res) => {
 
     return successResponse(res, booking, 'Booking cancelled successfully');
   } catch (error) {
-    // Rollback transaction
-    await transaction.rollback();
+    // Rollback transaction only if it exists and hasn't been committed
+    if (transaction) {
+      await transaction.rollback();
+    }
     throw error;
   }
 });

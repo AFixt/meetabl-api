@@ -431,6 +431,11 @@ const getUserSettings = asyncHandler(async (req, res) => {
       });
     }
 
+    // Get plan limits from configuration
+    const { PLAN_LIMITS } = require('../config/stripe-products');
+    const planType = user.plan_type?.toUpperCase() || 'FREE';
+    const planLimits = PLAN_LIMITS[planType] || PLAN_LIMITS.FREE;
+
     // Combine settings with subscription data
     const settingsData = settings.toJSON();
     const combinedData = {
@@ -441,7 +446,14 @@ const getUserSettings = asyncHandler(async (req, res) => {
       stripe_subscription_status: user.stripe_subscription_status,
       stripe_price_id: user.stripe_price_id,
       stripe_current_period_end: user.stripe_current_period_end,
-      stripe_customer_id: user.stripe_customer_id
+      stripe_customer_id: user.stripe_customer_id,
+      // Include plan limits from configuration
+      max_event_types: planLimits.maxEventTypes,
+      max_calendars: planLimits.maxCalendars,
+      can_remove_branding: planLimits.canRemoveBranding || false,
+      can_customize_avatar: planLimits.canCustomizeAvatar || false,
+      can_customize_booking_page: planLimits.canCustomizeBookingPage || false,
+      can_use_meeting_polls: planLimits.canUseMeetingPolls || false
     };
 
     // Return combined data
@@ -460,7 +472,7 @@ const updateUserSettings = asyncHandler(async (req, res) => {
   try {
     const userId = req.user.id || req.user.dataValues?.id;
     const {
-      branding_color, confirmation_email_copy, accessibility_mode, alt_text_enabled, booking_horizon, google_analytics_id, logo_alt_text, meeting_duration, buffer_minutes,
+      branding_color, confirmation_email_copy, accessibility_mode, alt_text_enabled, booking_horizon, google_analytics_id, logo_alt_text, meeting_duration, buffer_minutes, requires_confirmation,
       // Booking page customization fields
       booking_page_primary_color, booking_page_secondary_color, booking_page_background_color, 
       booking_page_text_color, booking_page_font_size, booking_page_font_family
@@ -500,6 +512,7 @@ const updateUserSettings = asyncHandler(async (req, res) => {
     if (logo_alt_text !== undefined) settings.logoAltText = logo_alt_text;
     if (meeting_duration !== undefined) settings.meetingDuration = meeting_duration;
     if (buffer_minutes !== undefined) settings.bufferMinutes = buffer_minutes;
+    if (requires_confirmation !== undefined) settings.requiresConfirmation = requires_confirmation;
 
     // Update booking page customization fields (if user has permission)
     if (user.can_customize_booking_page) {
@@ -520,7 +533,7 @@ const updateUserSettings = asyncHandler(async (req, res) => {
       action: 'user.settings.update',
       metadata: {
         updated: {
-          branding_color, confirmation_email_copy, accessibility_mode, alt_text_enabled, booking_horizon, google_analytics_id, logo_alt_text, meeting_duration, buffer_minutes,
+          branding_color, confirmation_email_copy, accessibility_mode, alt_text_enabled, booking_horizon, google_analytics_id, logo_alt_text, meeting_duration, buffer_minutes, requires_confirmation,
           booking_page_primary_color, booking_page_secondary_color, booking_page_background_color,
           booking_page_text_color, booking_page_font_size, booking_page_font_family
         }

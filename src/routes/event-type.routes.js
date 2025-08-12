@@ -58,7 +58,7 @@ const createValidation = [
   body('maximumAdvance')
     .optional()
     .isInt({ min: 1440, max: 525600 }).withMessage('Maximum advance must be between 1 and 365 days'),
-  body('reminderMinutes')
+  body('reminder_minutes')
     .optional()
     .isInt({ min: 0, max: 10080 }).withMessage('Reminder minutes must be between 0 and 7 days'),
   body('questions')

@@ -114,4 +114,18 @@ router.get('/approve/:token', bookingController.approveBookingRequest);
  */
 router.post('/reject/:token', bookingController.rejectBookingRequest);
 
+/**
+ * @route POST /api/bookings/:id/approve
+ * @desc Approve a booking request by ID (authenticated)
+ * @access Private
+ */
+router.post('/:id/approve', authenticateJWT, bookingController.approveBookingById);
+
+/**
+ * @route POST /api/bookings/:id/reject
+ * @desc Reject a booking request by ID (authenticated)
+ * @access Private
+ */
+router.post('/:id/reject', authenticateJWT, bookingController.rejectBookingById);
+
 module.exports = router;

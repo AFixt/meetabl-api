@@ -75,7 +75,7 @@ const validateGetRequest = [
  */
 const validateUuid = [
   param('id')
-    .isUUID(4)
+    .isUUID()
     .withMessage('ID must be a valid UUID'),
 
   validateRequest

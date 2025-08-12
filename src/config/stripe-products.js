@@ -47,7 +47,7 @@ module.exports = {
       name: 'Free',
       maxCalendars: 1,
       maxEventTypes: 1,
-      integrationsEnabled: false,
+      integrationsEnabled: true,
       features: [
         '1 calendar connection',
         '1 event type',

@@ -24,10 +24,8 @@ const getMigrationOptions = () => {
   // In production, we can be more cautious by setting specific options
   if (env === 'production') {
     options.alter = false; // Don't automatically alter tables in production
-    
-    // Additional options can be configured here based on deployment requirements
-    // For example, we might want to only allow adding new columns but not removing them
-    options.match = /^[a-z]+_database$/; // Example constraint for safety
+    options.force = false; // Don't drop tables
+    // Remove the match constraint as it was preventing migrations
   }
   
   return options;

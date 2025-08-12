@@ -246,7 +246,10 @@ User.prototype.hasPaidSubscription = function () {
  * @returns {boolean} Whether user can add more calendars
  */
 User.prototype.canAddCalendars = function (currentCount) {
-  return currentCount < this.max_calendars;
+  const { PLAN_LIMITS } = require('../config/stripe-products');
+  const planType = this.plan_type?.toUpperCase() || 'FREE';
+  const planLimits = PLAN_LIMITS[planType] || PLAN_LIMITS.FREE;
+  return currentCount < planLimits.maxCalendars;
 };
 
 /**
@@ -255,7 +258,10 @@ User.prototype.canAddCalendars = function (currentCount) {
  * @returns {boolean} Whether user can add more event types
  */
 User.prototype.canAddEventTypes = function (currentCount) {
-  return currentCount < this.max_event_types;
+  const { PLAN_LIMITS } = require('../config/stripe-products');
+  const planType = this.plan_type?.toUpperCase() || 'FREE';
+  const planLimits = PLAN_LIMITS[planType] || PLAN_LIMITS.FREE;
+  return currentCount < planLimits.maxEventTypes;
 };
 
 /**
@@ -263,7 +269,10 @@ User.prototype.canAddEventTypes = function (currentCount) {
  * @returns {boolean} Whether user can use integrations
  */
 User.prototype.canUseIntegrations = function () {
-  return this.integrations_enabled;
+  const { PLAN_LIMITS } = require('../config/stripe-products');
+  const planType = this.plan_type?.toUpperCase() || 'FREE';
+  const planLimits = PLAN_LIMITS[planType] || PLAN_LIMITS.FREE;
+  return planLimits.integrationsEnabled || false;
 };
 
 /**
