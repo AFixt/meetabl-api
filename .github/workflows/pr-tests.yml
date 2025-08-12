@@ -100,7 +100,7 @@ jobs:
         test-suite: ['models', 'controllers', 'services', 'middlewares']
     services:
       mysql:
-        image: mysql:${{ env.MYSQL_VERSION }}
+        image: mysql:8.0
         env:
           MYSQL_ROOT_PASSWORD: test_password
           MYSQL_DATABASE: meetabl_test
@@ -191,7 +191,7 @@ jobs:
         test-suite: [auth, booking-critical, user-critical]
     services:
       mysql:
-        image: mysql:${{ env.MYSQL_VERSION }}
+        image: mysql:8.0
         env:
           MYSQL_ROOT_PASSWORD: test_password
           MYSQL_DATABASE: meetabl_test
@@ -304,7 +304,7 @@ jobs:
     if: github.event.pull_request.draft == false && needs.quick-validation.outputs.has-source-changes == 'true'
     services:
       mysql:
-        image: mysql:${{ env.MYSQL_VERSION }}
+        image: mysql:8.0
         env:
           MYSQL_ROOT_PASSWORD: test_password
           MYSQL_DATABASE: meetabl_test
@@ -439,7 +439,7 @@ jobs:
     if: github.event.pull_request.draft == false
     services:
       mysql:
-        image: mysql:${{ env.MYSQL_VERSION }}
+        image: mysql:8.0
         env:
           MYSQL_ROOT_PASSWORD: test_password
           MYSQL_DATABASE: meetabl_test

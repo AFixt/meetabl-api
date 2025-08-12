@@ -37,7 +37,7 @@ jobs:
         test-group: [models, controllers, services, middlewares, routes, queue]
     services:
       mysql:
-        image: mysql:${{ env.MYSQL_VERSION }}
+        image: mysql:8.0
         env:
           MYSQL_ROOT_PASSWORD: test_password
           MYSQL_DATABASE: meetabl_test
@@ -149,7 +149,7 @@ jobs:
         test-group: [auth-flow, booking-flow, user-management, calendar-integration, payment-flow, team-collaboration, error-handling]
     services:
       mysql:
-        image: mysql:${{ env.MYSQL_VERSION }}
+        image: mysql:8.0
         env:
           MYSQL_ROOT_PASSWORD: test_password
           MYSQL_DATABASE: meetabl_test
@@ -278,7 +278,7 @@ jobs:
         load-scenario: [quick-load, stress-test, endurance-test, spike-test]
     services:
       mysql:
-        image: mysql:${{ env.MYSQL_VERSION }}
+        image: mysql:8.0
         env:
           MYSQL_ROOT_PASSWORD: test_password
           MYSQL_DATABASE: meetabl_test
@@ -393,7 +393,7 @@ jobs:
         security-test: [dependency-audit, code-analysis, endpoint-security, authentication-security]
     services:
       mysql:
-        image: mysql:${{ env.MYSQL_VERSION }}
+        image: mysql:8.0
         env:
           MYSQL_ROOT_PASSWORD: test_password
           MYSQL_DATABASE: meetabl_test
@@ -487,7 +487,7 @@ jobs:
         benchmark-type: [api-benchmarks, database-benchmarks, memory-benchmarks, comparison-benchmarks]
     services:
       mysql:
-        image: mysql:${{ env.MYSQL_VERSION }}
+        image: mysql:8.0
         env:
           MYSQL_ROOT_PASSWORD: test_password
           MYSQL_DATABASE: meetabl_test
@@ -602,7 +602,7 @@ jobs:
         ]
     services:
       mysql:
-        image: mysql:${{ env.MYSQL_VERSION }}
+        image: mysql:8.0
         env:
           MYSQL_ROOT_PASSWORD: test_password
           MYSQL_DATABASE: meetabl_test

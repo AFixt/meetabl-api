@@ -67,7 +67,7 @@ jobs:
     runs-on: ubuntu-latest
     services:
       mysql:
-        image: mysql:${{ env.MYSQL_VERSION }}
+        image: mysql:8.0
         env:
           MYSQL_ROOT_PASSWORD: test_password
           MYSQL_DATABASE: meetabl_test
@@ -148,7 +148,7 @@ jobs:
         test-suite: ['models', 'controllers', 'services', 'middlewares']
     services:
       mysql:
-        image: mysql:${{ env.MYSQL_VERSION }}
+        image: mysql:8.0
         env:
           MYSQL_ROOT_PASSWORD: test_password
           MYSQL_DATABASE: meetabl_test
@@ -240,7 +240,7 @@ jobs:
         test-suite: ['routes', 'workflows']
     services:
       mysql:
-        image: mysql:${{ env.MYSQL_VERSION }}
+        image: mysql:8.0
         env:
           MYSQL_ROOT_PASSWORD: test_password
           MYSQL_DATABASE: meetabl_test
@@ -343,7 +343,7 @@ jobs:
     needs: [unit-tests, integration-tests]
     services:
       mysql:
-        image: mysql:${{ env.MYSQL_VERSION }}
+        image: mysql:8.0
         env:
           MYSQL_ROOT_PASSWORD: test_password
           MYSQL_DATABASE: meetabl_test
@@ -449,7 +449,7 @@ jobs:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     services:
       mysql:
-        image: mysql:${{ env.MYSQL_VERSION }}
+        image: mysql:8.0
         env:
           MYSQL_ROOT_PASSWORD: test_password
           MYSQL_DATABASE: meetabl_test
@@ -546,7 +546,7 @@ jobs:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     services:
       mysql:
-        image: mysql:${{ env.MYSQL_VERSION }}
+        image: mysql:8.0
         env:
           MYSQL_ROOT_PASSWORD: test_password
           MYSQL_DATABASE: meetabl_test
