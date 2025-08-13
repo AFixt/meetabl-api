@@ -23,6 +23,16 @@ RUN adduser -S nodeuser -u 1001
 # Create logs directory with proper permissions
 RUN mkdir -p logs && chown -R nodeuser:nodejs logs
 
+# Create uploads directories with proper permissions
+RUN mkdir -p uploads/logos uploads/avatars uploads/uploads && \
+    chown -R nodeuser:nodejs uploads && \
+    chmod -R 755 uploads
+
+# Create tmp uploads directory for multer
+RUN mkdir -p /tmp/uploads && \
+    chown -R nodeuser:nodejs /tmp/uploads && \
+    chmod 755 /tmp/uploads
+
 # Switch to non-root user
 USER nodeuser
 

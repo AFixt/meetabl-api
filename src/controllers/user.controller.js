@@ -24,6 +24,10 @@ if (process.env.AWS_ACCESS_KEY_ID && process.env.AWS_SECRET_ACCESS_KEY && proces
 }
 
 // Configure multer for file uploads
+console.log('[MULTER CONFIG] Creating multer instance');
+console.log('[MULTER CONFIG] Temp dir:', '/tmp/uploads/');
+console.log('[MULTER CONFIG] File size limit:', 5 * 1024 * 1024, 'bytes');
+
 const upload = multer({
   dest: '/tmp/uploads/', // Temporary storage
   limits: {
@@ -31,15 +35,33 @@ const upload = multer({
     files: 1
   },
   fileFilter: (req, file, cb) => {
+    console.log('[MULTER fileFilter] ===================');
+    console.log('[MULTER fileFilter] Timestamp:', new Date().toISOString());
+    console.log('[MULTER fileFilter] Called with file:', file);
+    console.log('[MULTER fileFilter] File fieldname:', file.fieldname);
+    console.log('[MULTER fileFilter] File mimetype:', file.mimetype);
+    console.log('[MULTER fileFilter] File originalname:', file.originalname);
+    console.log('[MULTER fileFilter] File encoding:', file.encoding);
+    console.log('[MULTER fileFilter] Request URL:', req.url);
+    console.log('[MULTER fileFilter] Request method:', req.method);
+    console.log('[MULTER fileFilter] Request headers:', JSON.stringify(req.headers, null, 2));
+    console.log('[MULTER fileFilter] Request user ID:', req.user ? req.user.id : 'NO USER');
+    console.log('[MULTER fileFilter] Request session:', req.session ? 'EXISTS' : 'NO SESSION');
+    
     // Check if file is an image
     const allowedMimes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp'];
     if (allowedMimes.includes(file.mimetype)) {
+      console.log('[MULTER fileFilter] ✓ File type allowed');
       cb(null, true);
     } else {
+      console.log('[MULTER fileFilter] ✗ File type NOT allowed');
       cb(new Error('Only image files (JPEG, PNG, GIF, WebP) are allowed'), false);
     }
+    console.log('[MULTER fileFilter] ===================');
   }
 });
+console.log('[MULTER CONFIG] Multer instance created:', typeof upload);
+console.log('[MULTER CONFIG] Upload methods available:', Object.keys(upload));
 
 /**
  * Upload logo image
@@ -47,11 +69,28 @@ const upload = multer({
  * @param {Object} res - Express response object
  */
 const uploadLogo = asyncHandler(async (req, res) => {
+  console.log('[CONTROLLER uploadLogo] ===================');
+  console.log('[CONTROLLER uploadLogo] Function called at:', new Date().toISOString());
+  console.log('[CONTROLLER uploadLogo] Request ID:', req.id || 'no-id');
+  console.log('[CONTROLLER uploadLogo] Request method:', req.method);
+  console.log('[CONTROLLER uploadLogo] Request URL:', req.url);
+  console.log('[CONTROLLER uploadLogo] Request headers:', JSON.stringify(req.headers, null, 2));
+  console.log('[CONTROLLER uploadLogo] Request user:', req.user ? JSON.stringify({ id: req.user.id, email: req.user.email }) : 'NO USER');
+  console.log('[CONTROLLER uploadLogo] Request session:', req.session ? 'EXISTS' : 'NO SESSION');
+  console.log('[CONTROLLER uploadLogo] Request cookies:', req.cookies ? Object.keys(req.cookies) : 'NO COOKIES');
+  console.log('[CONTROLLER uploadLogo] Request file:', req.file ? JSON.stringify(req.file, null, 2) : 'NO FILE');
+  console.log('[CONTROLLER uploadLogo] Request body:', JSON.stringify(req.body, null, 2));
+  console.log('[CONTROLLER uploadLogo] Request files:', req.files ? JSON.stringify(req.files, null, 2) : 'NO FILES');
+  
   try {
     const userId = req.user.id || req.user.dataValues?.id;
+    console.log('[CONTROLLER uploadLogo] userId extracted:', userId);
+    
     const { logoAltText } = req.body;
+    console.log('[CONTROLLER uploadLogo] logoAltText:', logoAltText);
 
     if (!req.file) {
+      console.log('[CONTROLLER uploadLogo] No file found in request');
       throw validationError([{ field: 'logo', message: 'Logo image is required' }]);
     }
 

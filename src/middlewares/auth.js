@@ -17,6 +17,10 @@ const { User, JwtBlacklist } = require('../models');
  * @param {Function} next - Express next function
  */
 const authenticateJWT = async (req, res, next) => {
+  console.log('[AUTH] authenticateJWT called for:', req.path);
+  console.log('[AUTH] Method:', req.method);
+  console.log('[AUTH] Content-Type:', req.get('content-type'));
+  
   try {
     // Debug logging
     logger.debug('Auth middleware - cookies:', Object.keys(req.cookies || {}));
@@ -24,6 +28,7 @@ const authenticateJWT = async (req, res, next) => {
       jwt: req.cookies?.jwt ? 'present' : 'missing',
       token: req.cookies?.token ? 'present' : 'missing'
     });
+    console.log('[AUTH] Cookies present:', Object.keys(req.cookies || {}));
     
     // Try to get token from cookie first, then Authorization header
     let token = req.cookies.jwt || req.cookies.token;

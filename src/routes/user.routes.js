@@ -86,7 +86,61 @@ router.put('/me/public-profile', userController.updatePublicProfile);
  * @desc Upload logo image
  * @access Private
  */
-router.post('/me/logo', userController.upload.single('logo'), userController.uploadLogo);
+router.post('/me/logo',
+  (req, res, next) => {
+    console.log('[ROUTE /me/logo] ===================');
+    console.log('[ROUTE /me/logo] Request received at:', new Date().toISOString());
+    console.log('[ROUTE /me/logo] Method:', req.method);
+    console.log('[ROUTE /me/logo] URL:', req.url);
+    console.log('[ROUTE /me/logo] User authenticated:', req.user ? 'YES' : 'NO');
+    console.log('[ROUTE /me/logo] User ID:', req.user ? req.user.id : 'NO USER');
+    console.log('[ROUTE /me/logo] Content-Type:', req.get('content-type'));
+    console.log('[ROUTE /me/logo] Content-Length:', req.get('content-length'));
+    console.log('[ROUTE /me/logo] Connection state:', req.socket.readyState);
+    console.log('[ROUTE /me/logo] Socket destroyed:', req.socket.destroyed);
+    
+    // Monitor connection events
+    req.socket.on('close', () => {
+      console.log('[ROUTE /me/logo SOCKET] Socket closed unexpectedly!');
+    });
+    
+    req.socket.on('error', (err) => {
+      console.error('[ROUTE /me/logo SOCKET ERROR]', err.message, err.code);
+    });
+    
+    req.on('aborted', () => {
+      console.log('[ROUTE /me/logo ABORTED] Client aborted the request!');
+    });
+    
+    req.on('close', () => {
+      console.log('[ROUTE /me/logo CLOSE] Request closed!');
+    });
+    
+    console.log('[ROUTE /me/logo] Calling multer upload.single...');
+    
+    // Wrap multer to catch errors
+    const multerMiddleware = userController.upload.single('logo');
+    multerMiddleware(req, res, (err) => {
+      if (err) {
+        console.error('[ROUTE /me/logo MULTER ERROR]', err.message, err.code, err.stack);
+        return res.status(400).json({ error: err.message });
+      }
+      console.log('[ROUTE /me/logo] Multer processing complete');
+      next();
+    });
+  },
+  (req, res, next) => {
+    console.log('[ROUTE /me/logo AFTER MULTER] ===================');
+    console.log('[ROUTE /me/logo AFTER MULTER] File uploaded:', req.file ? 'YES' : 'NO');
+    if (req.file) {
+      console.log('[ROUTE /me/logo AFTER MULTER] File details:', JSON.stringify(req.file, null, 2));
+    }
+    console.log('[ROUTE /me/logo AFTER MULTER] Body:', JSON.stringify(req.body, null, 2));
+    console.log('[ROUTE /me/logo AFTER MULTER] Calling controller...');
+    next();
+  },
+  userController.uploadLogo
+);
 
 /**
  * @route DELETE /api/users/me/logo
@@ -100,7 +154,10 @@ router.delete('/me/logo', userController.deleteLogo);
  * @desc Upload avatar image
  * @access Private
  */
-router.post('/me/avatar', userController.upload.single('avatar'), userController.uploadAvatar);
+router.post('/me/avatar',
+  userController.upload.single('avatar'),
+  userController.uploadAvatar
+);
 
 /**
  * @route DELETE /api/users/me/avatar

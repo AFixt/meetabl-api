@@ -25,8 +25,8 @@ const PORT = process.env.PORT || 3000;
     // Initialize application
     const app = await initializeApp();
 
-    // Start the server
-    app.listen(PORT, () => {
+    // Start the server with timeout configuration
+    const server = app.listen(PORT, () => {
       logger.info(`meetabl API server running on port ${PORT}`);
       logger.info(`Environment: ${process.env.NODE_ENV || 'development'}`);
       
@@ -34,6 +34,11 @@ const PORT = process.env.PORT || 3000;
       const monitoringInterval = parseInt(process.env.DB_MONITOR_INTERVAL) || 5;
       startMonitoringJob(monitoringInterval);
     });
+    
+    // Set server timeout to 2 minutes for file uploads
+    server.timeout = 120000; // 120 seconds
+    server.keepAliveTimeout = 65000; // 65 seconds
+    server.headersTimeout = 66000; // 66 seconds
 
     // Handle uncaught exceptions
     process.on('uncaughtException', (error) => {
