@@ -546,15 +546,42 @@ const confirmEmail = asyncHandler(async (req, res) => {
     const hashedToken = crypto.createHash('sha256').update(token).digest('hex');
 
     // Find user with valid verification token
-    const user = await User.findOne({
+    let user = await User.findOne({
       where: {
         email_verification_token: hashedToken,
         email_verification_expires: { [Op.gt]: Date.now() }
       }
     });
 
+    // If no user found with valid token, check if token was already used
     if (!user) {
-      throw validationError([{ field: 'token', message: 'Invalid or expired verification token' }]);
+      // Try to find a user who is already verified (token would have been cleared)
+      // This handles the case where someone clicks the verification link again
+      const verifiedUser = await User.findOne({
+        where: {
+          email_verified: true,
+          // We can't match by token since it's cleared, but we can check by the email
+          // from the JWT token if provided, or return a generic message
+        }
+      });
+      
+      // For security, don't reveal if a specific email exists or not
+      // Just provide a generic message that could apply to either case
+      throw validationError([{ 
+        field: 'token', 
+        message: 'This verification link is invalid or has already been used. If your email is already verified, you can log in to your account.' 
+      }]);
+    }
+
+    // Check if user is already verified (edge case where token still exists)
+    if (user.email_verified) {
+      await transaction.commit();
+      
+      return res.json({
+        success: true,
+        message: 'Your email address has already been verified. You can log in to your account.',
+        alreadyVerified: true
+      });
     }
 
     // Update user as verified

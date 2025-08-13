@@ -242,7 +242,9 @@ const createBooking = asyncHandler(async (req, res) => {
     await Notification.create({
       id: uuidv4(),
       bookingId: bookingId,
-      type: 'email',
+      type: 'booking_created',
+      channel: 'email',
+      recipient: customerEmail,
       status: 'pending'
     }, { transaction });
 
@@ -288,8 +290,10 @@ const createBooking = asyncHandler(async (req, res) => {
 
     return successResponse(res, booking, 'Booking created successfully', 201);
   } catch (error) {
-    // Rollback transaction
-    await transaction.rollback();
+    // Rollback transaction only if it hasn't been committed
+    if (transaction && !transaction.finished) {
+      await transaction.rollback();
+    }
     throw error;
   }
 });
@@ -375,7 +379,9 @@ const cancelBooking = asyncHandler(async (req, res) => {
     await Notification.create({
       id: uuidv4(),
       bookingId: id,
-      type: 'email',
+      type: 'booking_cancelled',
+      channel: 'email',
+      recipient: booking.customerEmail,
       status: 'pending'
     }, { transaction });
 
@@ -1030,8 +1036,10 @@ const rescheduleBooking = asyncHandler(async (req, res) => {
     // Create reschedule notification
     await Notification.create({
       id: uuidv4(),
-      booking_id: id,
-      type: 'email',
+      bookingId: id,
+      type: 'booking_updated',
+      channel: 'email',
+      recipient: booking.customerEmail,
       status: 'pending'
     }, { transaction });
 
@@ -1219,7 +1227,7 @@ const confirmBookingRequest = asyncHandler(async (req, res) => {
     const { token } = req.params;
 
     // Find the booking request by token
-    const bookingRequest = await BookingRequest.findOne({
+    let bookingRequest = await BookingRequest.findOne({
       where: {
         confirmationToken: token,
         status: 'pending'
@@ -1231,7 +1239,43 @@ const confirmBookingRequest = asyncHandler(async (req, res) => {
       }]
     });
 
+    // If not found with pending status, check if it's already confirmed
     if (!bookingRequest) {
+      const confirmedBookingRequest = await BookingRequest.findOne({
+        where: {
+          confirmationToken: token,
+          status: { [Op.in]: ['confirmed', 'pending_host_approval'] }
+        },
+        include: [{
+          model: User,
+          as: 'user',
+          attributes: ['id', 'firstName', 'lastName', 'email']
+        }]
+      });
+
+      if (confirmedBookingRequest) {
+        // Booking was already confirmed
+        await transaction.commit();
+        
+        const isAwaitingHost = confirmedBookingRequest.status === 'pending_host_approval';
+        
+        return res.json({
+          success: true,
+          message: isAwaitingHost 
+            ? 'You have already confirmed this booking. It is currently awaiting approval from the host.'
+            : 'You have already confirmed this booking. No further action is needed.',
+          alreadyConfirmed: true,
+          status: confirmedBookingRequest.status,
+          booking: {
+            id: confirmedBookingRequest.id,
+            customerName: confirmedBookingRequest.customerName,
+            startTime: confirmedBookingRequest.startTime,
+            endTime: confirmedBookingRequest.endTime,
+            status: confirmedBookingRequest.status
+          }
+        });
+      }
+
       throw notFoundError('Invalid or expired confirmation link');
     }
 
@@ -1734,5 +1778,7 @@ module.exports = {
   rescheduleBooking,
   bulkCancelBookings,
   approveBookingRequest,
-  rejectBookingRequest
+  rejectBookingRequest,
+  approveBookingById: approveBookingRequest,
+  rejectBookingById: rejectBookingRequest
 };
