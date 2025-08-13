@@ -23,7 +23,6 @@ const { errorHandler, notFoundError } = require('./utils/error-response');
 const { requestPerformanceMiddleware, initializePerformanceMonitoring } = require('./middlewares/performance');
 const { requestLoggingMiddleware, errorLoggingMiddleware } = require('./middlewares/logging');
 const logManagementService = require('./services/log-management.service');
-const statusMonitor = require('express-status-monitor');
 const { initializePWA } = require('./middlewares/pwa');
 
 // Validate critical environment variables at startup
@@ -111,32 +110,6 @@ if (!process.env.AWS_ACCESS_KEY_ID || !process.env.AWS_SECRET_ACCESS_KEY || !pro
   app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 }
 
-// Status monitor configuration
-const statusMonitorConfig = {
-  title: 'meetabl API Status',
-  path: '/status',
-  spans: [
-    { interval: 1, retention: 60 },
-    { interval: 5, retention: 60 },
-    { interval: 15, retention: 60 }
-  ],
-  chartVisibility: {
-    cpu: true,
-    mem: true,
-    load: true,
-    responseTime: true,
-    rps: true,
-    statusCodes: true
-  },
-  healthChecks: [{
-    protocol: 'http',
-    host: 'localhost',
-    path: '/api/monitoring/health',
-    port: process.env.PORT || 3000
-  }]
-};
-
-app.use(statusMonitor(statusMonitorConfig));
 
 // Apply security middlewares with comprehensive CSP
 app.use(helmet({
@@ -185,6 +158,24 @@ app.use(helmet({
   crossOriginResourcePolicy: { policy: "cross-origin" } // Allow cross-origin for API
 }));
 
+// Add request logging for uploads
+app.use((req, res, next) => {
+  if (req.url && req.url.includes('/logo')) {
+    console.log('[APP REQUEST LOGGER] ===================');
+    console.log('[APP REQUEST LOGGER] Timestamp:', new Date().toISOString());
+    console.log('[APP REQUEST LOGGER] Method:', req.method);
+    console.log('[APP REQUEST LOGGER] URL:', req.url);
+    console.log('[APP REQUEST LOGGER] Path:', req.path);
+    console.log('[APP REQUEST LOGGER] Content-Type:', req.get('content-type'));
+    console.log('[APP REQUEST LOGGER] Content-Length:', req.get('content-length'));
+    console.log('[APP REQUEST LOGGER] Origin:', req.get('origin'));
+    console.log('[APP REQUEST LOGGER] User-Agent:', req.get('user-agent'));
+    console.log('[APP REQUEST LOGGER] Has cookies:', !!req.headers.cookie);
+    console.log('[APP REQUEST LOGGER] ===================');
+  }
+  next();
+});
+
 // Configure CORS for multiple origins
 const allowedOrigins = process.env.ALLOWED_ORIGINS 
   ? process.env.ALLOWED_ORIGINS.split(',').map(origin => origin.trim())
@@ -211,9 +202,20 @@ app.use(cors({
 // Add raw body parsing for Stripe webhooks
 app.use('/api/stripe/webhook', express.raw({ type: 'application/json' }));
 
-// Apply JSON body parsing to all other routes
-app.use(bodyParser.json());
-app.use(bodyParser.urlencoded({ extended: true }));
+// Skip body parsing for multipart uploads (handled by multer)
+app.use((req, res, next) => {
+  if (req.is('multipart/form-data')) {
+    return next();
+  }
+  return bodyParser.json({ limit: '10mb' })(req, res, next);
+});
+
+app.use((req, res, next) => {
+  if (req.is('multipart/form-data')) {
+    return next();
+  }
+  return bodyParser.urlencoded({ extended: true, limit: '10mb' })(req, res, next);
+});
 app.use(cookieParser());
 
 // Redis-based session configuration will be initialized in initializeApp
