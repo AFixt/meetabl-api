@@ -762,7 +762,9 @@ const getPublicBookings = asyncHandler(async (req, res) => {
         bookingPageDescription: user.settings?.bookingPageDescription || null,
         brandingColor: user.settings?.brandingColor || '#000000',
         meetingDuration: user.settings?.meetingDuration || 60,
-        bufferMinutes: user.settings?.bufferMinutes || 0
+        bufferMinutes: user.settings?.bufferMinutes || 0,
+        logoUrl: user.settings?.logoUrl || null,
+        logoAltText: user.settings?.logoAltText || null
       },
       date,
       available_slots: allSlots
