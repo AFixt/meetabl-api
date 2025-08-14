@@ -392,8 +392,7 @@ const syncSubscription = asyncHandler(async (req, res) => {
           billing_period: planDetails?.interval === 'year' ? 'annual' : 'monthly'
         });
         
-        // Apply plan limits based on new plan type
-        await user.applyPlanLimits();
+        // Save user with new plan type
         await user.save();
         
         logger.info(`Subscription synced for user ${userId}: ${planType} (${subscription.status})`);
@@ -418,7 +417,6 @@ const syncSubscription = asyncHandler(async (req, res) => {
           billing_period: null
         });
         
-        await user.applyPlanLimits();
         await user.save();
         
         logger.info(`No active subscription found for user ${userId}, reset to free plan`);

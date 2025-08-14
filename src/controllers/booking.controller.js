@@ -541,7 +541,25 @@ const getPublicBookings = asyncHandler(async (req, res) => {
           firstName: user.firstName,
           lastName: user.lastName,
           username: user.username,
-          timezone: user.timezone
+          timezone: user.timezone,
+          can_remove_branding: user.can_remove_branding || false
+        },
+        settings: {
+          googleAnalyticsId: user.settings?.googleAnalyticsId || null,
+          bookingPageTitle: user.settings?.bookingPageTitle || null,
+          bookingPageDescription: user.settings?.bookingPageDescription || null,
+          brandingColor: user.settings?.brandingColor || '#000000',
+          meetingDuration: user.settings?.meetingDuration || 60,
+          bufferMinutes: user.settings?.bufferMinutes || 0,
+          logoUrl: user.settings?.logoUrl || null,
+          logoAltText: user.settings?.logoAltText || null,
+          // Booking page customization fields
+          bookingPagePrimaryColor: user.settings?.bookingPagePrimaryColor || '#003b49',
+          bookingPageSecondaryColor: user.settings?.bookingPageSecondaryColor || '#ff6b6b',
+          bookingPageBackgroundColor: user.settings?.bookingPageBackgroundColor || '#ffffff',
+          bookingPageTextColor: user.settings?.bookingPageTextColor || '#333333',
+          bookingPageFontSize: user.settings?.bookingPageFontSize || 'medium',
+          bookingPageFontFamily: user.settings?.bookingPageFontFamily || 'Inter, sans-serif'
         },
         date,
         available_slots: []
@@ -754,7 +772,8 @@ const getPublicBookings = asyncHandler(async (req, res) => {
         firstName: user.firstName,
         lastName: user.lastName,
         username: user.username,
-        timezone: user.timezone
+        timezone: user.timezone,
+        can_remove_branding: user.can_remove_branding // Now a virtual getter
       },
       settings: {
         googleAnalyticsId: user.settings?.googleAnalyticsId || null,
@@ -764,7 +783,14 @@ const getPublicBookings = asyncHandler(async (req, res) => {
         meetingDuration: user.settings?.meetingDuration || 60,
         bufferMinutes: user.settings?.bufferMinutes || 0,
         logoUrl: user.settings?.logoUrl || null,
-        logoAltText: user.settings?.logoAltText || null
+        logoAltText: user.settings?.logoAltText || null,
+        // Booking page customization fields
+        bookingPagePrimaryColor: user.settings?.bookingPagePrimaryColor || '#003b49',
+        bookingPageSecondaryColor: user.settings?.bookingPageSecondaryColor || '#ff6b6b',
+        bookingPageBackgroundColor: user.settings?.bookingPageBackgroundColor || '#ffffff',
+        bookingPageTextColor: user.settings?.bookingPageTextColor || '#333333',
+        bookingPageFontSize: user.settings?.bookingPageFontSize || 'medium',
+        bookingPageFontFamily: user.settings?.bookingPageFontFamily || 'Inter, sans-serif'
       },
       date,
       available_slots: allSlots

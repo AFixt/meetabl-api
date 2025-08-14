@@ -149,41 +149,8 @@ const User = sequelize.define('User', {
     allowNull: false,
     defaultValue: 'free'
   },
-  max_calendars: {
-    type: DataTypes.INTEGER,
-    allowNull: false,
-    defaultValue: 1
-  },
-  max_event_types: {
-    type: DataTypes.INTEGER,
-    allowNull: false,
-    defaultValue: 1
-  },
-  integrations_enabled: {
-    type: DataTypes.BOOLEAN,
-    allowNull: false,
-    defaultValue: true // All plans now have integrations
-  },
-  can_remove_branding: {
-    type: DataTypes.BOOLEAN,
-    allowNull: false,
-    defaultValue: false
-  },
-  can_customize_avatar: {
-    type: DataTypes.BOOLEAN,
-    allowNull: false,
-    defaultValue: false
-  },
-  can_customize_booking_page: {
-    type: DataTypes.BOOLEAN,
-    allowNull: false,
-    defaultValue: false
-  },
-  can_use_meeting_polls: {
-    type: DataTypes.BOOLEAN,
-    allowNull: false,
-    defaultValue: false
-  },
+  // Plan features are now computed from the plan_type, not stored in database
+  // Virtual getters are defined below
   billing_period: {
     type: DataTypes.ENUM('monthly', 'annual'),
     allowNull: true
@@ -280,52 +247,60 @@ User.prototype.canUseIntegrations = function () {
  * @returns {object} Plan limits and features
  */
 User.prototype.getPlanLimits = function () {
-  const limits = {
-    free: {
-      max_event_types: 1,
-      max_calendars: 1,
-      can_remove_branding: false,
-      can_customize_avatar: false,
-      can_customize_booking_page: false,
-      can_use_meeting_polls: false,
-      price_monthly: 0
-    },
-    basic: {
-      max_event_types: 999, // unlimited
-      max_calendars: 5,
-      can_remove_branding: true,
-      can_customize_avatar: true,
-      can_customize_booking_page: true,
-      can_use_meeting_polls: false,
-      price_monthly: 9
-    },
-    professional: {
-      max_event_types: 999, // unlimited
-      max_calendars: 999, // unlimited
-      can_remove_branding: true,
-      can_customize_avatar: true,
-      can_customize_booking_page: true,
-      can_use_meeting_polls: true,
-      price_monthly: 17
-    }
-  };
-  
-  return limits[this.plan_type] || limits.free;
+  const { PLAN_LIMITS } = require('../config/stripe-products');
+  const planType = this.plan_type?.toUpperCase() || 'FREE';
+  return PLAN_LIMITS[planType] || PLAN_LIMITS.FREE;
 };
 
-/**
- * Apply plan limits when plan changes
- */
-User.prototype.applyPlanLimits = function () {
-  const limits = this.getPlanLimits();
-  
-  this.max_event_types = limits.max_event_types;
-  this.max_calendars = limits.max_calendars;
-  this.can_remove_branding = limits.can_remove_branding;
-  this.can_customize_avatar = limits.can_customize_avatar;
-  this.can_customize_booking_page = limits.can_customize_booking_page;
-  this.can_use_meeting_polls = limits.can_use_meeting_polls;
-};
+// Virtual getters for plan features
+Object.defineProperty(User.prototype, 'max_event_types', {
+  get: function() {
+    const limits = this.getPlanLimits();
+    return limits.maxEventTypes || 1;
+  }
+});
+
+Object.defineProperty(User.prototype, 'max_calendars', {
+  get: function() {
+    const limits = this.getPlanLimits();
+    return limits.maxCalendars || 1;
+  }
+});
+
+Object.defineProperty(User.prototype, 'can_remove_branding', {
+  get: function() {
+    const limits = this.getPlanLimits();
+    return limits.canRemoveBranding || false;
+  }
+});
+
+Object.defineProperty(User.prototype, 'can_customize_avatar', {
+  get: function() {
+    const limits = this.getPlanLimits();
+    return limits.canCustomizeAvatar || false;
+  }
+});
+
+Object.defineProperty(User.prototype, 'can_customize_booking_page', {
+  get: function() {
+    const limits = this.getPlanLimits();
+    return limits.canCustomizeBookingPage || false;
+  }
+});
+
+Object.defineProperty(User.prototype, 'can_use_meeting_polls', {
+  get: function() {
+    const limits = this.getPlanLimits();
+    return limits.canUseMeetingPolls || false;
+  }
+});
+
+Object.defineProperty(User.prototype, 'integrations_enabled', {
+  get: function() {
+    const limits = this.getPlanLimits();
+    return limits.integrationsEnabled !== false; // Default true for backward compatibility
+  }
+});
 
 /**
  * Set up hooks for password hashing
@@ -342,11 +317,6 @@ const hashPassword = async (user) => {
 User.beforeCreate(hashPassword);
 User.beforeUpdate(hashPassword);
 
-// Apply plan limits when plan type changes
-User.beforeUpdate(async (user) => {
-  if (user.changed('plan_type')) {
-    user.applyPlanLimits();
-  }
-});
+// No longer need to apply plan limits - they're computed virtually
 
 module.exports = User;

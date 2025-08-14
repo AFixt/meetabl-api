@@ -271,9 +271,8 @@ class StripeWebhookService {
         billing_period: planDetails?.interval === 'year' ? 'annual' : 'monthly'
       });
       
-      // Apply plan limits if plan changed
+      // Save user if plan changed
       if (planDetails) {
-        await user.applyPlanLimits();
         await user.save();
       }
     }
@@ -443,8 +442,7 @@ class StripeWebhookService {
           billing_period: planDetails?.interval === 'year' ? 'annual' : 'monthly'
         });
         
-        // Apply plan limits based on new plan type
-        await user.applyPlanLimits();
+        // Save user with new plan type
         await user.save();
         
         logger.info(`User ${user.id} upgraded to ${planType} plan (${planDetails?.interval || 'unknown'} billing)`);

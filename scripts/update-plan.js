@@ -27,9 +27,8 @@ async function updatePlan(email, planType) {
       process.exit(1);
     }
 
-    // Update plan type and apply limits
+    // Update plan type (limits are computed virtually)
     user.plan_type = planType;
-    user.applyPlanLimits();
     await user.save();
 
     console.log(`✅ Plan updated for user: ${email}`);
