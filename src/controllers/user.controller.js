@@ -89,9 +89,28 @@ const uploadLogo = asyncHandler(async (req, res) => {
     const { logoAltText } = req.body;
     console.log('[CONTROLLER uploadLogo] logoAltText:', logoAltText);
 
+    // Check if this is an alt text only update (no file provided)
     if (!req.file) {
-      console.log('[CONTROLLER uploadLogo] No file found in request');
-      throw validationError([{ field: 'logo', message: 'Logo image is required' }]);
+      console.log('[CONTROLLER uploadLogo] No file found in request - updating alt text only');
+      
+      // Find user settings
+      let settings = await UserSettings.findOne({ where: { userId: userId } });
+      
+      if (!settings || !settings.logoUrl) {
+        throw validationError([{ field: 'logo', message: 'No existing logo to update alt text for' }]);
+      }
+      
+      // Update only the alt text
+      await settings.update({
+        logoAltText: logoAltText || ''
+      });
+      
+      logger.info(`Logo alt text updated for user: ${userId}`);
+      
+      return successResponse(res, {
+        logoUrl: settings.logoUrl,
+        logoAltText: settings.logoAltText
+      }, 'Alt text updated successfully');
     }
 
     // Additional image validation
