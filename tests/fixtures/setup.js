@@ -59,12 +59,7 @@ jest.setTimeout(30000);
 // Make sure Node.js knows we're in test mode
 process.env.NODE_ENV = 'test';
 
-// Mock express-status-monitor before anything else
-jest.mock('express-status-monitor', () => {
-  return jest.fn().mockImplementation(() => {
-    return (req, res, next) => next();
-  });
-});
+// express-status-monitor package has been removed
 
 // Mock logger module with complete implementation
 jest.mock('../../src/config/logger', () => {
